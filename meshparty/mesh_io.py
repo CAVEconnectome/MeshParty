@@ -201,7 +201,8 @@ class Mesh(object):
         plyfile.PlyData([vertex_element]).write(out_fname)
 
     def get_local_view(self, n_points, pc_align=False, center_node_id=None,
-                       center_coord=None, method="kdtree", verbose=False):
+                       center_coord=None, method="kdtree", verbose=False,
+                       return_node_ids=False):
         if center_node_id is None and center_coord is None:
             center_node_id = np.random.randint(len(self.vertices))
 
@@ -227,7 +228,11 @@ class Mesh(object):
 
         if pc_align:
             local_vertices = self.calc_pc_align(local_vertices)
-        return local_vertices, center_node_id
+
+        if return_node_ids:
+            return local_vertices, center_node_id, node_ids
+        else:
+            return local_vertices, center_node_id
 
     def calc_pc_align(self, vertices):
         pca = decomposition.PCA(n_components=3)
