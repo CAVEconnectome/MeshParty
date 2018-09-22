@@ -9,36 +9,110 @@ import networkx as nx
 import cloudvolume
 from multiwrapper import multiprocessing_utils as mu
 
-def read_mesh_h5():
-    pass
 
-def write_mesh_h5():
-    pass
+def read_mesh_h5(filename):
+    """Reads a mesh's vertices, faces and normals from an hdf5 file"""
+    assert os.path.isfile(filename)
 
-def read_obj(path):
-    return Mesh(path)
+    with h5py.File(filename) as f:
+        vertices = f["vertices"].value
+        faces = f["faces"].value
+ 
+        if "normals" in f.keys():
+            normals = f["normals"].value
+        else:
+            normals = []
+
+    return vertices, faces, normals
+
+
+def write_mesh_h5(filename, vertices, faces, 
+                  normals=None, overwrite=False):
+    """Writes a mesh's vertices, faces (and normals) to an hdf5 file"""
+    
+    if os.path.isfile(filename):
+        if overwrite:
+            os.remove(filename)
+        else:
+            raise Exception(f"File {filename} already exists")
+
+    with h5py.File(filename, "w") as f:
+        f.create_dataset("vertices", vertices, compression="gzip")
+        f.create_dataset("faces", faces, compression="gzip")
+
+        if normals is not None:
+            f.create_dataset("normals", normals, compression="gzip")
+
+
+def read_mesh_obj(filename):
+    """Reads a mesh's vertices, faces and normals from an obj file"""
+    vertices = []
+    faces = []
+    normals = []
+
+    for line in open(filename, "r"):
+        if line.startswith('#'): continue
+        values = line.split()
+        if not values: continue
+        if values[0] == 'v':
+            v = values[1:4]
+            vertices.append(v)
+        elif values[0] == 'vn':
+            v = map(float, values[1:4])
+            normals.append(v)
+        elif values[0] == 'f':
+            face = []
+            texcoords = []
+            norms = []
+            for v in values[1:]:
+                w = v.split('/')
+                face.append(int(w[0]))
+                if len(w) >= 2 and len(w[1]) > 0:
+                    texcoords.append(int(w[1]))
+                else:
+                    texcoords.append(0)
+                if len(w) >= 3 and len(w[2]) > 0:
+                    norms.append(int(w[2]))
+                else:
+                    norms.append(0)
+            faces.append(face)
+
+    vertices = np.array(vertices, dtype=np.float)
+    faces = np.array(faces, dtype=np.int) - 1
+    normals = np.array(normals, dtype=np.float)
+
+    return vertices, faces, normals
+
 
 def _download_meshes_thread(args):
     """ Downloads meshes into target directory
 
     :param args: list
     """
-    seg_ids, cv_path, target_dir = args
+    seg_ids, cv_path, target_dir, fmt = args
 
     cv = cloudvolume.CloudVolume(cv_path)
     os.chdir(target_dir)
 
     for seg_id in seg_ids:
-        cv.mesh.save(seg_id)
+        if fmt == "hdf5":
+            mesh = cv.mesh.get(seg_id)
+            write_mesh_h5(f"{seg_id}.h5", mesh["vertices"], mesh["faces"])
+        elif fmt == "obj":
+            cv.mesh.save(seg_id)
+        else:
+            raise Exception(f"unknown fmt: {fmt}")
 
 
-def download_meshes(seg_ids, target_dir, cv_path, n_threads=1):
+def download_meshes(seg_ids, target_dir, cv_path, n_threads=1, 
+                    verbose=False, fmt="obj"):
     """ Downloads meshes in target directory (parallel)
 
     :param seg_ids: list of ints
     :param target_dir: str
     :param cv_path: str
     :param n_threads: int
+    :param fmt: str, desired file format ("obj" or "hdf5")
     """
 
     n_jobs = n_threads * 3
@@ -49,15 +123,15 @@ def download_meshes(seg_ids, target_dir, cv_path, n_threads=1):
 
     multi_args = []
     for seg_id_block in seg_id_blocks:
-        multi_args.append([seg_id_block, cv_path, target_dir])
+        multi_args.append([seg_id_block, cv_path, target_dir, fmt])
 
-    if n_jobs == 1:
-        mu.multiprocess_func(_download_meshes_thread,
-                             multi_args, debug=True,
-                             verbose=True, n_threads=1)
-    else:
-        mu.multisubprocess_func(_download_meshes_thread,
-                                multi_args, n_threads=n_threads)
+    #if n_jobs == 1:
+    mu.multiprocess_func(_download_meshes_thread,
+                         multi_args, debug=True,
+                         verbose=verbose, n_threads=n_threads)
+    #else:
+    #    mu.multisubprocess_func(_download_meshes_thread,
+    #                            multi_args, n_threads=n_threads)
 
 
 def refine_mesh():
@@ -76,6 +150,7 @@ class MeshMeta(object):
                 self.filename_dict[filename] = None
 
         return self.filename_dict[filename]
+
 
 class Mesh(object):
     def __init__(self, filename):
@@ -134,54 +209,27 @@ class Mesh(object):
         return self._graph
 
     def load_obj(self):
-        # adapted from https://www.pygame.org/wiki/OBJFileLoader
+        """Reads data from an obj file"""
+        vs, fs, ns = read_mesh_obj(self.filename)
 
-        vertices = []
-        faces = []
-        normals = []
-
-        for line in open(self.filename, "r"):
-            if line.startswith('#'): continue
-            values = line.split()
-            if not values: continue
-            if values[0] == 'v':
-                v = values[1:4]
-                vertices.append(v)
-            elif values[0] == 'vn':
-                v = map(float, values[1:4])
-                normals.append(v)
-            elif values[0] == 'f':
-                face = []
-                texcoords = []
-                norms = []
-                for v in values[1:]:
-                    w = v.split('/')
-                    face.append(int(w[0]))
-                    if len(w) >= 2 and len(w[1]) > 0:
-                        texcoords.append(int(w[1]))
-                    else:
-                        texcoords.append(0)
-                    if len(w) >= 3 and len(w[2]) > 0:
-                        norms.append(int(w[2]))
-                    else:
-                        norms.append(0)
-                faces.append(face)
-
-        self._faces = np.array(faces, dtype=np.int) - 1
-        self._vertices = np.array(vertices, dtype=np.float)
-        self._normals = np.array(normals, dtype=np.float)
+        self._vertices = vs
+        self._faces = fs
+        self._normals = ns
 
     def load_h5(self):
-        with h5py.File(self.filename, "r") as f:
-            self._vertices = f["vertices"].value
-            self._normals = f["normals"].value
-            self._faces = f["faces"].value
+        """Reads data from an hdf5 file"""
+        vs, fs, ns = read_mesh_h5(self.filename)
 
-    def write_h5(self):
-        with h5py.File(self.filename, "w") as f:
-            f.create_dataset("vertices", self.vertices, compression="gzip")
-            f.create_dataset("faces", self.faces, compression="gzip")
-            f.create_dataset("normals", self.normals, compression="gzip")
+        self._vertices = vs
+        self._faces = fs
+        self._normals = ns
+
+    def write_h5(self, overwrite=False):
+        """Writes data to an hdf5 file"""
+        normals = None if len(self.normals) == 0 else self.normals
+
+        write_mesh_h5(self.filename, self.vertices, self.faces, 
+                      normals, overwrite=overwrite)
 
     def write_vertices_ply(self, out_fname, coords=None):
         """Writing vertex coordinates as a .ply file using plyfile"""
