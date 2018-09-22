@@ -3,6 +3,7 @@ Mesh Iterator Classes
 """
 
 import random
+import time
 
 
 ORDERS = ["random", "sequential"]
@@ -38,9 +39,12 @@ class LocalViewIterator(object):
             raise StopIteration
 
         if self._order == "random":
+            random.seed(time.time())
             center = random.choice(self._active_inds)
-        if self._order == "sequential":
+        elif self._order == "sequential":
             center = self._active_inds[0]
+        else:
+            raise Exception()
 
         view, _, node_ids = self._mesh.get_local_view(center_node_id=center,
                                                       **self._kwargs)

@@ -32,6 +32,5 @@ setup(
     packages=['meshparty'],
     include_package_data=True,
     install_requires=required,
-    setup_requires=['pytest-runner'],
-    dependency_links=['git+https://github.com/sdorkenw/MultiWrapper']
+    setup_requires=['pytest-runner']
 )
