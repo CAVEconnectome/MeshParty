@@ -37,11 +37,11 @@ def write_mesh_h5(filename, vertices, faces,
             raise Exception(f"File {filename} already exists")
 
     with h5py.File(filename, "w") as f:
-        f.create_dataset("vertices", vertices, compression="gzip")
-        f.create_dataset("faces", faces, compression="gzip")
+        f.create_dataset("vertices", data=vertices, compression="gzip")
+        f.create_dataset("faces", data=faces, compression="gzip")
 
         if normals is not None:
-            f.create_dataset("normals", normals, compression="gzip")
+            f.create_dataset("normals", data=normals, compression="gzip")
 
 
 def read_mesh_obj(filename):
@@ -125,13 +125,14 @@ def download_meshes(seg_ids, target_dir, cv_path, n_threads=1,
     for seg_id_block in seg_id_blocks:
         multi_args.append([seg_id_block, cv_path, target_dir, fmt])
 
-    #if n_jobs == 1:
-    mu.multiprocess_func(_download_meshes_thread,
-                         multi_args, debug=True,
-                         verbose=verbose, n_threads=n_threads)
-    #else:
-    #    mu.multisubprocess_func(_download_meshes_thread,
-    #                            multi_args, n_threads=n_threads)
+    if n_jobs == 1:
+        mu.multiprocess_func(_download_meshes_thread,
+                             multi_args, debug=True,
+                             verbose=verbose, n_threads=n_threads)
+    else:
+       mu.multisubprocess_func(_download_meshes_thread,
+                               multi_args, n_threads=n_threads,
+                               package_name="meshparty")
 
 
 def refine_mesh():
@@ -289,7 +290,8 @@ class Mesh(object):
         return pca.transform(vertices)
 
     def create_nx_graph(self):
-        weights = np.linalg.norm(self.vertices[self.edges[:, 0]] - self.vertices[self.edges[:, 1]], axis=1)
+        weights = np.linalg.norm(self.vertices[self.edges[:, 0]] -
+                                 self.vertices[self.edges[:, 1]], axis=1)
 
         print(weights.shape)
 
