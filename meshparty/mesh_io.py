@@ -16,7 +16,11 @@ def read_mesh_h5(filename):
 
     with h5py.File(filename) as f:
         vertices = f["vertices"].value
-        faces = f["faces"].value
+
+        if "faces" in f.keys():
+            faces = f["faces"].value
+        else:
+            faces = []
  
         if "normals" in f.keys():
             normals = f["normals"].value
@@ -251,7 +255,7 @@ class Mesh(object):
 
     def get_local_view(self, n_points, pc_align=False, center_node_id=None,
                        center_coord=None, method="kdtree", verbose=False,
-                       return_node_ids=False, svd_solver="auto"):
+                       return_node_ids=False, svd_solver="auto", pc_norm=True):
         if center_node_id is None and center_coord is None:
             center_node_id = np.random.randint(len(self.vertices))
 
@@ -277,16 +281,18 @@ class Mesh(object):
         local_vertices = self.vertices[node_ids].copy()
 
         if pc_align:
-            local_vertices = self.calc_pc_align(local_vertices, svd_solver)
+            local_vertices = self.calc_pc_align(local_vertices, svd_solver, 
+                                                pc_norm=pc_norm)
 
         if return_node_ids:
             return local_vertices, center_node_id, node_ids
         else:
             return local_vertices, center_node_id
 
-    def calc_pc_align(self, vertices, svd_solver):
-        vertices -= vertices.mean(axis=0)
-        vertices /= vertices.std(axis=0)
+    def calc_pc_align(self, vertices, svd_solver, pc_norm=True):
+        if pc_norm:
+            vertices -= vertices.mean(axis=0)
+            vertices /= vertices.std(axis=0)
         pca = decomposition.PCA(n_components=3, svd_solver=svd_solver,
                                 copy=False)
         return pca.fit_transform(vertices)
