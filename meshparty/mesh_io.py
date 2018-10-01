@@ -276,7 +276,7 @@ class Mesh(object):
            sorting = np.argsort(np.array(list(dist_dict.values())))
            node_ids = np.array(list(dist_dict.keys()))[sorting[:n_points]]
         else:
-            raise Exception("unknow method")
+            raise Exception("unknown method")
 
         local_vertices = self.vertices[node_ids].copy()
 
