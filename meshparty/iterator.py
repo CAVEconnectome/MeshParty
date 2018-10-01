@@ -16,8 +16,8 @@ class LocalViewIterator(object):
     least one local view across the iterator.
     """
 
-    def __init__(self, mesh, n_points, order="random",
-                 pc_align=False, method="kdtree", verbose=False):
+    def __init__(self, mesh, n_points, order="random", pc_align=False
+                 pc_norm=True, method="kdtree", verbose=False):
 
         assert order in ORDERS, f"invalid order {order} not in {ORDERS}"
 
@@ -28,7 +28,7 @@ class LocalViewIterator(object):
         # arguments for local view method calls
         self._kwargs = dict(n_points=n_points, pc_align=pc_align,
                             method=method, verbose=verbose,
-                            return_node_ids=True)
+                            return_node_ids=True, pc_norm=pc_norm)
 
     def __iter__(self):
         return self
