@@ -12,6 +12,8 @@ from multiwrapper import multiprocessing_utils as mu
 import trimesh
 from trimesh import caching, io
 
+from pymeshfix import _meshfix
+
 
 def read_mesh_h5(filename):
     """Reads a mesh's vertices, faces and normals from an hdf5 file"""
@@ -172,6 +174,13 @@ class Mesh(trimesh.Trimesh):
     def graph(self):
         graph = self.create_nx_graph()
         return graph
+
+    def fix_mesh(self):
+        vclean, fclean = _meshfix.CleanFromVF(self.vertices,
+                                              self.faces)
+
+        self.vertices = vclean
+        self.faces = fclean
 
     def write_h5(self, overwrite=False):
         """Writes data to an hdf5 file"""

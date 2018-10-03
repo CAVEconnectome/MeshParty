@@ -8,3 +8,4 @@ multiwrapper
 trimesh
 cloud-volume==0.31.2
 pyassimp
+pymeshfix
