@@ -140,10 +140,6 @@ def download_meshes(seg_ids, target_dir, cv_path, n_threads=1,
                                 package_name="meshparty")
 
 
-def refine_mesh():
-    pass
-
-
 class MeshMeta(object):
     def __init__(self):
         self.filename_dict = {}

@@ -10,10 +10,33 @@ pip install . --upgrade
 ## Usage example
 
 ```
-from mesh_party import mesh_io
+from mesh_party import trimesh_io
 
-meshmeta = mesh_io.MeshMeta()
+meshmeta = trimesh_io.MeshMeta()
 mesh = meshmeta.mesh(path_to_mesh) # mesh gets cached
 
 local_vertices = mesh.get_local_view(n_points, pc_align=True, method="kdtree")
+```
+
+
+## Extracting mesh information
+
+The mesh needs to be `watertight` In order to compute reliable information. To
+test whether a mesh is watertight, run
+
+```
+mesh.is_watertight
+```
+
+To make a mesh watertight do
+```
+mesh.fix_mesh()
+```
+
+Since trimesh_io.Mesh() inherits from trimesh.Trimesh all trimesh functionality 
+is available to mesh, e.g.:
+```
+mesh.volume
+mesh.area
+mesh.center_mass
 ```
