@@ -5,6 +5,7 @@ from sklearn import decomposition
 import plyfile
 import os
 import networkx as nx
+import requests
 
 import cloudvolume
 from multiwrapper import multiprocessing_utils as mu
@@ -19,14 +20,19 @@ def read_mesh_h5(filename):
     """Reads a mesh's vertices, faces and normals from an hdf5 file"""
     assert os.path.isfile(filename)
 
-    with h5py.File(filename) as f:
+    with h5py.File(filename, "r") as f:
         vertices = f["vertices"].value
         faces = f["faces"].value
+
+        if len(faces.shape) == 1:
+            faces = faces.reshape(-1, 3)
+
 
         if "normals" in f.keys():
             normals = f["normals"].value
         else:
             normals = []
+
 
     return vertices, faces, normals
 
@@ -89,28 +95,53 @@ def read_mesh_obj(filename):
     return vertices, faces, normals
 
 
+def get_frag_ids_from_endpoint(node_id, endpoint):
+    url = "%s/1.0/%d/validfragments" % (endpoint, node_id)
+    r = requests.get(url)
+
+    print(node_id, url)
+    assert r.status_code == 200
+
+    frag_ids = np.frombuffer(r.content, dtype=np.uint64)
+
+    return list(frag_ids)
+
+
 def _download_meshes_thread(args):
     """ Downloads meshes into target directory
 
     :param args: list
     """
-    seg_ids, cv_path, target_dir, fmt = args
+    seg_ids, cv_path, target_dir, fmt, overwrite, mesh_endpoint = args
 
     cv = cloudvolume.CloudVolume(cv_path)
     os.chdir(target_dir)
 
     for seg_id in seg_ids:
-        if fmt == "hdf5":
-            mesh = cv.mesh.get(seg_id)
-            write_mesh_h5(f"{seg_id}.h5", mesh["vertices"], mesh["faces"])
-        elif fmt == "obj":
-            cv.mesh.save(seg_id)
-        else:
-            raise Exception(f"unknown fmt: {fmt}")
+        if not overwrite and os.path.exists(f"{seg_id}.h5"):
+            continue
 
+        frags = [np.uint64(seg_id)]
 
-def download_meshes(seg_ids, target_dir, cv_path, n_threads=1,
-                    verbose=False, fmt="obj"):
+        if mesh_endpoint is not None:
+            frags = get_frag_ids_from_endpoint(seg_id, mesh_endpoint)
+
+        print("frags", frags)
+
+        try:
+            if fmt == "hdf5":
+                mesh = cv.mesh.get(frags)
+                write_mesh_h5(f"{seg_id}.h5", mesh["vertices"], mesh["faces"],
+                              overwrite=overwrite)
+            elif fmt == "obj":
+                cv.mesh.save(frags)
+            else:
+                raise Exception(f"unknown fmt: {fmt}")
+        except Exception as e:
+            print(e)
+
+def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
+                    mesh_endpoint=None, n_threads=1, verbose=False, fmt="obj"):
     """ Downloads meshes in target directory (parallel)
 
     :param seg_ids: list of ints
@@ -120,7 +151,11 @@ def download_meshes(seg_ids, target_dir, cv_path, n_threads=1,
     :param fmt: str, desired file format ("obj" or "hdf5")
     """
 
-    n_jobs = n_threads * 3
+    if n_threads > 1:
+        n_jobs = n_threads * 3
+    else:
+        n_jobs = 1
+
     if len(seg_ids) < n_jobs:
         n_jobs = len(seg_ids)
 
@@ -128,7 +163,8 @@ def download_meshes(seg_ids, target_dir, cv_path, n_threads=1,
 
     multi_args = []
     for seg_id_block in seg_id_blocks:
-        multi_args.append([seg_id_block, cv_path, target_dir, fmt])
+        multi_args.append([seg_id_block, cv_path, target_dir, fmt,
+                           overwrite, mesh_endpoint])
 
     if n_jobs == 1:
         mu.multiprocess_func(_download_meshes_thread,
@@ -137,7 +173,7 @@ def download_meshes(seg_ids, target_dir, cv_path, n_threads=1,
     else:
         mu.multisubprocess_func(_download_meshes_thread,
                                 multi_args, n_threads=n_threads,
-                                package_name="meshparty")
+                                package_name="meshparty", n_retries=40)
 
 
 class MeshMeta(object):
@@ -146,13 +182,19 @@ class MeshMeta(object):
 
     def mesh(self, filename):
         if not filename in self.filename_dict:
+            # print("reload -- elements in cache: %d" % len(self.filename_dict))
+            # print(self.filename_dict)
             # try:
+            if len(self.filename_dict) > 400:
+                self.filename_dict = {}
+
             if filename.endswith(".obj"):
                 vertices, faces, normals = read_mesh_obj(filename)
             elif filename.endswith(".h5"):
                 vertices, faces, normals = read_mesh_h5(filename)
             else:
                 raise Exception("Unknown filetype")
+
             mesh = Mesh(vertices=vertices, faces=faces, normals=normals)
 
             self.filename_dict[filename] = mesh
@@ -210,7 +252,7 @@ class Mesh(trimesh.Trimesh):
     def get_local_view(self, n_points, pc_align=False, center_node_id=None,
                        center_coord=None, method="kdtree", verbose=False,
                        return_node_ids=False, svd_solver="auto",
-                       return_faces=False, normalize_pca=False):
+                       return_faces=False, pc_norm=False):
         if center_node_id is None and center_coord is None:
             center_node_id = np.random.randint(len(self.vertices))
 
@@ -237,7 +279,7 @@ class Mesh(trimesh.Trimesh):
 
         if pc_align:
             local_vertices = self.calc_pc_align(local_vertices, svd_solver,
-                                                normalize_pca=normalize_pca)
+                                                pc_norm=pc_norm)
 
         return_tuple = (local_vertices, center_node_id)
 
@@ -267,19 +309,19 @@ class Mesh(trimesh.Trimesh):
         return filtered_faces
 
     def get_local_mesh(self, n_points, center_node_id=None, center_coord=None,
-                       method="kdtree", pc_align=True, normalize_pca=False):
+                       method="kdtree", pc_align=True, pc_norm=False):
         vertices, _, faces = self.get_local_view(n_points=n_points,
                                                  center_node_id=center_node_id,
                                                  center_coord=center_coord,
                                                  method=method,
                                                  return_faces=True,
                                                  pc_align=pc_align,
-                                                 normalize_pca=normalize_pca)
+                                                 pc_norm=pc_norm)
 
         return Mesh(vertices=vertices, faces=faces)
 
-    def calc_pc_align(self, vertices, svd_solver, normalize_pca=False):
-        if normalize_pca:
+    def calc_pc_align(self, vertices, svd_solver, pc_norm=False):
+        if pc_norm:
             vertices -= vertices.mean(axis=0)
             vertices /= vertices.std(axis=0)
         pca = decomposition.PCA(n_components=3, svd_solver=svd_solver,

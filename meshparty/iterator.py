@@ -17,7 +17,7 @@ class LocalViewIterator(object):
     """
 
     def __init__(self, mesh, n_points, order="random", pc_align=False,
-                 pc_norm=True, method="kdtree", verbose=False):
+                 pc_norm=False, method="kdtree", verbose=False):
 
         assert order in ORDERS, f"invalid order {order} not in {ORDERS}"
 

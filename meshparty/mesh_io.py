@@ -187,6 +187,10 @@ class Mesh(object):
         return self._vertices
 
     @property
+    def size(self):
+        return len(self.vertices)
+
+    @property
     def faces(self):
         return self._faces
 
@@ -204,7 +208,7 @@ class Mesh(object):
     @property
     def kdtree(self):
         if self._kdtree is None:
-            self._kdtree = spatial.cKDTree(self.vertices, balanced_tree=False)
+            self._kdtree = spatial.cKDTree(self.vertices, balanced_tree=True)
         return self._kdtree
 
     @property
@@ -242,9 +246,7 @@ class Mesh(object):
         if coords is None:
             coords = self.vertices
 
-        tweaked_array = np.array(
-            list(zip(coords[:, 0], coords[:, 1], coords[:, 2])),
-            dtype=[('x', 'f4'), ('y', 'f4'), ('z', 'f4')])
+        tweaked_array = np.array(list(zip(coords[:, 0], coords[:, 1], coords[:, 2])), dtype=[('x', 'f4'), ('y', 'f4'), ('z', 'f4')])
 
         vertex_element = plyfile.PlyElement.describe(tweaked_array, "vertex")
 
@@ -281,7 +283,7 @@ class Mesh(object):
         local_vertices = self.vertices[node_ids].copy()
 
         if pc_align:
-            local_vertices = self.calc_pc_align(local_vertices, svd_solver, 
+            local_vertices = self.calc_pc_align(local_vertices, svd_solver,
                                                 pc_norm=pc_norm)
 
         if return_node_ids:
