@@ -7,6 +7,11 @@ cd MeshParty
 pip install . --upgrade
 ```
 
+You might need to install assimp as well:
+```
+sudo apt-get install libassimp-dev
+```
+
 ## Usage example
 
 ```
