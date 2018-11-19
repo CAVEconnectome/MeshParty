@@ -1,6 +1,6 @@
 import numpy as np
 import h5py
-from scipy import spatial
+from scipy import spatial, sparse
 from sklearn import decomposition
 import plyfile
 import os
@@ -33,7 +33,6 @@ def read_mesh_h5(filename):
         else:
             normals = []
 
-
     return vertices, faces, normals
 
 
@@ -53,6 +52,19 @@ def write_mesh_h5(filename, vertices, faces,
 
         if normals is not None:
             f.create_dataset("normals", data=normals, compression="gzip")
+
+
+def read_mesh(filename):
+    """Reads a mesh's vertices, faces and normals from obj or h5 file"""
+
+    if filename.endswith(".obj"):
+        vertices, faces, normals = read_mesh_obj(filename)
+    elif filename.endswith(".h5"):
+        vertices, faces, normals = read_mesh_h5(filename)
+    else:
+        raise Exception("Unknown filetype")
+
+    return vertices, faces, normals
 
 
 def read_mesh_obj(filename):
@@ -99,7 +111,6 @@ def get_frag_ids_from_endpoint(node_id, endpoint):
     url = "%s/1.0/%d/validfragments" % (endpoint, node_id)
     r = requests.get(url)
 
-    print(node_id, url)
     assert r.status_code == 200
 
     frag_ids = np.frombuffer(r.content, dtype=np.uint64)
@@ -126,19 +137,16 @@ def _download_meshes_thread(args):
         if mesh_endpoint is not None:
             frags = get_frag_ids_from_endpoint(seg_id, mesh_endpoint)
 
-        print("frags", frags)
-
         try:
             if fmt == "hdf5":
                 mesh = cv.mesh.get(frags)
                 write_mesh_h5(f"{seg_id}.h5", mesh["vertices"], mesh["faces"],
                               overwrite=overwrite)
-            elif fmt == "obj":
-                cv.mesh.save(frags)
             else:
-                raise Exception(f"unknown fmt: {fmt}")
+                cv.mesh.save(frags, file_format=fmt)
         except Exception as e:
             print(e)
+
 
 def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
                     mesh_endpoint=None, n_threads=1, verbose=False, fmt="obj"):
@@ -177,29 +185,24 @@ def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
 
 
 class MeshMeta(object):
-    def __init__(self):
+    def __init__(self, cache_size=400):
         self.filename_dict = {}
+        self._cache_size = cache_size
+
+    @property
+    def cache_size(self):
+        return self._cache_size
 
     def mesh(self, filename):
         if not filename in self.filename_dict:
-            # print("reload -- elements in cache: %d" % len(self.filename_dict))
-            # print(self.filename_dict)
-            # try:
-            if len(self.filename_dict) > 400:
+            if len(self.filename_dict) > self.cache_size:
                 self.filename_dict = {}
 
-            if filename.endswith(".obj"):
-                vertices, faces, normals = read_mesh_obj(filename)
-            elif filename.endswith(".h5"):
-                vertices, faces, normals = read_mesh_h5(filename)
-            else:
-                raise Exception("Unknown filetype")
+            vertices, faces, normals = read_mesh(filename)
 
             mesh = Mesh(vertices=vertices, faces=faces, normals=normals)
 
             self.filename_dict[filename] = mesh
-            # except:
-            #     self.filename_dict[filename] = None
 
         return self.filename_dict[filename]
 
@@ -212,6 +215,11 @@ class Mesh(trimesh.Trimesh):
     def graph(self):
         graph = self.create_nx_graph()
         return graph
+
+    @caching.cache_decorator
+    def csgraph(self):
+        csgraph = self.create_csgraph()
+        return csgraph
 
     def fix_mesh(self):
         vclean, fclean = _meshfix.CleanFromVF(self.vertices,
@@ -244,10 +252,8 @@ class Mesh(trimesh.Trimesh):
 
         plyfile.PlyData([vertex_element]).write(out_fname)
 
-
     def write_to_file(self, filename):
         io.export.export_mesh(self, filename)
-
 
     def get_local_view(self, n_points, pc_align=False, center_node_id=None,
                        center_coord=None, method="kdtree", verbose=False,
@@ -310,13 +316,14 @@ class Mesh(trimesh.Trimesh):
 
     def get_local_mesh(self, n_points, center_node_id=None, center_coord=None,
                        method="kdtree", pc_align=True, pc_norm=False):
-        vertices, _, faces = self.get_local_view(n_points=n_points,
-                                                 center_node_id=center_node_id,
-                                                 center_coord=center_coord,
-                                                 method=method,
-                                                 return_faces=True,
-                                                 pc_align=pc_align,
-                                                 pc_norm=pc_norm)
+        local_view_tuple = self.get_local_view(n_points=n_points,
+                                               center_node_id=center_node_id,
+                                               center_coord=center_coord,
+                                               method=method,
+                                               return_faces=True,
+                                               pc_align=pc_align,
+                                               pc_norm=pc_norm)
+        vertices, _, faces = local_view_tuple
 
         return Mesh(vertices=vertices, faces=faces)
 
@@ -332,14 +339,26 @@ class Mesh(trimesh.Trimesh):
         weights = np.linalg.norm(self.vertices[self.edges[:, 0]] -
                                  self.vertices[self.edges[:, 1]], axis=1)
 
-        print(weights.shape)
-
         weighted_graph = nx.Graph()
         weighted_graph.add_edges_from(self.edges)
 
         for i_edge, edge in enumerate(self.edges):
             weighted_graph[edge[0]][edge[1]]['weight'] = weights[i_edge]
+            weighted_graph[edge[1]][edge[0]]['weight'] = weights[i_edge]
 
         return weighted_graph
+
+    def create_csgraph(self):
+        weights = np.linalg.norm(self.vertices[self.edges[:, 0]] -
+                                 self.vertices[self.edges[:, 1]], axis=1)
+
+        edges = np.concatenate([self.edges.T, self.edges.T[[1, 0]]], axis=1)
+        weights = np.concatenate([weights, weights]).astype(dtype=np.float32)
+
+        csgraph = sparse.csr_matrix((weights, edges),
+                                    shape=[len(self.vertices), ] * 2,
+                                    dtype=np.float32)
+
+        return csgraph
 
 
