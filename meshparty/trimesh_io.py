@@ -27,7 +27,6 @@ def read_mesh_h5(filename):
         if len(faces.shape) == 1:
             faces = faces.reshape(-1, 3)
 
-
         if "normals" in f.keys():
             normals = f["normals"].value
         else:
@@ -138,18 +137,19 @@ def _download_meshes_thread(args):
             frags = get_frag_ids_from_endpoint(seg_id, mesh_endpoint)
 
         try:
+            mesh = cv.mesh.get(frags)
             if fmt == "hdf5":
-                mesh = cv.mesh.get(frags)
                 write_mesh_h5(f"{seg_id}.h5", mesh["vertices"], mesh["faces"],
                               overwrite=overwrite)
             else:
-                cv.mesh.save(frags, file_format=fmt)
+                mesh.write_to_file(f"{seg_id}.{fmt}")
         except Exception as e:
             print(e)
 
 
 def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
-                    mesh_endpoint=None, n_threads=1, verbose=False, fmt="obj"):
+                    mesh_endpoint=None, n_threads=1, verbose=False,
+                    straggler_detection=True, fmt="hdf5"):
     """ Downloads meshes in target directory (parallel)
 
     :param seg_ids: list of ints
@@ -185,26 +185,95 @@ def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
 
 
 class MeshMeta(object):
-    def __init__(self, cache_size=400):
-        self.filename_dict = {}
+    def __init__(self, cache_size=400, cv_path=None, disk_cache_path=None,
+                 mesh_endpoint=None):
+        self._mesh_cache = {}
         self._cache_size = cache_size
+        self._cv_path = cv_path
+        self._cv = None
+        self._disk_cache_path = disk_cache_path
+        self._mesh_endpoint = mesh_endpoint
+
+        if not self.disk_cache_path is None:
+            if not os.path.exists(self.disk_cache_path):
+                os.makedirs(self.disk_cache_path)
 
     @property
     def cache_size(self):
         return self._cache_size
 
-    def mesh(self, filename):
-        if not filename in self.filename_dict:
-            if len(self.filename_dict) > self.cache_size:
-                self.filename_dict = {}
+    @property
+    def cv_path(self):
+        return self._cv_path
 
-            vertices, faces, normals = read_mesh(filename)
+    @property
+    def disk_cache_path(self):
+        return self._disk_cache_path
 
-            mesh = Mesh(vertices=vertices, faces=faces, normals=normals)
+    @property
+    def mesh_endpoint(self):
+        return self._mesh_endpoint
 
-            self.filename_dict[filename] = mesh
+    @property
+    def cv(self):
+        if self._cv is None and self.cv_path is not None:
+            self._cv = cloudvolume.CloudVolume(self.cv_path, parallel=10)
 
-        return self.filename_dict[filename]
+        return self._cv
+
+    def filename(self, seg_id):
+        assert self.disk_cache_path is not None
+
+        return "%s/%d.h5" % (self.disk_cache_path, seg_id)
+
+    def mesh(self, filename=None, seg_id=None, cache_mesh=True, fix_mesh=False):
+        assert filename is not None or \
+               (seg_id is not None and self.cv is not None)
+
+        if filename is not None:
+            if not filename in self._mesh_cache:
+                vertices, faces, normals = read_mesh(filename)
+
+                mesh = Mesh(vertices=vertices, faces=faces, normals=normals)
+
+                if fix_mesh:
+                    mesh.fix_mesh()
+
+                if cache_mesh and len(self._mesh_cache) < self.cache_size:
+                    self._mesh_cache[filename] = mesh
+            else:
+                mesh = self._mesh_cache[filename]
+        else:
+            if self.disk_cache_path is not None:
+                if os.path.exists(self.filename(seg_id)):
+                    return self.mesh(filename=self.filename(seg_id),
+                                     cache_mesh=cache_mesh)
+
+            if not seg_id in self._mesh_cache:
+                if self.mesh_endpoint is not None:
+                    frags = get_frag_ids_from_endpoint(seg_id,
+                                                       self.mesh_endpoint)
+                else:
+                    frags = [seg_id]
+
+                cv_mesh = self.cv.mesh.get(frags)
+
+                mesh = Mesh(vertices=cv_mesh["vertices"],
+                            faces=np.array(cv_mesh["faces"]).reshape(-1, 3))
+
+                if fix_mesh:
+                    mesh.fix_mesh()
+
+                if cache_mesh and len(self._mesh_cache) < self.cache_size:
+                    self._mesh_cache[seg_id] = mesh
+
+                if self.disk_cache_path is not None:
+                    write_mesh_h5(self.filename(seg_id), mesh.vertices,
+                                  mesh.faces.flatten())
+            else:
+                mesh = self._mesh_cache[seg_id]
+
+        return mesh
 
 
 class Mesh(trimesh.Trimesh):
@@ -228,12 +297,7 @@ class Mesh(trimesh.Trimesh):
         self.vertices = vclean
         self.faces = fclean
 
-    def write_h5(self, overwrite=False):
-        """Writes data to an hdf5 file"""
-        normals = None if len(self.normals) == 0 else self.normals
-
-        write_mesh_h5(self.filename, self.vertices, self.faces,
-                      normals, overwrite=overwrite)
+        self.fix_normals()
 
     def write_vertices_ply(self, out_fname, coords=None):
         """Writing vertex coordinates as a .ply file using plyfile"""
