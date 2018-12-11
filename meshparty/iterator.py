@@ -4,6 +4,7 @@ Mesh Iterator Classes
 
 import random
 import time
+import numpy as np
 
 
 ORDERS = ["random", "sequential"]
@@ -16,48 +17,63 @@ class LocalViewIterator(object):
     least one local view across the iterator.
     """
 
-    def __init__(self, mesh, n_points, order="random", pc_align=False,
-                 pc_norm=False, method="kdtree", verbose=False):
+    def __init__(self, mesh, n_points, batch_size=1, order="random",
+                 pc_align=False, pc_norm=False, method="kdtree",
+                 verbose=False):
 
         assert order in ORDERS, f"invalid order {order} not in {ORDERS}"
 
         self._active_inds = list(range(mesh.vertices.shape[0]))
         self._order = order
         self._mesh = mesh
+        self._batch_size = batch_size
 
         # arguments for local view method calls
         self._kwargs = dict(n_points=n_points, pc_align=pc_align,
-                            method=method, verbose=verbose,
+                            verbose=verbose,
                             return_node_ids=True, pc_norm=pc_norm)
 
     def __iter__(self):
         return self
 
     def __next__(self):
+        time_start = time.time()
         # stopping condition: no more indices to sample
         if len(self._active_inds) == 0:
             raise StopIteration
 
+        n_samples = min(self._batch_size, len(self._active_inds))
+
         if self._order == "random":
             random.seed(time.time())
-            center = random.choice(self._active_inds)
+            centers = np.random.choice(self._active_inds, n_samples,
+                                       replace=False)
+            views, _, node_ids = self._mesh.get_local_views(
+                center_node_ids=centers,  **self._kwargs)
+            self._deactivate_nodes(node_ids.flatten())
         elif self._order == "sequential":
-            center = self._active_inds[0]
+            centers = []
+            views = []
+            while len(self._active_inds) > 0:
+                centers.append(self._active_inds[0])
+                view, _, node_ids = self._mesh.get_local_views(
+                    center_node_ids=[centers[-1]], **self._kwargs)
+                views.extend(view)
+                self._deactivate_nodes(node_ids)
         else:
             raise Exception()
 
-        view, _, node_ids = self._mesh.get_local_view(center_node_id=center,
-                                                      **self._kwargs)
-
-        self._deactivate_nodes(node_ids)
-
-        return view, center
+        print("Views took %.3fs" % (time.time() - time_start))
+        return np.array(views, dtype=np.float32), \
+               np.array(centers, dtype=np.uint32)
 
     def _deactivate_nodes(self, node_ids):
         """
         Removes nodes from consideration which have been sampled
         in the last patch
         """
+        if isinstance(node_ids, np.ndarray):
+            node_ids = node_ids.tolist()
 
         to_deactivate = set(node_ids)
         self._active_inds = list(filter(lambda x: x not in to_deactivate,
