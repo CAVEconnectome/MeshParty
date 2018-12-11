@@ -6,6 +6,7 @@ import plyfile
 import os
 import networkx as nx
 import requests
+import time
 
 import cloudvolume
 from multiwrapper import multiprocessing_utils as mu
@@ -290,12 +291,34 @@ class Mesh(trimesh.Trimesh):
         csgraph = self.create_csgraph()
         return csgraph
 
-    def fix_mesh(self):
-        vclean, fclean = _meshfix.CleanFromVF(self.vertices,
-                                              self.faces)
+    @property
+    def n_vertices(self):
+        return len(self.vertices)
 
-        self.vertices = vclean
-        self.faces = fclean
+    @property
+    def n_faces(self):
+        return len(self.faces)
+
+    def fix_mesh(self, wiggle_vertices=False, verbose=False):
+
+        tin = _meshfix.PyTMesh(verbose)
+        tin.LoadArray(self.vertices, self.faces)
+        tin.RemoveSmallestComponents()
+
+        # Check if volume is 0 after isolated components have been removed
+        self.vertices, self.faces = tin.ReturnArrays()
+
+        self.fix_normals()
+
+        if self.volume == 0:
+            return
+
+        if wiggle_vertices:
+            self.vertices += np.random.rand(self.n_vertices * 3).reshape(-1, 3) * 10
+
+        self.vertices, self.faces = _meshfix.CleanFromVF(self.vertices,
+                                                         self.faces,
+                                                         verbose=False)
 
         self.fix_normals()
 
@@ -319,39 +342,39 @@ class Mesh(trimesh.Trimesh):
     def write_to_file(self, filename):
         io.export.export_mesh(self, filename)
 
-    def get_local_view(self, n_points, pc_align=False, center_node_id=None,
-                       center_coord=None, method="kdtree", verbose=False,
-                       return_node_ids=False, svd_solver="auto",
-                       return_faces=False, pc_norm=False):
-        if center_node_id is None and center_coord is None:
-            center_node_id = np.random.randint(len(self.vertices))
+    def get_local_views(self, n_points, pc_align=False, center_node_ids=None,
+                        center_coords=None, verbose=False,
+                        return_node_ids=False, svd_solver="auto",
+                        return_faces=False, pc_norm=False):
 
-        if center_coord is None:
-            center_coord = self.vertices[center_node_id]
+        if center_node_ids is None and center_coords is None:
+            center_node_ids = np.array([np.random.randint(len(self.vertices))])
+
+        if center_coords is None:
+            center_node_ids = np.array(center_node_ids, dtype=np.int)
+            center_coords = self.vertices[center_node_ids]
+
+        center_coords = np.array(center_coords)
 
         n_samples = np.min([n_points, len(self.vertices)])
 
-        if method == "kdtree":
-            dists, node_ids = self.kdtree.query(center_coord, n_samples,
-                                                n_jobs=-1)
-            if verbose:
-                print(np.mean(dists), np.max(dists), np.min(dists))
-        elif method == "graph":
-           dist_dict = nx.single_source_dijkstra_path_length(self.graph,
-                                                             center_node_id,
-                                                             weight="weight")
-           sorting = np.argsort(np.array(list(dist_dict.values())))
-           node_ids = np.array(list(dist_dict.keys()))[sorting[:n_points]]
-        else:
-            raise Exception("unknow method")
+        dists, node_ids = self.kdtree.query(center_coords, n_samples,
+                                            n_jobs=-1)
+        if verbose:
+            print(np.mean(dists, axis=1), np.max(dists, axis=1),
+                  np.min(dists, axis=1))
 
-        local_vertices = self.vertices[node_ids].copy()
+        node_ids = np.sort(node_ids, axis=1)
+
+        local_vertices = self.vertices[node_ids]
 
         if pc_align:
-            local_vertices = self.calc_pc_align(local_vertices, svd_solver,
-                                                pc_norm=pc_norm)
+            for i_lv in range(len(local_vertices)):
+                local_vertices[i_lv] = self.calc_pc_align(local_vertices[i_lv],
+                                                          svd_solver,
+                                                          pc_norm=pc_norm)
 
-        return_tuple = (local_vertices, center_node_id)
+        return_tuple = (local_vertices, center_node_ids)
 
         if return_node_ids:
             return_tuple += (node_ids, )
@@ -361,42 +384,94 @@ class Mesh(trimesh.Trimesh):
 
         return return_tuple
 
+    def get_local_view(self, n_points, pc_align=False, center_node_id=None,
+                       center_coord=None, method="kdtree", verbose=False,
+                       return_node_ids=False, svd_solver="auto",
+                       return_faces=False, pc_norm=False):
+
+        assert method == "kdtree"
+
+        if center_node_id is None and center_coord is None:
+            center_node_id = np.random.randint(len(self.vertices))
+
+        if center_coord is None:
+            center_coord = self.vertices[center_node_id]
+
+        return self.get_local_views(n_points=n_points, pc_align=pc_align,
+                                    center_node_ids=[center_node_id],
+                                    center_coords=[center_coord],
+                                    verbose=verbose,
+                                    return_node_ids=return_node_ids,
+                                    svd_solver=svd_solver,
+                                    return_faces=return_faces,
+                                    pc_norm=pc_norm)
+
     def _filter_faces(self, node_ids):
-        def _remap(entry):
-            return mapper_dict[entry] if entry in mapper_dict else entry
+        """ node_ids has to be sorted! """
+        if len(node_ids.shape) == 1:
+            node_ids = node_ids[None]
 
-        filtered_faces = self.faces.copy()
+        all_node_ids = node_ids.flatten()
+        pre_filtered_faces = self.faces[np.in1d(self.faces[:, 0], all_node_ids)]
+        pre_filtered_faces = pre_filtered_faces[np.in1d(pre_filtered_faces[:, 1], all_node_ids)]
+        pre_filtered_faces = pre_filtered_faces[np.in1d(pre_filtered_faces[:, 2], all_node_ids)]
 
-        filtered_faces = filtered_faces[np.in1d(filtered_faces[:, 0], node_ids)]
-        filtered_faces = filtered_faces[np.in1d(filtered_faces[:, 1], node_ids)]
-        filtered_faces = filtered_faces[np.in1d(filtered_faces[:, 2], node_ids)]
+        filtered_faces = []
 
-        mapper_dict = dict(zip(node_ids,
-                               np.arange(len(node_ids), dtype=np.int)))
-        _remap = np.vectorize(_remap)
-        filtered_faces = _remap(filtered_faces)
+        for ns in node_ids:
+            f = pre_filtered_faces[np.in1d(pre_filtered_faces[:, 0], ns)]
+            f = f[np.in1d(f[:, 1], ns)]
+            f = f[np.in1d(f[:, 2], ns)]
+
+            f = np.unique(np.concatenate([f.flatten(), ns]),
+                          return_inverse=True)[1][:-len(ns)].reshape(-1, 3)
+
+            filtered_faces.append(f)
 
         return filtered_faces
 
-    def get_local_mesh(self, n_points, center_node_id=None, center_coord=None,
-                       method="kdtree", pc_align=True, pc_norm=False):
-        local_view_tuple = self.get_local_view(n_points=n_points,
-                                               center_node_id=center_node_id,
-                                               center_coord=center_coord,
-                                               method=method,
-                                               return_faces=True,
-                                               pc_align=pc_align,
-                                               pc_norm=pc_norm)
+    def get_local_meshes(self, n_points, center_node_ids=None,
+                         center_coords=None, pc_align=True, pc_norm=False,
+                         fix_meshes=False):
+        local_view_tuple = self.get_local_views(n_points=n_points,
+                                                center_node_ids=center_node_ids,
+                                                center_coords=center_coords,
+                                                return_faces=True,
+                                                pc_align=pc_align,
+                                                pc_norm=pc_norm)
         vertices, _, faces = local_view_tuple
 
-        return Mesh(vertices=vertices, faces=faces)
+        meshes = [Mesh(vertices=v, faces=f) for v, f in zip(vertices, faces)]
+
+        if fix_meshes:
+            for mesh in meshes:
+                mesh.fix_mesh(wiggle_vertices=True)
+
+        return meshes
+
+    def get_local_mesh(self, n_points, center_node_id=None, center_coord=None,
+                       pc_align=True, pc_norm=False):
+        if center_node_id is not None:
+            center_node_id = [center_node_id]
+
+        if center_coord is not None:
+            center_coord = [center_coord]
+
+        return self.get_local_meshes(n_points,
+                                     center_node_ids=center_node_id,
+                                     center_coords=center_coord,
+                                     pc_align=pc_align, pc_norm=pc_norm)[0]
 
     def calc_pc_align(self, vertices, svd_solver, pc_norm=False):
+        vertices = vertices.copy()
         if pc_norm:
             vertices -= vertices.mean(axis=0)
             vertices /= vertices.std(axis=0)
-        pca = decomposition.PCA(n_components=3, svd_solver=svd_solver,
+
+        pca = decomposition.PCA(n_components=3,
+                                svd_solver=svd_solver,
                                 copy=False)
+
         return pca.fit_transform(vertices)
 
     def create_nx_graph(self):
