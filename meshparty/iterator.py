@@ -18,8 +18,8 @@ class LocalViewIterator(object):
     """
 
     def __init__(self, mesh, n_points, batch_size=1, order="random",
-                 pc_align=False, pc_norm=False, method="kdtree",
-                 verbose=False):
+                 pc_align=False, pc_norm=False, adaptnorm=False,
+                 sample_n_points=None, verbose=False):
 
         assert order in ORDERS, f"invalid order {order} not in {ORDERS}"
 
@@ -30,8 +30,13 @@ class LocalViewIterator(object):
 
         # arguments for local view method calls
         self._kwargs = dict(n_points=n_points, pc_align=pc_align,
-                            verbose=verbose,
+                            verbose=verbose, sample_n_points=sample_n_points,
                             return_node_ids=True, pc_norm=pc_norm)
+
+        self._deact_kwargs = dict(n_points=n_points, pc_align=pc_align,
+                                  adapt_unit_sphere_norm=adaptnorm,
+                                  verbose=verbose, sample_n_points=None,
+                                  return_node_ids=True, pc_norm=pc_norm)
 
     def __iter__(self):
         return self
@@ -50,6 +55,11 @@ class LocalViewIterator(object):
                                        replace=False)
             views, _, node_ids = self._mesh.get_local_views(
                 center_node_ids=centers,  **self._kwargs)
+
+            if self._kwargs["sample_n_points"] is not None:
+                _, _, node_ids = self._mesh.get_local_views(
+                    center_node_ids=centers, **self._deact_kwargs)
+
             self._deactivate_nodes(node_ids.flatten())
         elif self._order == "sequential":
             centers = []
@@ -59,6 +69,11 @@ class LocalViewIterator(object):
                 view, _, node_ids = self._mesh.get_local_views(
                     center_node_ids=[centers[-1]], **self._kwargs)
                 views.extend(view)
+
+                if self._kwargs["sample_n_points"] is not None:
+                    _, _, node_ids = self._mesh.get_local_views(
+                        center_node_ids=centers, **self._deact_kwargs)
+
                 self._deactivate_nodes(node_ids)
         else:
             raise Exception()
