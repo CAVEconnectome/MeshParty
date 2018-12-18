@@ -36,7 +36,7 @@ def read_mesh_h5(filename):
         if "mesh_edges" in f.keys():
             mesh_edges = f["mesh_edges"].value
         else:
-            mesh_edges = []
+            mesh_edges = None
 
     return vertices, faces, normals, mesh_edges
 
