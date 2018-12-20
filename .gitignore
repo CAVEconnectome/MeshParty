@@ -1,2 +1,7 @@
 .pypirc
 example
+dist/
+build/
+.eggs/
+*.egg-info
+*.pyc
