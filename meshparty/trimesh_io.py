@@ -283,7 +283,7 @@ class MeshMeta(object):
                 mesh = Mesh(vertices=vertices, faces=faces, normals=normals,
                             mesh_edges=mesh_edges)
 
-                if merge_large_components:
+                if merge_large_components and mesh.mesh_edges is None:
                     mesh.merge_large_components()
 
                 if cache_mesh and len(self._mesh_cache) < self.cache_size:
@@ -309,7 +309,7 @@ class MeshMeta(object):
                 mesh = Mesh(vertices=cv_mesh["vertices"],
                             faces=np.array(cv_mesh["faces"]).reshape(-1, 3))
 
-                if merge_large_components:
+                if merge_large_components and mesh.mesh_edges is None:
                     mesh.merge_large_components()
 
                 if cache_mesh and len(self._mesh_cache) < self.cache_size:
@@ -692,9 +692,12 @@ class Mesh(trimesh.Trimesh):
                 close_by[i_tree, j_tree] = is_close_by
                 close_by[j_tree, i_tree] = is_close_by
 
-        self._mesh_edges = np.concatenate([self.edges, add_edges])
-        self._csgraph = None
-        self._nxgraph = None
+        if len(add_edges) > 0:
+            self._mesh_edges = np.concatenate([self.edges, add_edges])
+            self._csgraph = None
+            self._nxgraph = None
+        else:
+            self._mesh_edges = self.edges.copy()
 
         print("TIME MERGING: %.3fs" % (time.time() - time_start))
 

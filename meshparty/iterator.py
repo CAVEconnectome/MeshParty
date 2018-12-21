@@ -19,7 +19,7 @@ class LocalViewIterator(object):
 
     def __init__(self, mesh, n_points, batch_size=1, order="random",
                  pc_align=False, pc_norm=False, adaptnorm=False,
-                 sample_n_points=None, verbose=False):
+                 fisheye=False, sample_n_points=None, verbose=False):
 
         assert order in ORDERS, f"invalid order {order} not in {ORDERS}"
 
@@ -30,6 +30,7 @@ class LocalViewIterator(object):
 
         # arguments for local view method calls
         self._kwargs = dict(n_points=n_points, pc_align=pc_align,
+                            fisheye=fisheye,
                             verbose=verbose, sample_n_points=sample_n_points,
                             return_node_ids=True, pc_norm=pc_norm)
 
