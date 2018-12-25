@@ -9,3 +9,4 @@ trimesh
 cloud-volume
 pyassimp
 pymeshfix
+vtk

@@ -13,9 +13,9 @@ from multiwrapper import multiprocessing_utils as mu
 
 import trimesh
 from trimesh import caching, io
-
+from meshparty.vtk import trimesh_to_vtk
 from pymeshfix import _meshfix
-
+import vtk
 
 def read_mesh_h5(filename):
     """Reads a mesh's vertices, faces and normals from an hdf5 file"""
@@ -399,7 +399,7 @@ class Mesh(trimesh.Trimesh):
         """
         io.export.export_mesh(self, filename)
 
-    def get_local_views(self, n_points,
+    def get_local_views(self, n_points=None,
                         max_dist=np.inf,
                         sample_n_points=None,
                         fisheye=False,
@@ -463,33 +463,36 @@ class Mesh(trimesh.Trimesh):
 
         center_coords = np.array(center_coords)
 
-        sample_n_points = np.min([sample_n_points, len(self.vertices)])
+        if sample_n_points is None:
+            sample_n_points =  len(self.vertices)
+        else:
+            sample_n_points = np.min([sample_n_points, len(self.vertices)])
 
         dists, node_ids = self.kdtree.query(center_coords, sample_n_points,
                                             distance_upper_bound=max_dist,
                                             n_jobs=-1)
+        if sample_n_points is not None:
+            if sample_n_points > n_points:
+                if fisheye:
+                    probs = 1 / dists
 
-        if sample_n_points > n_points:
-            if fisheye:
-                probs = 1 / dists
+                    new_dists = []
+                    new_node_ids = []
+                    ids = np.arange(0, sample_n_points, dtype=np.int)
+                    for i_sample in range(len(center_coords)):
+                        sample_ids = np.random.choice(ids, n_points, replace=False,
+                                                        p=probs[i_sample])
+                        new_dists.append(dists[i_sample, sample_ids])
+                        new_node_ids.append(node_ids[i_sample, sample_ids])
 
-                new_dists = []
-                new_node_ids = []
-                ids = np.arange(0, sample_n_points, dtype=np.int)
-                for i_sample in range(len(center_coords)):
-                    sample_ids = np.random.choice(ids, n_points, replace=False,
-                                                  p=probs[i_sample])
-                    new_dists.append(dists[i_sample, sample_ids])
-                    new_node_ids.append(node_ids[i_sample, sample_ids])
+                    dists = np.array(new_dists, dtype=np.float32)
+                    node_ids = np.array(new_node_ids, dtype=np.int)
+                else:
+                    ids = np.arange(0, sample_n_points, dtype=np.int)
+                    sample_ids = np.random.choice(ids, n_points, replace=False)
 
-                dists = np.array(new_dists, dtype=np.float32)
-                node_ids = np.array(new_node_ids, dtype=np.int)
-            else:
-                ids = np.arange(0, sample_n_points, dtype=np.int)
-                sample_ids = np.random.choice(ids, n_points, replace=False)
-
-                dists = dists[:, sample_ids]
-                node_ids = node_ids[:, sample_ids]
+                    dists = dists[:, sample_ids]
+                    node_ids = node_ids[:, sample_ids]
 
         if verbose:
             print(np.mean(dists, axis=1), np.max(dists, axis=1),
@@ -528,7 +531,7 @@ class Mesh(trimesh.Trimesh):
 
         return return_tuple
 
-    def get_local_view(self, n_points, max_dist=np.inf,
+    def get_local_view(self, n_points=None, max_dist=np.inf,
                        sample_n_points=None,
                        pc_align=False, center_node_id=None,
                        center_coord=None, method="kdtree", verbose=False,
@@ -588,7 +591,7 @@ class Mesh(trimesh.Trimesh):
 
         return filtered_faces
 
-    def get_local_meshes(self, n_points, max_dist=np.inf, center_node_ids=None,
+    def get_local_meshes(self, n_points=None, max_dist=np.inf, center_node_ids=None,
                          center_coords=None, pc_align=False, pc_norm=False,
                          fix_meshes=False):
         """ Extracts a local mesh
@@ -619,7 +622,7 @@ class Mesh(trimesh.Trimesh):
 
         return meshes
 
-    def get_local_mesh(self, n_points, max_dist=np.inf, center_node_id=None,
+    def get_local_mesh(self, n_points=None, max_dist=np.inf, center_node_id=None,
                        center_coord=None, pc_align=True, pc_norm=False):
         """ Single version of get_local_meshes """
 
@@ -723,6 +726,47 @@ class Mesh(trimesh.Trimesh):
 
         return weighted_graph
 
+    def find_principal_axis(self, svd_solver='auto'):
+        """ Calculates PC alignment """
+
+        pca = decomposition.PCA(n_components=3,
+                                svd_solver=svd_solver,
+                                copy=False)
+        pca.fit(vertices)
+        return pca.components_[0,:]
+
+    def calc_local_cross_sections(self, locations, max_dist=5000, slices = np.arange(-2000,2000,100)):
+        local_meshes = self.get_local_mesh(max_dist=max_dist, pc_align=False, center_coords=locations)
+        cutter= vtk.vtkCutter()
+        plane = vtk.vtkPlane()
+        cutter.SetCutFunction(plane)
+        cutter.GenerateTrianglesOn ()
+        cutStrips = vtk.vtkStripper()
+        cutStrips.SetInputConnection(cutter.GetOutputPort())
+
+        areas = np.zeros((locations.shape[0],len(slices))
+
+        for i,mesh in enumerate(local_meshes): 
+            local_polyData = trimesh_to_vtk(mesh.vertices, mesh.faces)
+            cutter.SetInputData(local_polyData)
+            
+            local_axis = mesh.find_principal_axis()
+            plane.SetNormal(*local_axis)
+            for k,x in enumerate(slices):
+                plane_pos = location + x*local_axis
+                plane.SetOrigin(*plane_pos)
+                cutStrips.Update()
+                cutPoly = vtk.vtkPolyData()
+                cutPoly.SetPoints(cutStrips.GetOutput().GetPoints())
+                cutPoly.SetPolys(cutStrips.GetOutput().GetLines())
+                t = vtk.vtkTriangleFilter()
+                t.SetInputData(cutPoly)
+                t.Update()
+                massfilter = vtk.vtkMassProperties()
+                massfilter.SetInputData(t.GetOutput())
+                areas[i,k]=massfilter.GetSurfaceArea()
+        return areas
+            
     def _create_csgraph(self):
         """ Computes csgraph """
         if not self.mesh_edges is None:
@@ -741,5 +785,3 @@ class Mesh(trimesh.Trimesh):
                                     dtype=np.float32)
 
         return csgraph
-
-
