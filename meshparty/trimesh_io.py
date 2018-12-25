@@ -136,9 +136,12 @@ def _download_meshes_thread(args):
     cv = cloudvolume.CloudVolume(cv_path)
 
     for seg_id in seg_ids:
-        if not overwrite and os.path.exists(f"{seg_id}.h5"):
+        print('downloading {}'.format(seg_id))
+        target_file = os.path.join(target_dir, f"{seg_id}.h5")
+        if not overwrite and os.path.exists(target_file):
+            print('file exists {}'.format(target_file))
             continue
-
+        print('file does not exist {}'.format(target_file))
         frags = [np.uint64(seg_id)]
 
         if mesh_endpoint is not None:
