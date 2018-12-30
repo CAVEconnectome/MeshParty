@@ -94,7 +94,7 @@ def trimesh_to_vtk(vertices, tris):
 
 
 def calculate_cross_sections(mesh, graph_verts, graph_edges):
-
+  
     mesh_polydata = trimesh_to_vtk(mesh.vertices, mesh.faces)
 
     cutter = vtk.vtkPlaneCutter()
@@ -117,9 +117,11 @@ def calculate_cross_sections(mesh, graph_verts, graph_edges):
     dvs = (dvs / np.linalg.norm(dvs, axis=1)[:, np.newaxis])
     for k, edge in enumerate(graph_edges):
         dv = dvs[k, :]
-        dv = dv.tolist()[0]
+
+        dv = dv.tolist()
+
         v = graph_verts[graph_edges[k, 0], :]
-        v = v.tolist()[0]
+        v = v.tolist()
         plane.SetNormal(*dv)
         plane.SetOrigin(*v)
 
