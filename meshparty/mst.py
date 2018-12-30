@@ -41,7 +41,21 @@ def get_steiner_mst(trimesh, positions, d_upper_bound=1000):
     return mst_verts_red, mst_edges_red
 
 
-def smooth_graph(verts, edges, iterations=250, r=.1):
+def smooth_graph(verts, edges, iterations=100, r=.1):
+    """ smooths a spatial graph via iterative local averaging
+        calculates the average position of neighboring vertices
+        and relaxes the vertices toward that average
+
+        :param verts: a NxK numpy array of vertex positions
+        :param edges: a Mx2 numpy array of vertex indices that are edges
+        :param iterations: number of relaxation iterations (default = 100)
+        :param r: relaxation factor at each iteration
+        new_vertex = (1-r)*old_vertex + r*(local_avg)
+
+        :return: new_verts
+        verts is a Nx3 list of new smoothed vertex positions
+
+    """
     N = len(verts)
     sm1 = csc_matrix(
         (np.ones(len(edges)), (edges[:, 0], edges[:, 1])), shape=(N, N))
