@@ -17,6 +17,7 @@ from meshparty.vtk import trimesh_to_vtk
 from pymeshfix import _meshfix
 import vtk
 
+
 def read_mesh_h5(filename):
     """Reads a mesh's vertices, faces and normals from an hdf5 file"""
     assert os.path.isfile(filename)
@@ -83,9 +84,11 @@ def read_mesh_obj(filename):
     normals = []
 
     for line in open(filename, "r"):
-        if line.startswith('#'): continue
+        if line.startswith('#'):
+            continue
         values = line.split()
-        if not values: continue
+        if not values:
+            continue
         if values[0] == 'v':
             v = values[1:4]
             vertices.append(v)
@@ -229,7 +232,7 @@ class MeshMeta(object):
         self._disk_cache_path = disk_cache_path
         self._mesh_endpoint = mesh_endpoint
 
-        if not self.disk_cache_path is None:
+        if self.disk_cache_path is not None:
             if not os.path.exists(self.disk_cache_path):
                 os.makedirs(self.disk_cache_path)
 
@@ -277,10 +280,10 @@ class MeshMeta(object):
         :return: Mesh
         """
         assert filename is not None or \
-               (seg_id is not None and self.cv is not None)
+            (seg_id is not None and self.cv is not None)
 
         if filename is not None:
-            if not filename in self._mesh_cache:
+            if filename not in self._mesh_cache:
                 vertices, faces, normals, mesh_edges = read_mesh(filename)
 
                 mesh = Mesh(vertices=vertices, faces=faces, normals=normals,
@@ -300,7 +303,7 @@ class MeshMeta(object):
                                      cache_mesh=cache_mesh,
                                      merge_large_components=merge_large_components)
 
-            if not seg_id in self._mesh_cache:
+            if seg_id not in self._mesh_cache:
                 if self.mesh_endpoint is not None:
                     frags = get_frag_ids_from_endpoint(seg_id,
                                                        self.mesh_endpoint)
@@ -453,8 +456,7 @@ class Mesh(trimesh.Trimesh):
 
         if sample_n_points is None:
             sample_n_points = n_points
-
-        if sample_n_points > n_points:
+        elif sample_n_points > n_points:
             assert not return_faces
         elif sample_n_points == n_points:
             pass
@@ -464,14 +466,14 @@ class Mesh(trimesh.Trimesh):
         center_coords = np.array(center_coords)
 
         if sample_n_points is None:
-            sample_n_points =  len(self.vertices)
+            sample_n_points = len(self.vertices)
         else:
             sample_n_points = np.min([sample_n_points, len(self.vertices)])
 
         dists, node_ids = self.kdtree.query(center_coords, sample_n_points,
                                             distance_upper_bound=max_dist,
                                             n_jobs=-1)
-        if sample_n_points is not None:
+        if n_points is not None:
             if sample_n_points > n_points:
                 if fisheye:
                     probs = 1 / dists
@@ -481,7 +483,7 @@ class Mesh(trimesh.Trimesh):
                     ids = np.arange(0, sample_n_points, dtype=np.int)
                     for i_sample in range(len(center_coords)):
                         sample_ids = np.random.choice(ids, n_points, replace=False,
-                                                        p=probs[i_sample])
+                                                      p=probs[i_sample])
                         new_dists.append(dists[i_sample, sample_ids])
                         new_node_ids.append(node_ids[i_sample, sample_ids])
 
@@ -709,7 +711,7 @@ class Mesh(trimesh.Trimesh):
 
     def _create_nxgraph(self):
         """ Computes networkx graph """
-        if not self.mesh_edges is None:
+        if self.mesh_edges is not None:
             edges = self.mesh_edges
         else:
             edges = self.edges
@@ -732,28 +734,31 @@ class Mesh(trimesh.Trimesh):
         pca = decomposition.PCA(n_components=3,
                                 svd_solver=svd_solver,
                                 copy=False)
-        pca.fit(vertices)
-        return pca.components_[0,:]
+        pca.fit(self.vertices)
+        return pca.components_[0, :]
 
-    def calc_local_cross_sections(self, locations, max_dist=5000, slices = np.arange(-2000,2000,100)):
-        local_meshes = self.get_local_mesh(max_dist=max_dist, pc_align=False, center_coords=locations)
-        cutter= vtk.vtkCutter()
+    def calc_local_cross_sections(self, locations, max_dist=5000, dx=100):
+        slices = np.arange(-max_dist, max_dist, dx)
+        local_meshes = self.get_local_meshes(
+            max_dist=max_dist, pc_align=False, center_coords=locations)
+        cutter = vtk.vtkCutter()
         plane = vtk.vtkPlane()
         cutter.SetCutFunction(plane)
-        cutter.GenerateTrianglesOn ()
+        cutter.GenerateTrianglesOn()
         cutStrips = vtk.vtkStripper()
         cutStrips.SetInputConnection(cutter.GetOutputPort())
 
-        areas = np.zeros((locations.shape[0],len(slices))
-
-        for i,mesh in enumerate(local_meshes): 
+        areas = np.zeros((locations.shape[0], len(slices)))
+        local_axes = []
+        for i, mesh in enumerate(local_meshes):
             local_polyData = trimesh_to_vtk(mesh.vertices, mesh.faces)
             cutter.SetInputData(local_polyData)
-            
+
             local_axis = mesh.find_principal_axis()
+            local_axes.append(local_axis)
             plane.SetNormal(*local_axis)
-            for k,x in enumerate(slices):
-                plane_pos = location + x*local_axis
+            for k, x in enumerate(slices):
+                plane_pos = locations[i, :] + x*local_axis
                 plane.SetOrigin(*plane_pos)
                 cutStrips.Update()
                 cutPoly = vtk.vtkPolyData()
@@ -764,12 +769,12 @@ class Mesh(trimesh.Trimesh):
                 t.Update()
                 massfilter = vtk.vtkMassProperties()
                 massfilter.SetInputData(t.GetOutput())
-                areas[i,k]=massfilter.GetSurfaceArea()
-        return areas
-            
+                areas[i, k] = massfilter.GetSurfaceArea()
+        return areas, slices, local_axes
+
     def _create_csgraph(self):
         """ Computes csgraph """
-        if not self.mesh_edges is None:
+        if self.mesh_edges is not None:
             edges = self.mesh_edges
         else:
             edges = self.edges
