@@ -1,7 +1,6 @@
 import vtk
-from vtk.util.numpy_support import numpy_to_vtk, numpy_to_vtkIdTypeArray
+from vtk.util.numpy_support import numpy_to_vtk, numpy_to_vtkIdTypeArray, vtk_to_numpy
 import numpy as np
-
 
 def numpy_rep_to_vtk(vertices, shapes):
     """ converts a numpy representation of vertices and vertex connection graph
@@ -93,8 +92,25 @@ def trimesh_to_vtk(vertices, tris):
     return mesh
 
 
+def decimate_trimesh(trimesh, reduction=.1):
+    poly = trimesh_to_vtk(trimesh.vertices, trimesh.faces)
+    dec = vtk.vtkDecimatePro()
+    dec.SetTargetReduction(reduction)
+    dec.PreserveTopologyOn()
+    dec.SetInputData(poly)
+    dec.Update()
+    out_poly = dec.GetOutput()
+
+    points = vtk_to_numpy(out_poly.GetPoints().GetData())
+    ntris = out_poly.GetNumberOfPolys()
+    cellarray = vtk_to_numpy(out_poly.GetPolys().GetData())
+    cellarray = cellarray.reshape(ntris, 4)
+    tris = cellarray[:, 1:4]
+    return points, tris
+
+
 def calculate_cross_sections(mesh, graph_verts, graph_edges):
-  
+
     mesh_polydata = trimesh_to_vtk(mesh.vertices, mesh.faces)
 
     cutter = vtk.vtkPlaneCutter()
