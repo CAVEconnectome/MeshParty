@@ -202,18 +202,18 @@ def smooth_graph(verts, edges, neighborhood=2, iterations=100, r=.1):
     N = len(verts)
     E = len(edges)
     # setup a sparse matrix with the edges
-    sm = sparse.csgraph.csc_matrix(
+    sm = sparse.csc_matrix(
         (np.ones(E), (edges[:, 0], edges[:, 1])), shape=(N, N))
 
     # an identity matrix
-    eye = sparse.csgraph.csc_matrix((np.ones(N, dtype=np.float32),
+    eye = sparse.csc_matrix((np.ones(N, dtype=np.float32),
                                     (np.arange(0, N), np.arange(0, N))),
                                     shape=(N, N))
     # for undirected graphs we want it symettric
     sm = sm + sm.T
 
     # this will store our relaxation matrix
-    C = sparse.csgraph.csc_matrix(eye)
+    C = sparse.csc_matrix(eye)
     # multiple the matrix and add to itself
     # to spread connectivity along the graph
     for i in range(neighborhood):
