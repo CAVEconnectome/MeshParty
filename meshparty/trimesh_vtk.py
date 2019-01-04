@@ -125,7 +125,7 @@ def decimate_trimesh(trimesh, reduction=.1):
 def remove_unused_verts(verts, faces):
     used_verts = np.unique(faces.ravel())
     new_verts = verts[used_verts, :]
-    new_face = np.zeros(faces.shape)
+    new_face = np.zeros(faces.shape, dtype=faces.dtype)
     for i in range(faces.shape[1]):
         new_face[:, i] = np.searchsorted(used_verts, faces[:, i])
     return new_verts, new_face
