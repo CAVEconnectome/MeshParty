@@ -66,7 +66,7 @@ def graph_to_vtk(vertices, edges):
     if np.max(edges) >= len(vertices):
         msg = 'edges refer to non existent vertices {}.'
         raise ValueError(msg.format(np.max(edges)))
-    mesh, cells = numpy_rep_to_vtk(vertices, edges)
+    mesh, cells, edges = numpy_rep_to_vtk(vertices, edges)
     mesh.SetLines(cells)
     return mesh
 
@@ -154,7 +154,7 @@ def filter_largest_cc(trimesh):
     return points, tris, edges
 
 
-def calculate_cross_sections(mesh, graph_verts, graph_edges):
+def calculate_cross_sections(mesh, graph_verts, graph_edges, calc_centers=True):
 
     mesh_polydata = trimesh_to_vtk(mesh.vertices, mesh.faces)
 
@@ -171,6 +171,10 @@ def calculate_cross_sections(mesh, graph_verts, graph_edges):
     cutStrips.SetInputConnection(cf.GetOutputPort())
 
     cross_sections = np.zeros(len(graph_edges), dtype=np.float)
+
+    if calc_centers:
+        centers = np.zeros((len(graph_edges), 3))
+
     massfilter = vtk.vtkMassProperties()
     massfilter.SetInputConnection(cutter.GetOutputPort())
     t = vtk.vtkTriangleFilter()
@@ -198,6 +202,12 @@ def calculate_cross_sections(mesh, graph_verts, graph_edges):
         cutPoly.SetPolys(cutStrips.GetOutput().GetLines())
 
         t.SetInputData(cutPoly)
+        if calc_centers:
+            pts = vtk_to_numpy(cf.GetOutput().GetPoints().GetData())
+            # centerOfMassFilter = vtk.vtkCenterOfMass()
+            # centerOfMassFilter.SetInputConnection(t.GetOutputPort())
+            # centerOfMassFilter.Update()
+            centers[k,:]=np.mean(pts, axis=0)
 
         massfilter = vtk.vtkMassProperties()
         massfilter.SetInputConnection(t.GetOutputPort())
@@ -205,7 +215,7 @@ def calculate_cross_sections(mesh, graph_verts, graph_edges):
 
         cross_sections[k] = massfilter.GetSurfaceArea()
 
-    return cross_sections
+    return cross_sections, centers
 
 def make_vtk_skeleton_from_paths(verts, paths):
     cell_list =[]
