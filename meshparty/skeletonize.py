@@ -181,14 +181,15 @@ def paths_to_edges(path_list):
         arrays.append(e)
     return np.vstack(arrays)
 
-def smooth_graph(verts, edges, neighborhood = 2, iterations=100, r=.1):
+
+def smooth_graph(verts, edges, neighborhood=2, iterations=100, r=.1):
     """ smooths a spatial graph via iterative local averaging
         calculates the average position of neighboring vertices
         and relaxes the vertices toward that average
 
         :param verts: a NxK numpy array of vertex positions
         :param edges: a Mx2 numpy array of vertex indices that are edges
-        :param neighborhood: an integer of how many edges in the graph to consider
+        :param neighborhood: an integer of how far in the graph to relax over
         as being local to any vertex (default = 2)
         :param iterations: number of relaxation iterations (default = 100)
         :param r: relaxation factor at each iteration
@@ -201,17 +202,20 @@ def smooth_graph(verts, edges, neighborhood = 2, iterations=100, r=.1):
     N = len(verts)
     E = len(edges)
     # setup a sparse matrix with the edges
-    sm = csc_matrix(
+    sm = sparse.csgraph.csc_matrix(
         (np.ones(E), (edges[:, 0], edges[:, 1])), shape=(N, N))
-    
+
     # an identity matrix
-    eye= csc_matrix((np.ones(N, dtype=np.float32), (np.arange(0, N), np.arange(0,N))), shape=(N,N))
+    eye = sparse.csgraph.csc_matrix((np.ones(N, dtype=np.float32),
+                                    (np.arange(0, N), np.arange(0, N))),
+                                    shape=(N, N))
     # for undirected graphs we want it symettric
     sm = sm + sm.T
-    
+
     # this will store our relaxation matrix
-    C = csc_matrix(eye)
-    # multiple the matrix  and add to itself to spread connectivity along the graph
+    C = sparse.csgraph.csc_matrix(eye)
+    # multiple the matrix and add to itself
+    # to spread connectivity along the graph
     for i in range(neighborhood):
         C = C + sm @ C
     # zero out the diagonal elements
@@ -220,22 +224,22 @@ def smooth_graph(verts, edges, neighborhood = 2, iterations=100, r=.1):
     C = C.sign()
     # measure total effective neighbors per node
     neighbors = np.sum(C, axis=1)
-    
+
     # normalize the weights of neighbors according to number of neighbors
     neighbors = 1/neighbors
-    C = C.multiply( neighbors)
+    C = C.multiply(neighbors)
     # convert back to csc
     C = C.tocsc()
-    
+
     # multiply weights by relaxation term
     C *= r
-    
+
     # construct relaxation matrix, adding on identity with complementary weight
     A = C + (1-r)*eye
-    
+
     # make a copy of original vertices to no destroy inpuyt
     new_verts = np.copy(verts)
-    
+
     # iteratively relax the vertices
     for i in range(iterations):
         new_verts = A*new_verts
