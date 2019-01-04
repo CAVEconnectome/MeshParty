@@ -171,3 +171,12 @@ def mesh_teasar(mesh, root=None, valid=None, root_ds=None, soma_pt=None,
         return paths, path_lengths, time_arrays, dt
     else:
         return paths, path_lengths
+
+
+def paths_to_edges(path_list):
+    arrays = []
+    for path in path_list:
+        p = np.array(path)
+        e = np.vstack((p[0:-1], p[1:])).T
+        arrays.append(e)
+    return np.vstack(arrays)
