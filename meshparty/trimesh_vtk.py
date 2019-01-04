@@ -123,11 +123,11 @@ def decimate_trimesh(trimesh, reduction=.1):
 
 
 def remove_unused_verts(mesh):
-    used_verts=np.unique(mesh.faces.ravel())
-    new_verts=mesh.vertices[used_verts,:]
+    used_verts = np.unique(mesh.faces.ravel())
+    new_verts = mesh.vertices[used_verts, :]
     new_face = np.zeros(mesh.faces.shape)
-    for i in range(3):   
-        new_face[:,i]=np.searchsorted(used_verts, mesh.faces[:,i])
+    for i in range(3):
+        new_face[:, i] = np.searchsorted(used_verts, mesh.faces[:, i])
     return new_verts, new_face
 
 
@@ -207,7 +207,7 @@ def calculate_cross_sections(mesh, graph_verts, graph_edges, calc_centers=True):
             # centerOfMassFilter = vtk.vtkCenterOfMass()
             # centerOfMassFilter.SetInputConnection(t.GetOutputPort())
             # centerOfMassFilter.Update()
-            centers[k,:]=np.mean(pts, axis=0)
+            centers[k, :] = np.mean(pts, axis=0)
 
         massfilter = vtk.vtkMassProperties()
         massfilter.SetInputConnection(t.GetOutputPort())
@@ -217,13 +217,14 @@ def calculate_cross_sections(mesh, graph_verts, graph_edges, calc_centers=True):
 
     return cross_sections, centers
 
+
 def make_vtk_skeleton_from_paths(verts, paths):
-    cell_list =[]
-    num_cells=0
-    for p in paths: 
+    cell_list = []
+    num_cells = 0
+    for p in paths:
         cell_list.append(len(p))
-        cell_list+=p
-        num_cells+=1
+        cell_list += p
+        num_cells += 1
     cell_array = np.array(cell_list)
 
     mesh = vtk.vtkPolyData()
@@ -240,6 +241,52 @@ def make_vtk_skeleton_from_paths(verts, paths):
     req_dtype = np.int32 if isize == 4 else np.int64
 
     cells.SetCells(num_cells,
-                   numpy_to_vtkIdTypeArray(cell_array,deep=1))
+                   numpy_to_vtkIdTypeArray(cell_array, deep=1))
     mesh.SetLines(cells)
     return mesh
+
+
+def vtk_super_basic(actors, camera=None, do_save=False, folder=".", back_color=(.1, .1, .1),
+                    VIDEO_WIDTH=1080, VIDEO_HEIGHT=720):
+    """
+    Create a window, renderer, interactor, add the actors and start the thing
+
+    Parameters
+    ----------
+    actors :  list of vtkActors
+
+    Returns
+    -------
+    nothing
+    """
+
+    # create a rendering window and renderer
+    ren = vtk.vtkRenderer()
+    renWin = vtk.vtkRenderWindow()
+    renWin.AddRenderer(ren)
+    renWin.SetSize(VIDEO_WIDTH, VIDEO_HEIGHT)
+    if camera is not None:
+        ren.SetActiveCamera(camera)
+
+    ren.SetBackground(*back_color)
+    # create a renderwindowinteractor
+    iren = vtk.vtkRenderWindowInteractor()
+    iren.SetRenderWindow(renWin)
+
+    for a in actors:
+        # assign actor to the renderer
+        ren.AddActor(a)
+
+    # render
+    if camera is None:
+        ren.ResetCamera()
+    renWin.Render()
+
+    trackCamera = vtk.vtkInteractorStyleTrackballCamera()
+    iren.SetInteractorStyle(trackCamera)
+    # enable user interface interactor
+    iren.Initialize()
+    iren.Start()
+    renWin.Finalize()
+
+    return ren
