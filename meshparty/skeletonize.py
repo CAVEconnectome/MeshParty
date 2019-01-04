@@ -1,7 +1,7 @@
 from scipy import sparse
 import numpy as np
 import time
-
+from meshparty import trimesh_vtk
 
 def get_path(root, target, pred):
     path = [target]
@@ -246,13 +246,12 @@ def smooth_graph(verts, edges, neighborhood=2, iterations=100, r=.1):
     return new_verts
 
 def collapse_soma_skeleton(soma_pos, verts, edges, soma_d_thresh=12000):
-    soma_pos_m = soma_pos[np.newaxis,:]
+    soma_pos_m = soma_pos[np.newaxis, :]
     dv = np.linalg.norm(verts - soma_pos_m, axis=1)
-    soma_verts = np.where(dv<soma_d_thresh)[0]
+    soma_verts = np.where(dv < soma_d_thresh)[0]
     new_verts = np.vstack((verts, soma_pos_m))
     soma_i = verts.shape[0]
-    print(soma_i)
-    edges[np.isin(edges,soma_verts)]=soma_i
+    edges[np.isin(edges, soma_verts)] = soma_i
     simple_verts, simple_edges = trimesh_vtk.remove_unused_verts(new_verts, edges)
-    good_edges = ~(simple_edges[:,0]==simple_edges[:,1])
+    good_edges = ~(simple_edges[:, 0] == simple_edges[:, 1])
     return simple_verts, simple_edges[good_edges]
