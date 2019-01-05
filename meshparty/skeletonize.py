@@ -2,6 +2,8 @@ from scipy import sparse
 import numpy as np
 import time
 from meshparty import trimesh_vtk
+from meshparty import trimesh_io
+import pandas as pd
 
 def get_path(root, target, pred):
     path = [target]
@@ -63,6 +65,48 @@ def setup_root(mesh, soma_pos=None, soma_thresh=7500):
     return root, root_ds, pred, valid
 
 
+def recenter_verts(verts, edges, centers):
+    edge_df = pd.DataFrame()
+    edge_df['start_edge']=np.array(edges[:,0], np.int64)
+    edge_df['end_edge']=np.array(edges[:,1], np.int64)
+    edge_df['center_x']=np.array(centers)[:,0]
+    edge_df['center_y']=np.array(centers)[:,1]
+    edge_df['center_z']=np.array(centers)[:,2]
+    start_mean=edge_df.groupby('start_edge').mean()[['center_x','center_y','center_z']]
+    new_verts = np.copy(verts)
+    new_verts[start_mean.index.values,:]=start_mean.values
+    return new_verts
+
+
+def skeletonize_axon(skeletonize_axon_args):
+    mm_args, axon_id, invalidation_d, smooth_neighborhood = skeletonize_axon_args
+    mm = trimesh_io.MeshMeta(*mm_args)
+
+    axon_trimesh = mm.mesh(seg_id=axon_id, merge_large_components=False)
+    axon_trimesh.stitch_overlapped_components()
+
+    points, tris, edges = trimesh_vtk.filter_largest_cc(axon_trimesh)
+    fix_mesh = trimesh_io.Mesh(points, tris, mesh_edges=edges, process=False)
+
+    root, root_ds, pred, valid = setup_root(fix_mesh)
+    paths, path_lengths = mesh_teasar(fix_mesh,
+                                      root=root,
+                                      root_ds=root_ds,
+                                      valid=valid,
+                                      invalidation_d=invalidation_d,
+                                      return_timing=False)
+
+    edges = paths_to_edges(paths)
+    skel_verts, skel_edges = trimesh_vtk.remove_unused_verts(fix_mesh.vertices, edges)
+    smooth_verts = smooth_graph(skel_verts, skel_edges, neighborhood=smooth_neighborhood)
+
+    cross_sections, centers = trimesh_vtk.calculate_cross_sections(fix_mesh, smooth_verts, skel_edges)
+    center_verts = recenter_verts(smooth_verts, skel_edges, centers)
+    smooth_center_verts = smooth_graph(center_verts, skel_edges, neighborhood=smooth_neighborhood)
+
+    return skel_verts, skel_edges, cross_sections, smooth_verts, smooth_center_verts, paths
+
+
 def mesh_teasar(mesh, root=None, valid=None, root_ds=None, soma_pt=None,
                 soma_thresh=7500, invalidation_d=10000, return_timing=False):
     # if no root passed, then calculation one
@@ -80,7 +124,7 @@ def mesh_teasar(mesh, root=None, valid=None, root_ds=None, soma_pt=None,
     # the root vertex invalidated
     if valid is None:
         valid = np.ones(len(mesh.vertices), np.bool)
-        valid[root] = None
+        valid[root] = False
     else:
         if (len(valid) != len(mesh.vertices)):
             raise Exception("valid must be length of vertices")
