@@ -4,6 +4,8 @@ import time
 from meshparty import trimesh_vtk
 from meshparty import trimesh_io
 import pandas as pd
+from scipy.spatial import cKDTree as KDTree
+import pcst_fast  
 
 def get_path(root, target, pred):
     path = [target]
@@ -78,45 +80,209 @@ def recenter_verts(verts, edges, centers):
     return new_verts
 
 
-def skeletonize_axon(skeletonize_axon_args):
-    mm_args, axon_id, invalidation_d, smooth_neighborhood = skeletonize_axon_args
-    mm = trimesh_io.MeshMeta(*mm_args)
-
-    axon_trimesh = mm.mesh(seg_id=axon_id, merge_large_components=False)
+def skeletonize_axon(mesh_meta, axon_id, invalidation_d=5000, smooth_neighborhood=5,
+                     max_tip_d=2000, large_skel_path_threshold=5000):
+    axon_trimesh = mesh_meta.mesh(seg_id=axon_id, merge_large_components=False)
     axon_trimesh.stitch_overlapped_components()
 
-    points, tris, edges = trimesh_vtk.filter_largest_cc(axon_trimesh)
-    fix_mesh = trimesh_io.Mesh(points, tris, mesh_edges=edges, process=False)
-
-    root, root_ds, pred, valid = setup_root(fix_mesh)
-    paths, path_lengths = mesh_teasar(fix_mesh,
-                                      root=root,
-                                      root_ds=root_ds,
-                                      valid=valid,
-                                      invalidation_d=invalidation_d,
-                                      return_timing=False)
-
-    edges = paths_to_edges(paths)
-    skel_verts, skel_edges = trimesh_vtk.remove_unused_verts(fix_mesh.vertices, edges)
+    all_paths, roots, tot_path_lengths = skeletonize_components(axon_trimesh, invalidation_d=invalidation_d)
+    tot_edges = merge_tips(axon_trimesh, all_paths, roots, tot_path_lengths,
+                           large_skel_path_threshold=large_skel_path_threshold, max_tip_d=max_tip_d)
+   
+    skel_verts, skel_edges = trimesh_vtk.remove_unused_verts(axon_trimesh.vertices, tot_edges)
     smooth_verts = smooth_graph(skel_verts, skel_edges, neighborhood=smooth_neighborhood)
 
-    cross_sections, centers = trimesh_vtk.calculate_cross_sections(fix_mesh, smooth_verts, skel_edges)
+    cross_sections, centers = trimesh_vtk.calculate_cross_sections(axon_trimesh, smooth_verts, skel_edges)
     center_verts = recenter_verts(smooth_verts, skel_edges, centers)
     smooth_center_verts = smooth_graph(center_verts, skel_edges, neighborhood=smooth_neighborhood)
 
-    return skel_verts, skel_edges, cross_sections, smooth_verts, smooth_center_verts, paths
+    return skel_verts, skel_edges, cross_sections, smooth_verts, smooth_center_verts
 
 
-def mesh_teasar(mesh, root=None, valid=None, root_ds=None, soma_pt=None,
+def merge_tips(mesh, all_paths, roots, tot_path_lengths,
+               large_skel_path_threshold=5000, max_tip_d=2000):
+    
+    # collect all the tips of the skeletons (including roots)
+    skel_tips = []
+    for paths, root in zip(all_paths, roots):
+        tips = []
+        for path in paths:
+            tip = mesh.vertices[path[0], :]
+            tips.append(tip)
+        root_tip = mesh.vertices[root, :]
+        tips.append(root_tip)
+        skel_tips.append(np.vstack(tips))
+    # this is our overall tip matrix merged together
+    all_tips = np.vstack(skel_tips)
+    # variable to keep track of what component each tip was from
+    tip_component = np.zeros(all_tips.shape[0])
+    # counter to keep track of an overall tip index as we go through 
+    # the components with different numbers of tips
+    ind_counter = 0
+
+    # setup the prize collection steiner forest problem variables
+    # prizes will be related to path length of the tip components
+    tip_prizes = [] 
+    # where to collect all the tip<>tip edges
+    all_edges = []
+    # where to collect all the tip<>tip edge weights
+    all_edge_weights = []
+
+    # loop over all the components and their tips
+    for k, tips, path_lengths in zip(range(len(tot_path_lengths)), skel_tips, tot_path_lengths):
+        # how many tips in this component
+        ntips = tips.shape[0]
+        # calculate the total path length in this component
+        path_len = np.sum(np.array(path_lengths))
+        # the prize is 0 if this is small, and the path length if big
+        prize = path_len if path_len > large_skel_path_threshold else 0
+        # the cost of traveling within a skeleton is 0 if big, and the path_len if small
+        cost = path_len if path_len <= large_skel_path_threshold else 0
+        # add a block of prizes to the tip prizes for this component
+        tip_prizes.append(prize*np.ones(ntips))
+        # make an array of overall tip index for this component
+        comp_tips = np.arange(ind_counter, ind_counter+ntips, dtype=np.int64)
+        # add edges between this components root and each of the tips
+        root_tips = (ind_counter+ntips-1)*np.ones(ntips, dtype=np.int64)
+        in_tip_edges = np.hstack([root_tips[:, np.newaxis],
+                                  comp_tips[:, np.newaxis]])
+        all_edges.append(in_tip_edges)
+
+        # add a block for the cost of these edges
+        all_edge_weights.append(cost*np.ones(ntips))
+        # note what component each of these tips is from
+        tip_component[comp_tips] = k
+        # increment our overall index counter
+        ind_counter += ntips
+    # gather all the prizes into a single block
+    tip_prizes = np.concatenate(tip_prizes)
+
+    # make a kdtree with all the tips
+    tip_tree = KDTree(all_tips)
+    
+    # find the tips near one another
+    close_tips = tip_tree.query_pairs(max_tip_d, output_type='ndarray')
+    # filter out close tips from the same component
+    diff_comp = ~(tip_component[close_tips[:, 0]] == tip_component[close_tips[:, 1]])
+    filt_close_tips = close_tips[diff_comp]
+
+    # add these as edges
+    all_edges.append(filt_close_tips)
+    # with weights equal to their euclidean distance
+    dv = np.linalg.norm(all_tips[filt_close_tips[:,0],:] - all_tips[filt_close_tips[:, 1]], axis=1)
+    all_edge_weights.append(dv)
+
+    # consolidate the edges and weights into a single array
+    inter_tip_weights = np.concatenate(all_edge_weights)
+    inter_tip_edges = np.concatenate(all_edges)
+
+    # run the prize collecting steiner forest optimization
+    mst_verts, mst_edges = pcst_fast.pcst_fast(
+        inter_tip_edges, tip_prizes, inter_tip_weights, -1, 1, 'gw', 1)
+    # find the set of mst edges that are between connected components
+    new_mst_edges = mst_edges[tip_component[inter_tip_edges[mst_edges, 0]] != tip_component[inter_tip_edges[mst_edges ,1]]]
+    good_inter_tip_edges = inter_tip_edges[new_mst_edges, :]
+    # use a kdtree to get their original mesh indices
+    zero_d, orig_all_tip_inds = mesh.kdtree.query(all_tips, k=1)
+    new_edges_orig_ind = orig_all_tip_inds[good_inter_tip_edges]
+
+    # collect all the edges for all the paths into a single list
+    # with the original indices of the mesh
+    orig_edges = []
+    for paths, root in zip(all_paths, roots):
+        edges = paths_to_edges(paths)
+        orig_edges.append(edges)
+    orig_edges = np.vstack(orig_edges)
+    # and add our new mst edges
+    tot_edges = np.vstack([orig_edges, new_edges_orig_ind])
+
+    return tot_edges
+
+
+# def fix_skeleton(verts, edges):
+#     # fix the skeleton so that it    
+#     # filter out the vertices to be just those included in this skeleton
+#     skel_verts, skel_edges = trimesh_vtk.remove_unused_verts(axon_trimesh.vertices, tot_edges)
+#     Nind = skel_verts.shape[0]
+#     g=sparse.csc_matrix((np.ones(len(skel_edges)), (skel_edges[:,0], skel_edges[:,1])), shape =
+#                         (Nind,Nind))
+
+#     # figure out how many skeleton components we have now
+#     n_skel_comp, skel_labels = sparse.csgraph.connected_components(g,directed=False, return_labels=True)
+#     skel_comp_labels, skel_comp_counts = np.unique(skel_labels, return_counts = True)
+#     larg_skel_cc_ind = np.where(skel_comp_counts>100)[0]
+#     large_skel_components=len(larg_skel_cc_ind)
+
+def skeletonize_components(mesh, soma_pos=None, soma_thresh=7500, invalidation_d=10000):
+    # find all the connected components in the mesh
+    n_components, labels = sparse.csgraph.connected_components(mesh.csgraph,
+                                                               directed=False,
+                                                               return_labels=True)
+    # variables to collect the paths, roots and path lengths
+    all_paths = []
+    roots = []
+    tot_path_lengths = []
+
+    # loop over the components
+    for k in range(n_components):
+
+        # get the mesh vertices involved in this component
+        vert_inds = np.where(labels == k)[0]
+        # filter out the triangles and edges involved
+        filt_tris = mesh._filter_faces(vert_inds)[0]
+        if mesh.mesh_edges is not None:
+            filt_edges = mesh._filter_mesh_edges(vert_inds)[0]
+        else:
+            filt_edges = None
+        # get reindexed vertices
+        verts = mesh.vertices[vert_inds, :]
+
+        # initialize a trimesh object
+        mesh_component = trimesh_io.Mesh(verts,
+                                         filt_tris,
+                                         mesh_edges=filt_edges,
+                                         process=False)
+
+        # find the root using a soma position if you have it
+        # it will fall back to a heuristic if the soma
+        # is too far away for this component
+        root, root_ds, pred, valid = setup_root(mesh_component,
+                                                soma_pos=soma_pos,
+                                                soma_thresh=soma_thresh)
+        
+        # run teasar on this component
+        paths, path_lengths = mesh_teasar(mesh_component,
+                                          root=root,
+                                          root_ds=root_ds,
+                                          root_pred=pred,
+                                          valid=valid,
+                                          invalidation_d=invalidation_d)
+        # convert the paths into numpy arrays in the original index space
+        for i, path in enumerate(paths):
+            path = np.array(path)
+            orig_path = vert_inds[path]
+            paths[i] = orig_path
+        # also convert the root
+        root = vert_inds[root]
+
+        # collect the results in lists
+        tot_path_lengths.append(path_lengths)
+        all_paths.append(paths)
+        roots.append(root)
+ 
+    return all_paths, roots, tot_path_lengths
+
+
+def mesh_teasar(mesh, root=None, valid=None, root_ds=None, root_pred=None, soma_pt=None,
                 soma_thresh=7500, invalidation_d=10000, return_timing=False):
     # if no root passed, then calculation one
     if root is None:
-        root, root_ds, pred, valid = setup_root(mesh,
+        root, root_ds, root_pred, valid = setup_root(mesh,
                                                 soma_pos=soma_pt,
                                                 soma_thresh=soma_thresh)
     # if root_ds have not be precalculated do so
     if root_ds is None:
-        root_ds, pred = sparse.csgraph.dijkstra(mesh.csgraph,
+        root_ds, root_pred = sparse.csgraph.dijkstra(mesh.csgraph,
                                                 False,
                                                 root,
                                                 return_predecessors=True)
@@ -130,6 +296,7 @@ def mesh_teasar(mesh, root=None, valid=None, root_ds=None, soma_pt=None,
             raise Exception("valid must be length of vertices")
 
     if not np.all(~np.isinf(root_ds)):
+        print(np.where(np.isinf(root_ds)))
         raise Exception("all points should be reachable from root")
 
     # vector to store each branch result
@@ -146,7 +313,7 @@ def mesh_teasar(mesh, root=None, valid=None, root_ds=None, soma_pt=None,
 
     # arrays to track timing
     start = time.time()
-    time_arrays = [[], [], [], [], [], []]
+    time_arrays = [[], [], [], [], []]
 
     # keep looping till all vertices have been invalidated
     while(np.sum(valid) > 0):
@@ -159,6 +326,18 @@ def mesh_teasar(mesh, root=None, valid=None, root_ds=None, soma_pt=None,
         time_arrays[0].append(time.time()-t)
 
         t = time.time()
+        # figure out the longest this branch could be
+        # by following the route from target to the root
+        # and finding the first already visited node (max_branch)
+        # The dist(root->target) - dist(root->max_branch)
+        # is the maximum distance the shortest route to a branch
+        # point from the target could possibly be,
+        # use this bound to reduce the djisktra search radius for this target
+        max_branch = target
+        while max_branch not in visited_nodes:
+            max_branch = root_pred[max_branch]
+        max_path_length = root_ds[target]-root_ds[max_branch]
+
         # calculate the shortest path to that vertex
         # from all other vertices
         # up till the distance to the root
@@ -166,7 +345,7 @@ def mesh_teasar(mesh, root=None, valid=None, root_ds=None, soma_pt=None,
             mesh.csgraph,
             False,
             target,
-            limit=root_ds[target],
+            limit=max_path_length,
             return_predecessors=True)
 
         # pick out the vertex that has already been visited
@@ -183,6 +362,7 @@ def mesh_teasar(mesh, root=None, valid=None, root_ds=None, soma_pt=None,
         path = get_path(target, branch, pred_t)
         visited_nodes += path[0:-1]
         # record its length
+        assert(~np.isinf(ds[branch]))
         path_lengths.append(ds[branch])
         # record the path
         paths.append(path)
@@ -192,22 +372,16 @@ def mesh_teasar(mesh, root=None, valid=None, root_ds=None, soma_pt=None,
         # get the distance to all points along the new path
         # within the invalidation distance
         dm = sparse.csgraph.dijkstra(
-            mesh.csgraph, False, path, limit=invalidation_d)
+            mesh.csgraph, False, path, limit=invalidation_d, multi_target=True)
         time_arrays[3].append(time.time()-t)
-
-        t = time.time()
-        # find the shortest distance to each mesh node
-        dsp = np.min(dm, axis=0)
-        time_arrays[4].append(time.time()-t)
 
         t = time.time()
         # all such non infinite distances are within the invalidation
         # zone and should be marked invalid
-        valid[~np.isinf(dsp)] = False
-
+        valid[~np.isinf(dm)] = False
         # print out how many vertices are still valid
         print(np.sum(valid))
-        time_arrays[5].append(time.time()-t)
+        time_arrays[4].append(time.time()-t)
     # record the total time
     dt = time.time() - start
 
@@ -215,6 +389,30 @@ def mesh_teasar(mesh, root=None, valid=None, root_ds=None, soma_pt=None,
         return paths, path_lengths, time_arrays, dt
     else:
         return paths, path_lengths
+
+
+def setup_root(mesh, soma_pos=None, soma_thresh=7500):
+    valid = np.ones(len(mesh.vertices), np.bool)
+    root = None
+    # soma mode
+    if soma_pos is not None:
+        # pick the first soma as root
+        soma_d, soma_i = mesh.kdtree.query(soma_pos,
+                                           k=len(mesh.vertices),
+                                           distance_upper_bound=soma_thresh)
+        if (np.min(soma_d) < soma_thresh):
+            root = soma_i[np.argmin(soma_d)]
+            valid[soma_i[~np.isinf(soma_d)]] = False
+            root_ds, pred = sparse.csgraph.dijkstra(mesh.csgraph,
+                                                    False,
+                                                    root,
+                                                    return_predecessors=True)
+    if root is None:
+        # there is no soma close, so use far point heuristic
+        root, target, pred, dm, root_ds = find_far_points(mesh)
+        valid[root] = 0
+
+    return root, root_ds, pred, valid
 
 
 def paths_to_edges(path_list):
