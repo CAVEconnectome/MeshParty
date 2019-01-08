@@ -123,12 +123,34 @@ def decimate_trimesh(trimesh, reduction=.1):
 
 
 def remove_unused_verts(verts, faces):
+    """removes unused vertices from a graph or mesh
+
+    verts = NxD numpy array of vertex locations
+    faces = MxK numpy array of connected shapes (i.e. edges or tris)
+    (entries are indices into verts)
+
+    returns: 
+    new_verts, new_face
+    a filtered set of vertices and reindexed set of faces
+    """
     used_verts = np.unique(faces.ravel())
     new_verts = verts[used_verts, :]
     new_face = np.zeros(faces.shape, dtype=faces.dtype)
     for i in range(faces.shape[1]):
         new_face[:, i] = np.searchsorted(used_verts, faces[:, i])
     return new_verts, new_face
+
+
+def vtk_poly_to_mesh_components(poly):
+    points = vtk_to_numpy(poly.GetPoints().GetData())
+    ntris = poly.GetNumberOfPolys()
+    tris = vtk_cellarray_to_shape(poly.GetPolys().GetData(), ntris)
+    nedges = poly.GetNumberOfLines()
+    if nedges > 0:
+        edges = vtk_cellarray_to_shape(poly.GetLines().GetData(), nedges)
+    else:
+        edges = None
+    return points, tris, edges
 
 
 def filter_largest_cc(trimesh):
@@ -141,17 +163,7 @@ def filter_largest_cc(trimesh):
     clean.SetInputConnection(connf.GetOutputPort())
     clean.PointMergingOff()
     clean.Update()
-
-    out_poly = clean.GetOutput()
-    points = vtk_to_numpy(out_poly.GetPoints().GetData())
-    ntris = out_poly.GetNumberOfPolys()
-    tris = vtk_cellarray_to_shape(out_poly.GetPolys().GetData(), ntris)
-    nedges = out_poly.GetNumberOfLines()
-    if nedges > 0:
-        edges = vtk_cellarray_to_shape(out_poly.GetLines().GetData(), nedges)
-    else:
-        edges = None
-    return points, tris, edges
+    return vtk_poly_to_mesh_components(clean.GetOutput())
 
 
 def calculate_cross_sections(mesh, graph_verts, graph_edges, calc_centers=True):
