@@ -79,13 +79,17 @@ def recenter_verts(verts, edges, centers):
     new_verts[start_mean.index.values,:]=start_mean.values
     return new_verts
 
+def skeletonize(mesh_meta, seg_id, soma_pt=None, soma_thresh=7500,
+                invalidation_d=10000, smooth_neighborhood=5,
+                max_tip_d=2000, large_skel_path_threshold=5000):
 
-def skeletonize_axon(mesh_meta, axon_id, invalidation_d=5000, smooth_neighborhood=5,
-                     max_tip_d=2000, large_skel_path_threshold=5000):
     axon_trimesh = mesh_meta.mesh(seg_id=axon_id, merge_large_components=False)
     axon_trimesh.stitch_overlapped_components()
 
-    all_paths, roots, tot_path_lengths = skeletonize_components(axon_trimesh, invalidation_d=invalidation_d)
+    all_paths, roots, tot_path_lengths = skeletonize_components(axon_trimesh,
+                                                                soma_pt=soma_pt,
+                                                                soma_thresh=soma_thresh,    
+                                                                invalidation_d=invalidation_d)
     tot_edges = merge_tips(axon_trimesh, all_paths, roots, tot_path_lengths,
                            large_skel_path_threshold=large_skel_path_threshold, max_tip_d=max_tip_d)
    
@@ -98,6 +102,14 @@ def skeletonize_axon(mesh_meta, axon_id, invalidation_d=5000, smooth_neighborhoo
 
     return skel_verts, skel_edges, cross_sections, smooth_verts, smooth_center_verts
 
+
+def skeletonize_axon(mesh_meta, axon_id, invalidation_d=5000, smooth_neighborhood=5,
+                     max_tip_d=2000, large_skel_path_threshold=5000):
+    return skeletonize(mesh_meta, axon_id,
+                       invalidation_d=invalidation_d,
+                       smooth_neighborhood=smooth_neighborhood,
+                       max_tip_d=max_tip_d,
+                       large_skel_path_threshold=large_skel_path_threshold)
 
 def merge_tips(mesh, all_paths, roots, tot_path_lengths,
                large_skel_path_threshold=5000, max_tip_d=2000):
