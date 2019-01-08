@@ -13,9 +13,10 @@ from multiwrapper import multiprocessing_utils as mu
 
 import trimesh
 from trimesh import caching, io
-from meshparty.vtk import trimesh_to_vtk
 from pymeshfix import _meshfix
 import vtk
+from tqdm import trange
+import igraph
 
 
 def read_mesh_h5(filename):
@@ -151,10 +152,11 @@ def _download_meshes_thread(args):
             frags = get_frag_ids_from_endpoint(seg_id, mesh_endpoint)
 
         try:
-            cv_mesh = cv.mesh.get(frags)
+            cv_mesh = cv.mesh.get(frags, remove_duplicate_vertices=False)
 
             mesh = Mesh(vertices=cv_mesh["vertices"],
-                        faces=np.array(cv_mesh["faces"]).reshape(-1, 3))
+                        faces=np.array(cv_mesh["faces"]).reshape(-1, 3),
+                        process=False)
 
             if merge_large_components:
                 mesh.merge_large_components()
@@ -287,7 +289,7 @@ class MeshMeta(object):
                 vertices, faces, normals, mesh_edges = read_mesh(filename)
 
                 mesh = Mesh(vertices=vertices, faces=faces, normals=normals,
-                            mesh_edges=mesh_edges)
+                            mesh_edges=mesh_edges, process=False)
 
                 if merge_large_components and mesh.mesh_edges is None:
                     mesh.merge_large_components()
@@ -310,10 +312,11 @@ class MeshMeta(object):
                 else:
                     frags = [seg_id]
 
-                cv_mesh = self.cv.mesh.get(frags)
+                cv_mesh = self.cv.mesh.get(frags, remove_duplicate_vertices=False)
 
                 mesh = Mesh(vertices=cv_mesh["vertices"],
-                            faces=np.array(cv_mesh["faces"]).reshape(-1, 3))
+                            faces=np.array(cv_mesh["faces"]).reshape(-1, 3),
+                            process=False)
 
                 if merge_large_components and mesh.mesh_edges is None:
                     mesh.merge_large_components()
@@ -338,6 +341,7 @@ class Mesh(trimesh.Trimesh):
         self._mesh_edges = mesh_edges
         self._csgraph = None
         self._nxgraph = None
+        self._igraph = None
 
     @property
     def nxgraph(self):
@@ -350,6 +354,12 @@ class Mesh(trimesh.Trimesh):
         if self._csgraph is None:
             self._csgraph = self._create_csgraph()
         return self._csgraph
+
+    @property
+    def igraph(self):
+        if self._igraph is None:
+            self._igraph = self._create_igraph()
+        return self._igraph
 
     @property
     def n_vertices(self):
@@ -561,37 +571,44 @@ class Mesh(trimesh.Trimesh):
                                     return_faces=return_faces,
                                     pc_norm=pc_norm)
 
-    def _filter_faces(self, node_ids):
+    def _filter_shapes(self, node_ids, shapes):
         """ node_ids has to be sorted! """
         if not isinstance(node_ids[0], list) and \
                 not isinstance(node_ids[0], np.ndarray):
             node_ids = [node_ids]
-
+        ndim = shapes.shape[1]
         if isinstance(node_ids, np.ndarray):
             all_node_ids = node_ids.flatten()
         else:
             all_node_ids = np.concatenate(node_ids)
 
-        filter_ = np.in1d(self.faces[:, 0], all_node_ids)
-        pre_filtered_faces = self.faces[filter_].copy()
-        filter_ = np.in1d(pre_filtered_faces[:, 1], all_node_ids)
-        pre_filtered_faces = pre_filtered_faces[filter_]
-        filter_ = np.in1d(pre_filtered_faces[:, 2], all_node_ids)
-        pre_filtered_faces = pre_filtered_faces[filter_]
+        filter_ = np.in1d(shapes[:, 0], all_node_ids)
+        pre_filtered_shapes = shapes[filter_].copy()
+        for k in range(1, ndim):
+            filter_ = np.in1d(pre_filtered_shapes[:, k], all_node_ids)
+            pre_filtered_shapes = pre_filtered_shapes[filter_]
 
-        filtered_faces = []
+        filtered_shapes = []
 
         for ns in node_ids:
-            f = pre_filtered_faces[np.in1d(pre_filtered_faces[:, 0], ns)]
-            f = f[np.in1d(f[:, 1], ns)]
-            f = f[np.in1d(f[:, 2], ns)]
+            f = pre_filtered_shapes[np.in1d(pre_filtered_shapes[:, 0], ns)]
+            for k in range(1, ndim):
+                f = f[np.in1d(f[:, k], ns)]
 
             f = np.unique(np.concatenate([f.flatten(), ns]),
-                          return_inverse=True)[1][:-len(ns)].reshape(-1, 3)
+                          return_inverse=True)[1][:-len(ns)].reshape(-1, ndim)
 
-            filtered_faces.append(f)
+            filtered_shapes.append(f)
 
-        return filtered_faces
+        return filtered_shapes
+
+    def _filter_faces(self, node_ids):
+        """ node_ids has to be sorted! """
+        return self._filter_shapes(node_ids, self.faces)
+
+    def _filter_mesh_edges(self, node_ids):
+        """ node_ids has to be sorted! """
+        return self._filter_shapes(node_ids, self.mesh_edges)
 
     def get_local_meshes(self, n_points=None, max_dist=np.inf, center_node_ids=None,
                          center_coords=None, pc_align=False, pc_norm=False,
@@ -653,6 +670,99 @@ class Mesh(trimesh.Trimesh):
 
         return pca.fit_transform(vertices)
 
+    @staticmethod
+    def _is_coplanar(mat):
+        cartesian_v = np.array([[1, 0, 0],
+                                [0, 1, 0],
+                                [0, 0, 1]])
+
+        assert(mat.shape[1] == 3)
+        assert(mat.shape[0] >= 3)
+
+        M = np.copy(mat)
+        # turn them into vectors from first point
+        Mv = M[1:, :] - M[0, :]
+
+        for v in cartesian_v:
+            if np.all(Mv.dot(v) < 0.00000001):
+                return True
+        return False
+
+    def stitch_overlapped_components(self):
+        """ Finds edges between disconnected components that share
+        vertices aligned along cartesian planes 
+        """
+        time_start = time.time()
+
+        ccs = sparse.csgraph.connected_components(self.csgraph)
+        ccs_u, cc_sizes = np.unique(ccs[1], return_counts=True)
+
+        kdtrees = []
+        vertex_ids = []
+        for cc_id in ccs_u:
+            m = ccs[1] == cc_id
+            vertex_ids.append(np.where(m)[0])
+            v = self.vertices[m]
+            kdtrees.append(spatial.cKDTree(v))
+
+        close_by = np.ones([len(ccs_u), len(ccs_u)],
+                           dtype=np.bool)
+
+        add_edges = []
+        for i_tree in trange(len(ccs_u) - 1):
+            for j_tree in range(i_tree + 1, len(ccs_u)):
+
+                pairs = kdtrees[i_tree].query_ball_tree(kdtrees[j_tree],
+                                                        0)
+                if np.any(pairs):
+                    i_vs = []
+                    j_vs = []
+                    for i_p, p in enumerate(pairs):
+                       
+                        if len(p) > 0:
+                            j_vs.append(vertex_ids[j_tree][p[0]])
+                            i_vs.append(vertex_ids[i_tree][i_p])
+                    # test for coplanarity
+                  
+                    shared_verts = self.vertices[i_vs, :]
+                    if len(shared_verts) >= 3:
+                        co_planar = self._is_coplanar(shared_verts)
+                    else:
+                        co_planar = False
+
+                    if co_planar:
+                        is_close_by = True
+                        add_edges.extend([[i_v, j_v] for i_v, j_v in zip(i_vs, j_vs)])
+                    else:
+                        is_close_by = False
+                else:
+                    is_close_by = False
+
+                close_by[i_tree, j_tree] = is_close_by
+                close_by[j_tree, i_tree] = is_close_by
+
+        if len(add_edges) > 0:
+            self._mesh_edges = np.concatenate([self.edges, add_edges])
+            self._csgraph = None
+            self._nxgraph = None
+            self._igraph = None
+
+        print("TIME MERGING: %.3fs" % (time.time() - time_start))
+
+    # def merge_vertices(self, merge_vertices):
+    #     """ merge vertices"""
+
+    #     # code doesn't work with chains of merges
+    #     assert(np.all(~np.isin(merge_vertices[:, 0],
+    #                            merge_vertices[:, 1])))
+
+    #     f = np.copy(self.faces)
+        
+    #     for merge in merge_vertices:
+    #         merge_i = np.where(f == merge[0])
+    #         f[merge_i[0], merge_i[1]] = merge[1]
+    #     self.faces = f
+
     def merge_large_components(self, size_threshold=100, max_dist=140):
         """ Finds edges between disconnected components
 
@@ -679,9 +789,9 @@ class Mesh(trimesh.Trimesh):
                            dtype=np.bool)
 
         add_edges = []
-        for i_tree in range(len(large_cc_ids) - 1):
+        for i_tree in trange(len(large_cc_ids) - 1):
             for j_tree in range(i_tree + 1, len(large_cc_ids)):
-                print("%d - %d      " % (i_tree, j_tree), end="\r")
+               
 
                 pairs = kdtrees[i_tree].query_ball_tree(kdtrees[j_tree],
                                                         max_dist)
@@ -704,8 +814,8 @@ class Mesh(trimesh.Trimesh):
             self._mesh_edges = np.concatenate([self.edges, add_edges])
             self._csgraph = None
             self._nxgraph = None
-        else:
-            self._mesh_edges = self.edges.copy()
+            self._igraph = None
+
 
         print("TIME MERGING: %.3fs" % (time.time() - time_start))
 
@@ -728,49 +838,18 @@ class Mesh(trimesh.Trimesh):
 
         return weighted_graph
 
-    def find_principal_axis(self, svd_solver='auto'):
-        """ Calculates PC alignment """
+    def _create_igraph(self):
+        if self.mesh_edges is not None:
+            edges = self.mesh_edges
+        else:
+            edges = self.edges
 
-        pca = decomposition.PCA(n_components=3,
-                                svd_solver=svd_solver,
-                                copy=False)
-        pca.fit(self.vertices)
-        return pca.components_[0, :]
+        weights = np.linalg.norm(self.vertices[edges[:, 0]] -
+                                 self.vertices[edges[:, 1]], axis=1)
 
-    def calc_local_cross_sections(self, locations, max_dist=5000, dx=100):
-        slices = np.arange(-max_dist, max_dist, dx)
-        local_meshes = self.get_local_meshes(
-            max_dist=max_dist, pc_align=False, center_coords=locations)
-        cutter = vtk.vtkCutter()
-        plane = vtk.vtkPlane()
-        cutter.SetCutFunction(plane)
-        cutter.GenerateTrianglesOn()
-        cutStrips = vtk.vtkStripper()
-        cutStrips.SetInputConnection(cutter.GetOutputPort())
-
-        areas = np.zeros((locations.shape[0], len(slices)))
-        local_axes = []
-        for i, mesh in enumerate(local_meshes):
-            local_polyData = trimesh_to_vtk(mesh.vertices, mesh.faces)
-            cutter.SetInputData(local_polyData)
-
-            local_axis = mesh.find_principal_axis()
-            local_axes.append(local_axis)
-            plane.SetNormal(*local_axis)
-            for k, x in enumerate(slices):
-                plane_pos = locations[i, :] + x*local_axis
-                plane.SetOrigin(*plane_pos)
-                cutStrips.Update()
-                cutPoly = vtk.vtkPolyData()
-                cutPoly.SetPoints(cutStrips.GetOutput().GetPoints())
-                cutPoly.SetPolys(cutStrips.GetOutput().GetLines())
-                t = vtk.vtkTriangleFilter()
-                t.SetInputData(cutPoly)
-                t.Update()
-                massfilter = vtk.vtkMassProperties()
-                massfilter.SetInputData(t.GetOutput())
-                areas[i, k] = massfilter.GetSurfaceArea()
-        return areas, slices, local_axes
+        tl = np.hstack([self.edges, weights[:, np.newaxis]])
+        G = igraph.Graph.TupleList(tl, edge_attrs="weight")
+        return G
 
     def _create_csgraph(self):
         """ Computes csgraph """
