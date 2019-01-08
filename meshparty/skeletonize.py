@@ -83,7 +83,7 @@ def skeletonize(mesh_meta, seg_id, soma_pt=None, soma_thresh=7500,
                 invalidation_d=10000, smooth_neighborhood=5,
                 max_tip_d=2000, large_skel_path_threshold=5000):
 
-    axon_trimesh = mesh_meta.mesh(seg_id=axon_id, merge_large_components=False)
+    axon_trimesh = mesh_meta.mesh(seg_id=seg_id, merge_large_components=False)
     axon_trimesh.stitch_overlapped_components()
 
     all_paths, roots, tot_path_lengths = skeletonize_components(axon_trimesh,
