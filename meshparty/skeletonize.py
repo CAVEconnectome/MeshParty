@@ -318,9 +318,9 @@ def mesh_teasar(mesh, root=None, valid=None, root_ds=None, root_pred=None, soma_
         if (len(valid) != len(mesh.vertices)):
             raise Exception("valid must be length of vertices")
 
-    if not np.all(~np.isinf(root_ds)):
+    if np.sum(np.isinf(root_ds) | valid) != 0:
         print(np.where(np.isinf(root_ds)))
-        raise Exception("all points should be reachable from root")
+        raise Exception("all valid vertices should be reachable from root")
 
     # vector to store each branch result
     paths = []
