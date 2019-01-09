@@ -415,8 +415,12 @@ def mesh_teasar(mesh, root=None, valid=None, root_ds=None, root_pred=None, soma_
         return paths, path_lengths
 
 
-def setup_root(mesh, soma_pt=None, soma_thresh=7500):
-    valid = np.ones(len(mesh.vertices), np.bool)
+def setup_root(mesh, soma_pt=None, soma_thresh=7500, valid_ind=None):
+    if valid_ind is not None:
+        valid = np.zeros(len(mesh.vertices), np.bool)
+        valid[valid_ind] = True
+    else:
+        valid = np.ones(len(mesh.vertices), np.bool)
     root = None
     # soma mode
     if soma_pt is not None:
@@ -424,6 +428,11 @@ def setup_root(mesh, soma_pt=None, soma_thresh=7500):
         soma_d, soma_i = mesh.kdtree.query(soma_pt,
                                            k=len(mesh.vertices),
                                            distance_upper_bound=soma_thresh)
+        if valid_ind is not None:
+            soma_i, valid_ind = np.intersect1d(soma_i,
+                                               valid_ind,
+                                               return_indices=True)
+            soma_d = soma_d[valid_ind]
         if (np.min(soma_d) < soma_thresh):
             root = soma_i[np.argmin(soma_d)]
             valid[soma_i[~np.isinf(soma_d)]] = False
