@@ -17,7 +17,7 @@ from pymeshfix import _meshfix
 import vtk
 from tqdm import trange
 import igraph
-
+import rtree
 
 def read_mesh_h5(filename):
     """Reads a mesh's vertices, faces and normals from an hdf5 file"""
@@ -688,19 +688,29 @@ class Mesh(trimesh.Trimesh):
                 return True
         return False
 
-    def stitch_overlapped_components(self):
+    def stitch_overlapped_components(self, buffer = 50):
         """ Finds edges between disconnected components that share
         vertices aligned along cartesian planes 
         """
         time_start = time.time()
+        p = rtree.index.Property()
+        p.dimension = 3
+        idx3d = rtree.index.Index(properties=p)
 
         ccs = sparse.csgraph.connected_components(self.csgraph)
         ccs_u, cc_sizes = np.unique(ccs[1], return_counts=True)
 
         kdtrees = []
         vertex_ids = []
+        coords = []
         for cc_id in ccs_u:
             m = ccs[1] == cc_id
+            verts = self.vertices[m, :]
+            mins = np.min(verts, axis=0)-buffer
+            maxs = np.max(verts, axis=0)+buffer
+            cs = (mins[0], mins[1], mins[2], maxs[0], maxs[1], maxs[2]) 
+            coords.append(cs)
+            idx3d.insert(cc_id, cs)
             vertex_ids.append(np.where(m)[0])
             v = self.vertices[m]
             kdtrees.append(spatial.cKDTree(v))
@@ -710,7 +720,10 @@ class Mesh(trimesh.Trimesh):
 
         add_edges = []
         for i_tree in trange(len(ccs_u) - 1):
-            for j_tree in range(i_tree + 1, len(ccs_u)):
+            cs = coords[i_tree]
+            overlaps = idx3d.intersection(cs)
+            j_tree_overlap = [o for o in overlaps if o in range(i_tree + 1, len(ccs_u))]
+            for j_tree in j_tree_overlap:
 
                 pairs = kdtrees[i_tree].query_ball_tree(kdtrees[j_tree],
                                                         0)
