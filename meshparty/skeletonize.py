@@ -7,6 +7,258 @@ import pandas as pd
 from scipy.spatial import cKDTree as KDTree
 import pcst_fast  
 
+
+class Skeleton:
+    def __init__(self, vertices, edges, vertex_properties={}, root=None):
+        self._vertices = np.array(vertices)
+        self._edges = np.vstack(edges).astype(int)
+        self.vertex_properties = vertex_properties
+
+        self.reroot(root)
+        # self._csgraph = None
+        # self._nxgraph = None
+        # self._paths = None
+
+        self._branch_points = None
+        self._end_points = None
+
+
+    @property
+    def vertices(self):
+        return self._vertices.copy()
+
+    @property
+    def edges(self):
+        return self._edges.copy()
+
+    @property
+    def labels(self):
+        return self._labels.copy()
+
+    @property
+    def csgraph(self):
+        if self._csgraph is None:
+            self._csgraph = self._create_csgraph()
+        return self._csgraph.copy()
+
+    @property
+    def csgraph_binary(self):
+        return self._create_csgraph(euclidean_weight=False)
+
+    @property
+    def csgraph_undirected(self):
+        return self._create_csgraph(directed=False)
+
+    @property
+    def csgraph_binary_undirected(self):
+        return self._create_csgraph(directed=False, euclidean_weight=False)
+
+    @property
+    def n_vertices(self):
+        return len(self.vertices)
+
+    @property
+    def root(self):
+        if self._root is None:
+            self._create_default_root()
+        return copy(self._root)
+
+    def _create_default_root(self, multicomponent=True):
+        r = find_far_points_graph(self.csgraph, multicomponent=multicomponent)
+        self.reroot(r[0])
+
+    def reroot(self, new_root):
+        self._root = new_root
+        if new_root is not None:
+            # The edge list has to be treated like an undirected graph
+            G = self._create_csgraph()
+            d = sparse.csgraph.dijkstra(G,
+                                        directed=False,
+                                        indices=new_root)
+
+            # Make edges in edge list orient as [child, parent]
+            # Where each child only has one parent
+            # And the root has no parent. (Thus parent is closer than child)
+            edges = self.edges
+            is_ordered = d[edges[:,0]] > d[edges[:,1]]
+            e1 = np.where( is_ordered, edges[:,0], edges[:,1])
+            e2 = np.where( is_ordered, edges[:,1], edges[:,0])
+            self._edges = np.stack((e1,e2)).T
+        self._reset_derived_objects()
+
+
+    def _reset_derived_objects(self):
+        self._csgraph = None
+        self._nxgraph = None
+        self._paths = None
+
+
+    def _create_csgraph(self,
+                        directed=True,
+                        euclidean_weight=True,
+                        largest_component_only=True):
+
+        edges = self.edges
+        if largest_component_only:
+            icc = largest_connected_component(self._create_csgraph(euclidean_weight=False, largest_connected_component=False))
+            edge_filter = np.isin(edges[:,0], icc)
+            edges = edges[edge_filter]
+
+        xs = self.vertices[edges[:,0]]
+        ys = self.vertices[edges[:,1]]
+
+        if euclidean_weight:
+            weights = np.linalg.norm(xs-ys, axis=1)
+            use_dtype = np.float32
+        else:   
+            weights = np.ones(np.shape(xs)).astype(int)
+            use_dtype = int
+
+        if directed:
+            edges = edges.T
+        else:
+            edges = np.concatenate([edges.T, edges.T[[1, 0]]], axis=1)
+            weights = np.concatenate([weights, weights]).astype(dtype=use_dtype)
+
+        csgraph = sparse.csr_matrix((weights, edges),
+                                    shape=[len(self.vertices), ] * 2,
+                                    dtype=use_dtype)
+
+        return csgraph
+
+
+    @property
+    def branch_points(self):
+        if self._branch_points is None:
+            self._create_branch_and_end_points()
+        return self._branch_points.copy()
+
+
+    @property
+    def n_branch_points(self):
+        if self._branch_points is None:
+            self._create_branch_and_end_points()
+        return len(self._branch_points)
+
+    @property
+    def end_points(self):
+        if self._end_points is None:
+            self._create_branch_and_end_points()
+        return self._end_points.copy()
+
+    @property
+    def n_end_points(self):
+        if self._end_points is None:
+            self._create_branch_and_end_points()
+        return len(self._end_points)
+
+    def _create_branch_and_end_points(self):
+        branch_thresh = 1
+        end_value = 0
+        n_children = np.sum(self.csgraph>0, axis=0).squeeze()
+        self._branch_points = np.flatnonzero(n_children > branch_thresh)
+        self._end_points = np.flatnonzero(n_children == end_value)
+
+    @property
+    def paths(self):
+        if self._paths is None:
+            self._paths = self._compute_paths()
+        return self._paths
+    
+    def distance_to_root(self, indices):
+        ds = sparse.csgraph.dijkstra(self.csgraph, directed=True, indices=indices)
+        return ds[:,self.root]
+
+    def _parent_node(v_ind):
+        if v_ind == self.root:
+            return None
+        else:
+            return self.csgraph[v_ind,:].nonzero()[1][0]
+
+    def path_to_root(v_ind):
+        '''
+        Returns an ordered path to root from a given vertex node.
+        '''
+        path = [v_ind]
+        ind = v_ind
+        while ind is not None:
+            ind = self._parent_node(ind)
+            path.append(ind)
+        return path
+
+    def path_length(self, paths=None):
+        if paths is None:
+            paths = self.paths
+        L = 0
+        for path in paths:
+            L += self._single_path_length(path)
+        return L
+
+    def _single_path_length(self, path):
+        xs = self.vertices[ path[:-1] ]
+        ys = self.vertices[ path[1:] ]
+        return sum(np.linalg.norm(ys-xs))
+
+    def _compute_paths(self):
+        '''
+        Only considers the component with root
+        '''
+        ds, P = sparse.csgraph.dijkstra(self.csgraph,
+                                        directed=True,
+                                        indices=self.end_points,
+                                        return_predecessors=True)
+        d_to_root = ds[:,self.root]
+        end_point_order = np.argsort(d_to_root)[::-1]
+        paths = []
+
+        visited = np.full(shape=(len(self.vertices),), fill_value=False)
+        visited[self.root] = True
+        for ep_ind in end_point_order:
+            if np.isinf(d_to_root[ep_ind]):
+                continue
+            path, visited = self._unvisited_path_on_tree(self.end_points[ep_ind],
+                                                         visited)
+            paths.append(path)
+
+        return paths
+
+    def _unvisited_path_on_tree(self, ind, visited):
+        '''
+            Find path from ind to a visited node along G
+            Assumes that G[i,j] means i->j
+        '''
+        G = self.csgraph
+        n_ind = ind
+        path = [n_ind]
+        while visited[n_ind] == False:
+            visited[n_ind] = True
+            n_ind = self._parent_node(n_ind)
+            path.append(n_ind)
+        return path, visited
+
+
+def reduce_vertices(vertices, edges):
+    '''
+    Generate a reduced vertex and reindexed edge list by considering
+    only those vertices with edges.
+    '''
+    vertices = np.array(vertices)
+    keep_vinds = np.unique(edges).astype(int)
+    vmap = dict(zip(keep_vinds, np.arange(len(keep_vinds))))
+    vertices_n = vertices[keep_vinds]
+    edges_n = np.stack((np.fromiter((vmap[x] for x in edges[:,0]), dtype=int),
+                        np.fromiter((vmap[x] for x in edges[:,1]), dtype=int))).T
+
+    return vertices_n, edges_n
+
+
+def largest_connected_component(G):
+    _, labels = sparse.csgraph.connected_components(G)
+    label_vals, cnt = np.unique(labels, return_counts=True)
+    largest_ind = np.argmax(cnt)
+    return np.where(labels == label_vals[largest_ind])[0]
+
+
 def get_path(root, target, pred):
     path = [target]
     p = target
@@ -18,17 +270,28 @@ def get_path(root, target, pred):
 
 
 def find_far_points(trimesh):
+    return find_far_points_graph(trimesh.csgraph)
+
+
+def find_far_points_graph(mesh_graph, multicomponent=False):
     d = 0
     dn = 1
-    a = 0
+   
+    if multicomponent: 
+        a = largest_connected_component(mesh_graph)[0]
+    else:
+        a = 0
     b = 1
+    
     k = 0
     pred = None
     ds = None
     while 1:
         k += 1
         dsn, predn = sparse.csgraph.dijkstra(
-            trimesh.csgraph, False, a, return_predecessors=True)
+            mesh_graph, False, a, return_predecessors=True)
+        if multicomponent:
+            dsn[np.isinf(dsn)] = 0
         bn = np.argmax(dsn)
         dn = dsn[bn]
         if dn > d:
@@ -41,7 +304,6 @@ def find_far_points(trimesh):
             break
 
     return b, a, pred, d, ds
-
 
 def setup_root(mesh, soma_pos=None, soma_thresh=7500):
     valid = np.ones(len(mesh.vertices), np.bool)
