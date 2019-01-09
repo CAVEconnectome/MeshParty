@@ -251,42 +251,23 @@ def skeletonize_components(mesh, soma_pt=None, soma_thresh=7500, invalidation_d=
         if comp_counts[k] > cc_vertex_thresh:
             # get the mesh vertices involved in this component
             vert_inds = np.where(labels == k)[0]
-            # filter out the triangles and edges involved
-            filt_tris = mesh._filter_faces(vert_inds)[0]
-            if mesh.mesh_edges is not None:
-                filt_edges = mesh._filter_mesh_edges(vert_inds)[0]
-            else:
-                filt_edges = None
-            # get reindexed vertices
-            verts = mesh.vertices[vert_inds, :]
-
-            # initialize a trimesh object
-            mesh_component = trimesh_io.Mesh(verts,
-                                            filt_tris,
-                                            mesh_edges=filt_edges,
-                                            process=False)
 
             # find the root using a soma position if you have it
             # it will fall back to a heuristic if the soma
             # is too far away for this component
-            root, root_ds, pred, valid = setup_root(mesh_component,
+            root, root_ds, pred, valid = setup_root(mesh,
                                                     soma_pt=soma_pt,
-                                                    soma_thresh=soma_thresh)
+                                                    soma_thresh=soma_thresh,
+                                                    valid_ind=vert_inds)
             
             # run teasar on this component
-            paths, path_lengths = mesh_teasar(mesh_component,
-                                            root=root,
-                                            root_ds=root_ds,
-                                            root_pred=pred,
-                                            valid=valid,
-                                            invalidation_d=invalidation_d)
-            # convert the paths into numpy arrays in the original index space
-            for i, path in enumerate(paths):
-                path = np.array(path)
-                orig_path = vert_inds[path]
-                paths[i] = orig_path
-            # also convert the root
-            root = vert_inds[root]
+            paths, path_lengths = mesh_teasar(mesh,
+                                              root=root,
+                                              root_ds=root_ds,
+                                              root_pred=pred,
+                                              valid=valid,
+                                              invalidation_d=invalidation_d)
+  
             if len(path_lengths) > 0:
                 # collect the results in lists
                 tot_path_lengths.append(path_lengths)
