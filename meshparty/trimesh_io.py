@@ -136,9 +136,12 @@ def _download_meshes_thread(args):
     cv = cloudvolume.CloudVolume(cv_path)
 
     for seg_id in seg_ids:
-        if not overwrite and os.path.exists(f"{seg_id}.h5"):
+        print('downloading {}'.format(seg_id))
+        target_file = os.path.join(target_dir, f"{seg_id}.h5")
+        if not overwrite and os.path.exists(target_file):
+            print('file exists {}'.format(target_file))
             continue
-
+        print('file does not exist {}'.format(target_file))
         frags = [np.uint64(seg_id)]
 
         if mesh_endpoint is not None:
@@ -553,37 +556,44 @@ class Mesh(trimesh.Trimesh):
                                     return_faces=return_faces,
                                     pc_norm=pc_norm)
 
-    def _filter_faces(self, node_ids):
+     def _filter_shapes(self, node_ids, shapes):
         """ node_ids has to be sorted! """
         if not isinstance(node_ids[0], list) and \
                 not isinstance(node_ids[0], np.ndarray):
             node_ids = [node_ids]
-
+        ndim = shapes.shape[1]
         if isinstance(node_ids, np.ndarray):
             all_node_ids = node_ids.flatten()
         else:
             all_node_ids = np.concatenate(node_ids)
 
-        filter_ = np.in1d(self.faces[:, 0], all_node_ids)
-        pre_filtered_faces = self.faces[filter_].copy()
-        filter_ = np.in1d(pre_filtered_faces[:, 1], all_node_ids)
-        pre_filtered_faces = pre_filtered_faces[filter_]
-        filter_ = np.in1d(pre_filtered_faces[:, 2], all_node_ids)
-        pre_filtered_faces = pre_filtered_faces[filter_]
+        filter_ = np.in1d(shapes[:, 0], all_node_ids)
+        pre_filtered_shapes = shapes[filter_].copy()
+        for k in range(1, ndim):
+            filter_ = np.in1d(pre_filtered_shapes[:, k], all_node_ids)
+            pre_filtered_shapes = pre_filtered_shapes[filter_]
 
-        filtered_faces = []
+        filtered_shapes = []
 
         for ns in node_ids:
-            f = pre_filtered_faces[np.in1d(pre_filtered_faces[:, 0], ns)]
-            f = f[np.in1d(f[:, 1], ns)]
-            f = f[np.in1d(f[:, 2], ns)]
+            f = pre_filtered_shapes[np.in1d(pre_filtered_shapes[:, 0], ns)]
+            for k in range(1, ndim):
+                f = f[np.in1d(f[:, k], ns)]
 
             f = np.unique(np.concatenate([f.flatten(), ns]),
-                          return_inverse=True)[1][:-len(ns)].reshape(-1, 3)
+                          return_inverse=True)[1][:-len(ns)].reshape(-1, ndim)
 
-            filtered_faces.append(f)
+            filtered_shapes.append(f)
 
-        return filtered_faces
+        return filtered_shapes
+
+    def _filter_faces(self, node_ids):
+        """ node_ids has to be sorted! """
+        return self._filter_shapes(node_ids, self.faces)
+
+    def _filter_mesh_edges(self, node_ids):
+        """ node_ids has to be sorted! """
+        return self._filter_shapes(node_ids, self.mesh_edges)
 
     def get_local_meshes(self, n_points, max_dist=np.inf, center_node_ids=None,
                          center_coords=None, pc_align=False, pc_norm=False,
