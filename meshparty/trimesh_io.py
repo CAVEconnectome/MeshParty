@@ -2,7 +2,6 @@ import numpy as np
 import h5py
 from scipy import spatial, sparse
 from sklearn import decomposition
-import plyfile
 import os
 import networkx as nx
 import requests
@@ -12,7 +11,10 @@ import cloudvolume
 from multiwrapper import multiprocessing_utils as mu
 
 import trimesh
-from trimesh import caching, io
+try:
+    from trimesh import exchange
+except ImportError:
+    from trimesh import io as exchange
 
 from pymeshfix import _meshfix
 
@@ -409,7 +411,7 @@ class Mesh(trimesh.Trimesh):
 
         :param filename: str
         """
-        io.export.export_mesh(self, filename)
+        exchange.export.export_mesh(self, filename)
 
     def get_local_views(self, n_points,
                         max_dist=np.inf,
