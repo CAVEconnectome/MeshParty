@@ -5,14 +5,16 @@ from meshparty import trimesh_vtk
 from meshparty import trimesh_io
 import pandas as pd
 from scipy.spatial import cKDTree as KDTree
-import pcst_fast  
+from copy import copy
+# import pcst_fast  
 
 
 class Skeleton:
-    def __init__(self, vertices, edges, vertex_properties={}, root=None):
+    def __init__(self, vertices, edges, vertex_properties={}, edge_properties={}, root=None):
         self._vertices = np.array(vertices)
         self._edges = np.vstack(edges).astype(int)
         self.vertex_properties = vertex_properties
+        self.edge_properties = edge_properties
 
         self.reroot(root)
         # self._csgraph = None
@@ -32,30 +34,31 @@ class Skeleton:
         return self._edges.copy()
 
     @property
-    def labels(self):
-        return self._labels.copy()
-
-    @property
     def csgraph(self):
         if self._csgraph is None:
             self._csgraph = self._create_csgraph()
         return self._csgraph.copy()
 
+
     @property
     def csgraph_binary(self):
         return self._create_csgraph(euclidean_weight=False)
+
 
     @property
     def csgraph_undirected(self):
         return self._create_csgraph(directed=False)
 
+
     @property
     def csgraph_binary_undirected(self):
         return self._create_csgraph(directed=False, euclidean_weight=False)
 
+
     @property
     def n_vertices(self):
         return len(self.vertices)
+
 
     @property
     def root(self):
@@ -63,9 +66,11 @@ class Skeleton:
             self._create_default_root()
         return copy(self._root)
 
+
     def _create_default_root(self, multicomponent=True):
         r = find_far_points_graph(self.csgraph, multicomponent=multicomponent)
         self.reroot(r[0])
+
 
     def reroot(self, new_root):
         self._root = new_root
@@ -100,7 +105,7 @@ class Skeleton:
 
         edges = self.edges
         if largest_component_only:
-            icc = largest_connected_component(self._create_csgraph(euclidean_weight=False, largest_connected_component=False))
+            icc = largest_connected_component(self._create_csgraph(euclidean_weight=False, largest_component_only=False))
             edge_filter = np.isin(edges[:,0], icc)
             edges = edges[edge_filter]
 
@@ -111,7 +116,7 @@ class Skeleton:
             weights = np.linalg.norm(xs-ys, axis=1)
             use_dtype = np.float32
         else:   
-            weights = np.ones(np.shape(xs)).astype(int)
+            weights = np.ones((len(xs),)).astype(int)
             use_dtype = int
 
         if directed:
@@ -163,19 +168,19 @@ class Skeleton:
     def paths(self):
         if self._paths is None:
             self._paths = self._compute_paths()
-        return self._paths
+        return self._paths.copy()
     
     def distance_to_root(self, indices):
         ds = sparse.csgraph.dijkstra(self.csgraph, directed=True, indices=indices)
         return ds[:,self.root]
 
-    def _parent_node(v_ind):
+    def _parent_node(self, v_ind):
         if v_ind == self.root:
             return None
         else:
             return self.csgraph[v_ind,:].nonzero()[1][0]
 
-    def path_to_root(v_ind):
+    def path_to_root(self, v_ind):
         '''
         Returns an ordered path to root from a given vertex node.
         '''

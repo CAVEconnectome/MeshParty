@@ -16,7 +16,6 @@ from trimesh import caching, io
 from pymeshfix import _meshfix
 import vtk
 from tqdm import trange
-import igraph
 
 
 def read_mesh_h5(filename):
