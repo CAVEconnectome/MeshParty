@@ -17,13 +17,26 @@ class Skeleton:
         self.edge_properties = edge_properties
 
         self.reroot(root)
+        # self._parent_node = {}
         # self._csgraph = None
+        # self._csgraph_binary = None
         # self._nxgraph = None
         # self._paths = None
+        # self._edge_component_filter = None
 
         self._branch_points = None
         self._end_points = None
 
+    @property
+    def edge_component_filter(self)
+        if self._edge_component_filter is None:
+            icc = connected_component_slice(self._create_csgraph(euclidean_weight=False,
+                                                                   largest_component_only=False),
+                                              component_ind = self.root)
+            edge_filter = np.isin(edges[:,0], icc)
+
+            self._edge_component_filter = 
+        return self._edge_component_filter
 
     @property
     def vertices(self):
@@ -39,21 +52,19 @@ class Skeleton:
             self._csgraph = self._create_csgraph()
         return self._csgraph.copy()
 
-
     @property
     def csgraph_binary(self):
-        return self._create_csgraph(euclidean_weight=False)
-
+        if self._csgraph_binary is None:
+            self._csgraph_binary = self._create_csgraph(euclidean_weight=False)
+        return self._csgraph_binary
 
     @property
     def csgraph_undirected(self):
-        return self._create_csgraph(directed=False)
-
+        return self.csgraph + self.csgraph.T
 
     @property
     def csgraph_binary_undirected(self):
-        return self._create_csgraph(directed=False, euclidean_weight=False)
-
+        return self.csgraph_binary + self.csgraph_binary.T
 
     @property
     def n_vertices(self):
@@ -71,13 +82,15 @@ class Skeleton:
         r = find_far_points_graph(self.csgraph, multicomponent=multicomponent)
         self.reroot(r[0])
 
+    def _parent_node(self, vind):
+        return self._parent_node_array[vind]
 
     def reroot(self, new_root):
         self._root = new_root
+        self._parent_node_array = np.full(self.n_vertices, None)
         if new_root is not None:
             # The edge list has to be treated like an undirected graph
-            G = self._create_csgraph()
-            d = sparse.csgraph.dijkstra(G,
+            d = sparse.csgraph.dijkstra(self.csgraph_binary,
                                         directed=False,
                                         indices=new_root)
 
@@ -89,11 +102,13 @@ class Skeleton:
             e1 = np.where( is_ordered, edges[:,0], edges[:,1])
             e2 = np.where( is_ordered, edges[:,1], edges[:,0])
             self._edges = np.stack((e1,e2)).T
+            self._parent_node_array[e1]=e2
         self._reset_derived_objects()
 
 
     def _reset_derived_objects(self):
         self._csgraph = None
+        self._csgraph_binary = None
         self._nxgraph = None
         self._paths = None
 
@@ -105,7 +120,7 @@ class Skeleton:
 
         edges = self.edges
         if largest_component_only:
-            icc = largest_connected_component(self._create_csgraph(euclidean_weight=False, largest_component_only=False))
+            icc = connected_component_slice(self._create_csgraph(euclidean_weight=False, largest_component_only=False))
             edge_filter = np.isin(edges[:,0], icc)
             edges = edges[edge_filter]
 
@@ -116,8 +131,8 @@ class Skeleton:
             weights = np.linalg.norm(xs-ys, axis=1)
             use_dtype = np.float32
         else:   
-            weights = np.ones((len(xs),)).astype(int)
-            use_dtype = int
+            weights = np.ones((len(xs),)).astype(bool)
+            use_dtype = bool 
 
         if directed:
             edges = edges.T
@@ -158,11 +173,11 @@ class Skeleton:
         return len(self._end_points)
 
     def _create_branch_and_end_points(self):
-        branch_thresh = 1
-        end_value = 0
         n_children = np.sum(self.csgraph>0, axis=0).squeeze()
-        self._branch_points = np.flatnonzero(n_children > branch_thresh)
-        self._end_points = np.flatnonzero(n_children == end_value)
+        n_parents = np.sum(self.csgraph>0, axis=1).squeeze()
+
+        self._branch_points = np.flatnonzero(n_children > 1)
+        self._end_points = np.flatnonzero(n_children == 0)
 
     @property
     def paths(self):
@@ -173,12 +188,6 @@ class Skeleton:
     def distance_to_root(self, indices):
         ds = sparse.csgraph.dijkstra(self.csgraph, directed=True, indices=indices)
         return ds[:,self.root]
-
-    def _parent_node(self, v_ind):
-        if v_ind == self.root:
-            return None
-        else:
-            return self.csgraph[v_ind,:].nonzero()[1][0]
 
     def path_to_root(self, v_ind):
         '''
@@ -257,11 +266,12 @@ def reduce_vertices(vertices, edges):
     return vertices_n, edges_n
 
 
-def largest_connected_component(G):
+def connected_component_slice(G, ind=None):
     _, labels = sparse.csgraph.connected_components(G)
     label_vals, cnt = np.unique(labels, return_counts=True)
-    largest_ind = np.argmax(cnt)
-    return np.where(labels == label_vals[largest_ind])[0]
+    if ind is None
+        ind = np.argmax(cnt)
+    return np.where(labels == label_vals[ind])[0]
 
 
 def get_path(root, target, pred):
@@ -274,7 +284,7 @@ def get_path(root, target, pred):
     return path
 
 
-def find_far_points(trimesh):
+def find_far_points(trimesh, multicomponent=False):
     return find_far_points_graph(trimesh.csgraph)
 
 
@@ -309,6 +319,8 @@ def find_far_points_graph(mesh_graph, multicomponent=False):
             break
 
     return b, a, pred, d, ds
+
+
 
 def setup_root(mesh, soma_pos=None, soma_thresh=7500):
     valid = np.ones(len(mesh.vertices), np.bool)
