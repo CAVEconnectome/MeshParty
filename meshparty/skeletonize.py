@@ -9,11 +9,100 @@ from copy import copy
 # import pcst_fast  
 
 
+def reduce_vertices(vertices, edges, v_filter=None, e_filter=None, return_filter_inds=False):
+    if v_filter is None:
+        v_filter = np.unique(edges).astype(int)
+    if e_filter is None:
+        e_filter_bool = np.isin(edges[:,0], v_filter) & np.isin(edges[:,1], v_filter)
+        e_filter = np.where(e_filter_bool)[0]
+    
+    vertices_n = vertices[v_filter]
+    vmap = dict(zip(v_filter, np.arange(len(v_filter))))
+    
+    edges_f = edges[e_filter].copy()
+    edges_n = np.stack((np.fromiter((vmap[x] for x in edges_f[:,0]), dtype=int),
+                        np.fromiter((vmap[x] for x in edges_f[:,1]), dtype=int))).T
+
+    if return_filter_inds:
+        return vertices_n, edges_n, (v_filter, e_filter)
+    else:
+        return vertice_n, edges_n
+
+def create_csgraph(vertices,
+                   edges,
+                   euclidean_weight=True):
+
+    if euclidean_weight:
+        xs = vertices[edges[:,0]]
+        ys = vertices[edges[:,1]]
+        weights = np.linalg.norm(xs-ys, axis=1)
+        use_dtype = np.float32
+    else:   
+        weights = np.ones((len(edges),)).astype(bool)
+        use_dtype = bool 
+
+    edges = np.concatenate([edges.T, edges.T[[1, 0]]], axis=1)
+    weights = np.concatenate([weights, weights]).astype(dtype=use_dtype)
+
+    csgraph = sparse.csr_matrix((weights, edges),
+                                shape=[len(vertices), ] * 2,
+                                dtype=use_dtype)
+
+    return csgraph
+
+
+class SkeletonForest():
+    def __init__(self, vertices, edges, vertex_properties={}, edge_properties={}, root=None):
+        self._vertex_components = []
+        self._edge_components = []
+        self._skeletons = []
+
+        vertices = np.array(vertices)
+        edges = np.array(edges)
+
+        nc, v_lbls = sparse.csgraph.connected_components(create_csgraph(vertices, edges, euclidean_weight=False))
+        lbls, count = np.unique(v_lbls, return_counts=True)
+        lbl_order = np.argsort(count)[::-1]
+        for lbl in lbls[lbl_order]:
+            v_filter = np.where(v_lbls==lbl)[0]
+            vertices_f, edges_f, filters = reduce_vertices(vertices,
+                                                           edges,
+                                                           v_filter=v_filter,
+                                                           return_filter_inds=True)
+            vertex_properties_f = {vp_n: vp_v[filters[0]] for vp_n, vp_v in vertex_properties.items()}
+            edge_properties_f = {ep_n: ep_v[filters[1]] for ep_n, ep_v in edge_properties.items()}
+
+            self._vertex_components.append(filters[0])
+            self._edge_components.append(filters[1])
+            if root in v_filter:
+                root_f = np.where(root==v_filter)[0][0]
+            else:
+                root_f = None
+            self._skeletons.append( Skeleton(vertices_f, edges_f, vertex_properties_f, edge_properties_f, root=root_f) )
+
+    @property
+    def vertices_all(self):
+        vs_list = [skeleton.vertices for skeleton in self._skeletons]
+        return np.vstack(vs_list)
+
+    @property
+    def edges_all(self):
+        edges_stacked = []
+        n_shift = 0
+        for skeleton in self._skeletons:
+            edges_stacked.append(skeleton.edges + n_shift)
+            n_shift += skeleton.n_vertices
+        return np.vstack(edges_stacked)
+
+    @property
+    def csgraph(self):    
+        return create_csgraph(self.vertices_all, self.edges_all)
+
+
 class Skeleton:
     def __init__(self, vertices, edges, vertex_properties={}, edge_properties={}, root=None):
         self._vertices = np.array(vertices)
         self._edges = np.vstack(edges).astype(int)
-        self._edge_component_filter = None
         self.vertex_properties = vertex_properties
         self.edge_properties = edge_properties
 
@@ -23,22 +112,9 @@ class Skeleton:
         # self._csgraph_binary = None
         # self._nxgraph = None
         # self._paths = None
-        # self._edge_component_filter = None
 
         self._branch_points = None
         self._end_points = None
-
-
-    @property
-    def edge_component_filter(self):
-        if self._edge_component_filter is None:
-            icc = connected_component_slice(self._create_csgraph(euclidean_weight=False,
-                                                                 largest_component_only=False),
-                                            ind = self.root)
-            edge_filter = np.isin(self._edges[:,0], icc)
-            self._edge_component_filter = edge_filter 
-        return self._edge_component_filter.copy()
-
 
     @property
     def vertices(self):
@@ -46,10 +122,6 @@ class Skeleton:
 
     @property
     def edges(self):
-        return self._edges[self.edge_component_filter].copy()
-
-    @property
-    def edges_raw(self):
         return self._edges.copy()
 
     @property
@@ -57,13 +129,6 @@ class Skeleton:
         if self._csgraph is None:
             self._csgraph = self._create_csgraph()
         return self._csgraph.copy()
-
-    @property
-    def csgraph_raw(self):
-        G = self._create_csgraph(directed=True,
-                                 euclidean_weight=True,
-                                 largest_component_only=False)
-        return G
     
     @property
     def csgraph_binary(self):
@@ -83,7 +148,6 @@ class Skeleton:
     def n_vertices(self):
         return len(self.vertices)
 
-
     @property
     def root(self):
         if self._root is None:
@@ -95,8 +159,10 @@ class Skeleton:
         r = find_far_points_graph(self.csgraph_raw, multicomponent=multicomponent)
         self.reroot(r[0])
 
+
     def _parent_node(self, vind):
         return self._parent_node_array[vind]
+
 
     def reroot(self, new_root):
         self._root = new_root
@@ -114,7 +180,6 @@ class Skeleton:
             is_ordered = d[edges[:,0]] > d[edges[:,1]]
             e1 = np.where( is_ordered, edges[:,0], edges[:,1])
             e2 = np.where( is_ordered, edges[:,1], edges[:,0])
-            self._edges[self.edge_component_filter] = np.stack((e1,e2)).T
             self._parent_node_array[e1]=e2
         self._reset_derived_objects()
 
@@ -122,20 +187,13 @@ class Skeleton:
     def _reset_derived_objects(self):
         self._csgraph = None
         self._csgraph_binary = None
-        self._edge_component_filter = None
-        self._nxgraph = None
         self._paths = None
-
 
     def _create_csgraph(self,
                         directed=True,
-                        euclidean_weight=True,
-                        largest_component_only=True):
+                        euclidean_weight=True):
 
-        if largest_component_only:
-            edges = self.edges
-        else:
-            edges = self._edges.copy()
+        edges = self._edges.copy()
 
         xs = self.vertices[edges[:,0]]
         ys = self.vertices[edges[:,1]]
@@ -187,10 +245,9 @@ class Skeleton:
 
     def _create_branch_and_end_points(self):
         n_children = np.sum(self.csgraph_binary>0, axis=0).squeeze()
-        n_parents = np.sum(self.csgraph_binary>0, axis=1).squeeze()
 
         self._branch_points = np.flatnonzero(n_children > 1)
-        self._end_points = np.flatnonzero( (n_children == 0) & (n_parents == 1) )
+        self._end_points = np.flatnonzero(n_children == 0)
 
     @property
     def paths(self):
@@ -262,21 +319,6 @@ class Skeleton:
             n_ind = self._parent_node(n_ind)
             path.append(n_ind)
         return path, visited
-
-
-def reduce_vertices(vertices, edges):
-    '''
-    Generate a reduced vertex and reindexed edge list by considering
-    only those vertices with edges.
-    '''
-    vertices = np.array(vertices)
-    keep_vinds = np.unique(edges).astype(int)
-    vmap = dict(zip(keep_vinds, np.arange(len(keep_vinds))))
-    vertices_n = vertices[keep_vinds]
-    edges_n = np.stack((np.fromiter((vmap[x] for x in edges[:,0]), dtype=int),
-                        np.fromiter((vmap[x] for x in edges[:,1]), dtype=int))).T
-
-    return vertices_n, edges_n
 
 
 def connected_component_slice(G, ind=None):
