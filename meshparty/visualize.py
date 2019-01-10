@@ -1,7 +1,32 @@
-from meshparty import trimesh_io, trimesh_vtk, skeletonize
 
+import numpy as np
+from meshparty import trimesh_io, trimesh_vtk, skeletonize
 import plotly.graph_objs as go
 import vtk
+
+def go_xyz_block(xyz, **kwargs):
+    '''
+    Make a scatter3d plot from a Nx3 numpy.array
+    '''
+    if 'mode' not in kwargs:
+        mode='markers'
+    else:
+        mode = kwargs.pop('mode')
+
+    if 'marker' not in kwargs:
+        marker=dict(color='rgb(0,0,0)',
+                    size=3,
+                    symbol='circle')
+    else:
+        marker=kwargs.pop('marker')
+
+    return go.Scatter3d(x=xyz[:,0],
+                        y=xyz[:,1],
+                        z=xyz[:,2],
+                        mode=mode,
+                        marker=marker,
+                        **kwargs)
+
 
 def go_skeleton(sk, **kwargs):
     '''
@@ -20,7 +45,7 @@ def go_skeleton(sk, **kwargs):
         zs.append(np.nan)
 
     if 'mode' not in kwargs:
-        mode='line'
+        mode='lines'
     else:
         mode = kwargs.pop('mode')
     
@@ -31,6 +56,6 @@ def go_skeleton(sk, **kwargs):
     else:
         line = kwargs.pop('line')
     
-    go_skeleton = go.Scatter3d(xs=xs, ys=ys, zs=zs, mode=mode, line=line, **kwargs)
+    go_skeleton = go.Scatter3d(x=xs, y=ys, z=zs, mode=mode, line=line, **kwargs)
     return go_skeleton
 
