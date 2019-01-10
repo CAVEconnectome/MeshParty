@@ -262,7 +262,8 @@ class MeshMeta(object):
         return "%s/%d.h5" % (self.disk_cache_path, seg_id)
 
     def mesh(self, filename=None, seg_id=None, cache_mesh=True,
-             merge_large_components=True):
+             merge_large_components=True,
+             overwrite_merge_large_components=False):
         """ Loads mesh either from cache, disk or google storage
 
         :param filename: str
@@ -274,6 +275,8 @@ class MeshMeta(object):
             if True: large (>100 vx) mesh connected components are linked
             and the additional edges strored in .mesh_edges
             this information is cached as well
+        :param overwrite_merge_large_components: bool
+            if True: recalculate large components
         :return: Mesh
         """
         assert filename is not None or \
@@ -286,19 +289,27 @@ class MeshMeta(object):
                 mesh = Mesh(vertices=vertices, faces=faces, normals=normals,
                             mesh_edges=mesh_edges)
 
-                if merge_large_components and mesh.mesh_edges is None:
+                if (merge_large_components and mesh.mesh_edges is None) or \
+                        overwrite_merge_large_components:
                     mesh.merge_large_components()
 
                 if cache_mesh and len(self._mesh_cache) < self.cache_size:
                     self._mesh_cache[filename] = mesh
             else:
                 mesh = self._mesh_cache[filename]
+
+            if self.disk_cache_path is not None and \
+                    overwrite_merge_large_components:
+                write_mesh_h5(filename, mesh.vertices,
+                              mesh.faces.flatten(),
+                              mesh_edges=mesh.mesh_edges)
         else:
             if self.disk_cache_path is not None:
                 if os.path.exists(self._filename(seg_id)):
                     return self.mesh(filename=self._filename(seg_id),
                                      cache_mesh=cache_mesh,
-                                     merge_large_components=merge_large_components)
+                                     merge_large_components=merge_large_components,
+                                     overwrite_merge_large_components=overwrite_merge_large_components)
 
             if not seg_id in self._mesh_cache:
                 if self.mesh_endpoint is not None:
@@ -312,7 +323,8 @@ class MeshMeta(object):
                 mesh = Mesh(vertices=cv_mesh["vertices"],
                             faces=np.array(cv_mesh["faces"]).reshape(-1, 3))
 
-                if merge_large_components and mesh.mesh_edges is None:
+                if (merge_large_components and mesh.mesh_edges is None) or \
+                        overwrite_merge_large_components:
                     mesh.merge_large_components()
 
                 if cache_mesh and len(self._mesh_cache) < self.cache_size:
@@ -556,7 +568,7 @@ class Mesh(trimesh.Trimesh):
                                     return_faces=return_faces,
                                     pc_norm=pc_norm)
 
-     def _filter_shapes(self, node_ids, shapes):
+    def _filter_shapes(self, node_ids, shapes):
         """ node_ids has to be sorted! """
         if not isinstance(node_ids[0], list) and \
                 not isinstance(node_ids[0], np.ndarray):
@@ -655,13 +667,17 @@ class Mesh(trimesh.Trimesh):
 
         return pca.fit_transform(vertices)
 
-    def merge_large_components(self, size_threshold=100, max_dist=140):
+    def merge_large_components(self, size_threshold=100, max_dist=1000,
+                               dist_step=100):
         """ Finds edges between disconnected components
 
         :param size_threshold: int
         :param max_dist: float
         """
         time_start = time.time()
+
+        self._mesh_edges = None
+        self._csgraph = None
 
         ccs = sparse.csgraph.connected_components(self.csgraph)
         ccs_u, cc_sizes = np.unique(ccs[1], return_counts=True)
@@ -677,30 +693,26 @@ class Mesh(trimesh.Trimesh):
             v = self.vertices[m]
             kdtrees.append(spatial.cKDTree(v))
 
-        close_by = np.ones([len(large_cc_ids), len(large_cc_ids)],
-                           dtype=np.bool)
-
         add_edges = []
         for i_tree in range(len(large_cc_ids) - 1):
             for j_tree in range(i_tree + 1, len(large_cc_ids)):
                 print("%d - %d      " % (i_tree, j_tree), end="\r")
 
-                pairs = kdtrees[i_tree].query_ball_tree(kdtrees[j_tree],
-                                                        max_dist)
+                if np.any(kdtrees[i_tree].query_ball_tree(kdtrees[j_tree], max_dist)):
+                    for this_dist in range(dist_step, max_dist + dist_step, dist_step):
 
-                if np.any(pairs):
-                    is_close_by = True
+                        pairs = kdtrees[i_tree].query_ball_tree(kdtrees[j_tree],
+                                                                this_dist)
 
-                    for i_p, p in enumerate(pairs):
-                        if len(p) > 0:
-                            add_edges.extend([[vertex_ids[i_tree][i_p],
-                                               vertex_ids[j_tree][v]]
-                                              for v in p])
-                else:
-                    is_close_by = False
+                        if np.any(pairs):
+                            for i_p, p in enumerate(pairs):
+                                if len(p) > 0:
+                                    add_edges.extend([[vertex_ids[i_tree][i_p],
+                                                       vertex_ids[j_tree][v]]
+                                                      for v in p])
+                            break
 
-                close_by[i_tree, j_tree] = is_close_by
-                close_by[j_tree, i_tree] = is_close_by
+        print(f"Adding {len(add_edges)} new edges.")
 
         if len(add_edges) > 0:
             self._mesh_edges = np.concatenate([self.edges, add_edges])
