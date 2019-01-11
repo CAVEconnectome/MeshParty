@@ -28,7 +28,7 @@ def go_xyz_block(xyz, **kwargs):
                         **kwargs)
 
 
-def go_skeleton(sk, **kwargs):
+def go_skeleton(sk, color_by=None, **kwargs):
     '''
     Make a skeleton graphics object for plotly.
     '''
@@ -43,19 +43,26 @@ def go_skeleton(sk, **kwargs):
         ys.append(np.nan)
         zs.extend(sk.vertices[path,2])
         zs.append(np.nan)
-
+  
+    if color_by is None:
+        color = 'rgb(125,55,255)'
+    else:
+        color = sk.vertex_properties[color_by]
+  
     if 'mode' not in kwargs:
         mode='lines'
     else:
         mode = kwargs.pop('mode')
     
     if 'line' not in kwargs:
-        line=dict(color='rgb(125,55,255)',
-                  width=2,
-                  )
+        line = dict(width=4)
     else:
         line = kwargs.pop('line')
     
+    if 'color' not in line:
+        line['color'] = color
+        if color_by is not None:
+            line['colorscale'] = 'Hot'
     go_skeleton = go.Scatter3d(x=xs, y=ys, z=zs, mode=mode, line=line, **kwargs)
     return go_skeleton
 

@@ -8,7 +8,12 @@ from scipy.spatial import cKDTree as KDTree
 from copy import copy
 # import pcst_fast  
 
-
+def edge_averaged_vertex_property(edge_property, vertices, edges):
+    vertex_property = np.full((len(vertices),2), np.nan)
+    vertex_property[edges[:,0],0] = np.array(edge_property)
+    vertex_property[edges[:,1],1] = np.array(edge_property)
+    return np.nanmean(vertex_property, axis=1)
+    
 def reduce_vertices(vertices, edges, v_filter=None, e_filter=None, return_filter_inds=False):
     if v_filter is None:
         v_filter = np.unique(edges).astype(int)
@@ -69,8 +74,8 @@ class SkeletonForest():
                                                            edges,
                                                            v_filter=v_filter,
                                                            return_filter_inds=True)
-            vertex_properties_f = {vp_n: vp_v[filters[0]] for vp_n, vp_v in vertex_properties.items()}
-            edge_properties_f = {ep_n: ep_v[filters[1]] for ep_n, ep_v in edge_properties.items()}
+            vertex_properties_f = {vp_n: np.array(vp_v)[filters[0]] for vp_n, vp_v in vertex_properties.items()}
+            edge_properties_f = {ep_n: np.array(ep_v)[filters[1]] for ep_n, ep_v in edge_properties.items()}
 
             self._vertex_components.append(filters[0])
             self._edge_components.append(filters[1])
@@ -79,6 +84,9 @@ class SkeletonForest():
             else:
                 root_f = None
             self._skeletons.append( Skeleton(vertices_f, edges_f, vertex_properties_f, edge_properties_f, root=root_f) )
+
+    def __getitem__(self, key):
+        return self._skeletons[key]
 
     @property
     def vertices_all(self):
@@ -98,6 +106,16 @@ class SkeletonForest():
     def csgraph(self):    
         return create_csgraph(self.vertices_all, self.edges_all)
 
+    def vertex_property_all(self, property_name):
+        vp_list = [skeleton.vertex_properties[property_name] for skeleton in self._skeletons]
+        return np.vstack(vp_list)
+
+    def edge_property_all(self, property_name):
+        ep_list = [skeleton.edge_properties[property_name] for skeleton in self._skeletons]
+        return ep.vstack(ep_list)
+
+
+    
 
 class Skeleton:
     def __init__(self, vertices, edges, vertex_properties={}, edge_properties={}, root=None):
@@ -106,13 +124,14 @@ class Skeleton:
         self.vertex_properties = vertex_properties
         self.edge_properties = edge_properties
 
-        self.reroot(root)
-        # self._parent_node = {}
-        # self._csgraph = None
-        # self._csgraph_binary = None
-        # self._nxgraph = None
-        # self._paths = None
+        self._reset_derived_objects()
+        if root is None:
+            self._create_default_root()
+        else:
+            self.reroot(root)
 
+        # self._parent_node = {}
+        self._kdtree = None
         self._branch_points = None
         self._end_points = None
 
@@ -154,33 +173,39 @@ class Skeleton:
             self._create_default_root()
         return copy(self._root)
 
+    @property
+    def kdtree(self):
+        if self._kdtree is None:
+            self._kdtree = spatial.cKDTree(self.vertices)
+        return self._kdtree
+    
 
-    def _create_default_root(self, multicomponent=True):
-        r = find_far_points_graph(self.csgraph_raw, multicomponent=multicomponent)
+    def _create_default_root(self):
+        r = find_far_points_graph(self._create_csgraph(directed=False))
         self.reroot(r[0])
-
 
     def _parent_node(self, vind):
         return self._parent_node_array[vind]
 
-
     def reroot(self, new_root):
         self._root = new_root
         self._parent_node_array = np.full(self.n_vertices, None)
-        if new_root is not None:
-            # The edge list has to be treated like an undirected graph
-            d = sparse.csgraph.dijkstra(self.csgraph_binary,
-                                        directed=False,
-                                        indices=new_root)
+        
+        # The edge list has to be treated like an undirected graph
+        d = sparse.csgraph.dijkstra(self.csgraph_binary,
+                                    directed=False,
+                                    indices=new_root)
 
-            # Make edges in edge list orient as [child, parent]
-            # Where each child only has one parent
-            # And the root has no parent. (Thus parent is closer than child)
-            edges = self.edges
-            is_ordered = d[edges[:,0]] > d[edges[:,1]]
-            e1 = np.where( is_ordered, edges[:,0], edges[:,1])
-            e2 = np.where( is_ordered, edges[:,1], edges[:,0])
-            self._parent_node_array[e1]=e2
+        # Make edges in edge list orient as [child, parent]
+        # Where each child only has one parent
+        # And the root has no parent. (Thus parent is closer than child)
+        edges = self.edges
+        is_ordered = d[edges[:,0]] > d[edges[:,1]]
+        e1 = np.where( is_ordered, edges[:,0], edges[:,1])
+        e2 = np.where( is_ordered, edges[:,1], edges[:,0])
+
+        self._edges = np.stack((e1,e2)).T
+        self._parent_node_array[e1]=e2
         self._reset_derived_objects()
 
 
@@ -195,14 +220,13 @@ class Skeleton:
 
         edges = self._edges.copy()
 
-        xs = self.vertices[edges[:,0]]
-        ys = self.vertices[edges[:,1]]
-
         if euclidean_weight:
+            xs = self.vertices[edges[:,0]]
+            ys = self.vertices[edges[:,1]]
             weights = np.linalg.norm(xs-ys, axis=1)
             use_dtype = np.float32
         else:   
-            weights = np.ones((len(xs),)).astype(bool)
+            weights = np.ones((len(edges),)).astype(bool)
             use_dtype = bool 
 
         if directed:
@@ -245,7 +269,6 @@ class Skeleton:
 
     def _create_branch_and_end_points(self):
         n_children = np.sum(self.csgraph_binary>0, axis=0).squeeze()
-
         self._branch_points = np.flatnonzero(n_children > 1)
         self._end_points = np.flatnonzero(n_children == 0)
 
