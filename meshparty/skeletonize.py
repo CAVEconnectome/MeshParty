@@ -449,7 +449,7 @@ def mesh_teasar(mesh, root=None, valid=None, root_ds=None, root_pred=None, soma_
             # get the distance to all points along the new path
             # within the invalidation distance
             dm = sparse.csgraph.dijkstra(
-                mesh.csgraph, False, path, limit=invalidation_d, multi_target=True)
+                mesh.csgraph, False, path, limit=invalidation_d, min_only=True)
             time_arrays[3].append(time.time()-t)
 
             t = time.time()
