@@ -18,11 +18,11 @@ def get_path(root, target, pred):
     return path
 
 
-def find_far_points(trimesh):
+def find_far_points(trimesh, start_ind=0):
     d = 0
     dn = 1
-    a = 0
-    b = 1
+    a = start_ind
+    b = None
     k = 0
     pred = None
     ds = None
@@ -30,6 +30,8 @@ def find_far_points(trimesh):
         k += 1
         dsn, predn = sparse.csgraph.dijkstra(
             trimesh.csgraph, False, a, return_predecessors=True)
+        # look for farthest connected index
+        dsn[np.isinf(dsn)]=-1
         bn = np.argmax(dsn)
         dn = dsn[bn]
         if dn > d:
@@ -44,30 +46,6 @@ def find_far_points(trimesh):
     return b, a, pred, d, ds
 
 
-def setup_root(mesh, soma_pt=None, soma_thresh=7500):
-    valid = np.ones(len(mesh.vertices), np.bool)
-
-    # soma mode
-    if soma_pt is not None:
-        # pick the first soma as root
-        soma_d, soma_i = mesh.kdtree.query(soma_pt,
-                                           k=len(mesh.vertices),
-                                           distance_upper_bound=soma_thresh)
-        assert(np.min(soma_d)<soma_thresh)
-        root = soma_i[np.argmin(soma_d)]
-        valid[soma_i[~np.isinf(soma_d)]] = False
-        root_ds, pred = sparse.csgraph.dijkstra(mesh.csgraph,
-                                                False,
-                                                root,
-                                                return_predecessors=True)
-    else:
-        # there is no soma so use far point heuristic
-        root, target, pred, dm, root_ds = find_far_points(mesh)
-        valid[root] = 0
-
-    return root, root_ds, pred, valid
-
-
 def recenter_verts(verts, edges, centers):
     edge_df = pd.DataFrame()
     edge_df['start_edge']=np.array(edges[:,0], np.int64)
@@ -75,47 +53,52 @@ def recenter_verts(verts, edges, centers):
     edge_df['center_x']=np.array(centers)[:,0]
     edge_df['center_y']=np.array(centers)[:,1]
     edge_df['center_z']=np.array(centers)[:,2]
-    start_mean=edge_df.groupby('start_edge').mean()[['center_x','center_y','center_z']]
+    start_mean = edge_df.groupby('start_edge').mean()[['center_x','center_y','center_z']]
     new_verts = np.copy(verts)
     new_verts[start_mean.index.values,:]=start_mean.values
     return new_verts
 
+
 def skeletonize(mesh_meta, seg_id, soma_pt=None, soma_thresh=7500,
                 invalidation_d=10000, smooth_neighborhood=5,
-                max_tip_d=2000, large_skel_path_threshold=5000):
+                max_tip_d=2000, large_skel_path_threshold=5000,
+                cc_vertex_thresh=100, do_cross_section=False):
 
-    axon_trimesh = mesh_meta.mesh(seg_id=seg_id, merge_large_components=False)
-    axon_trimesh.stitch_overlapped_components()
+    mesh = mesh_meta.mesh(seg_id=seg_id, merge_large_components=False)
+    mesh.stitch_overlapped_components()
 
-    all_paths, roots, tot_path_lengths = skeletonize_components(axon_trimesh,
+    all_paths, roots, tot_path_lengths = skeletonize_components(mesh,
                                                                 soma_pt=soma_pt,
-                                                                soma_thresh=soma_thresh,    
-                                                                invalidation_d=invalidation_d)
-    tot_edges = merge_tips(axon_trimesh, all_paths, roots, tot_path_lengths,
+                                                                soma_thresh=soma_thresh,
+                                                                invalidation_d=invalidation_d,
+                                                                cc_vertex_thresh=cc_vertex_thresh)
+    tot_edges = merge_tips(mesh, all_paths, roots, tot_path_lengths,
                            large_skel_path_threshold=large_skel_path_threshold, max_tip_d=max_tip_d)
-   
-    skel_verts, skel_edges = trimesh_vtk.remove_unused_verts(axon_trimesh.vertices, tot_edges)
+
+    skel_verts, skel_edges = trimesh_vtk.remove_unused_verts(mesh.vertices, tot_edges)
     smooth_verts = smooth_graph(skel_verts, skel_edges, neighborhood=smooth_neighborhood)
-
-    cross_sections, centers = trimesh_vtk.calculate_cross_sections(axon_trimesh, smooth_verts, skel_edges)
-    center_verts = recenter_verts(smooth_verts, skel_edges, centers)
-    smooth_center_verts = smooth_graph(center_verts, skel_edges, neighborhood=smooth_neighborhood)
-
-    return skel_verts, skel_edges, cross_sections, smooth_verts, smooth_center_verts
+    if do_cross_section:
+        cross_sections, centers = trimesh_vtk.calculate_cross_sections(mesh, smooth_verts, skel_edges)
+        center_verts = recenter_verts(smooth_verts, skel_edges, centers)
+        smooth_center_verts = smooth_graph(center_verts, skel_edges, neighborhood=smooth_neighborhood)
+        return skel_verts, skel_edges, cross_sections, smooth_verts, smooth_center_verts
+    else:
+        return skel_verts, skel_edges, smooth_verts
 
 
 def skeletonize_axon(mesh_meta, axon_id, invalidation_d=5000, smooth_neighborhood=5,
-                     max_tip_d=2000, large_skel_path_threshold=5000):
+                     max_tip_d=2000, large_skel_path_threshold=5000, cc_vertex_thresh=100):
     return skeletonize(mesh_meta, axon_id,
                        invalidation_d=invalidation_d,
                        smooth_neighborhood=smooth_neighborhood,
                        max_tip_d=max_tip_d,
-                       large_skel_path_threshold=large_skel_path_threshold)
+                       large_skel_path_threshold=large_skel_path_threshold,
+                       cc_vertex_thresh=cc_vertex_thresh)
 
 
 def merge_tips(mesh, all_paths, roots, tot_path_lengths,
                large_skel_path_threshold=5000, max_tip_d=2000):
-    
+
     # collect all the tips of the skeletons (including roots)
     skel_tips = []
     all_tip_indices = []
@@ -234,32 +217,43 @@ def merge_tips(mesh, all_paths, roots, tot_path_lengths,
 #     larg_skel_cc_ind = np.where(skel_comp_counts>100)[0]
 #     large_skel_components=len(larg_skel_cc_ind)
 
-def skeletonize_components(mesh, soma_pt=None, soma_thresh=7500, invalidation_d=10000, cc_vertex_thresh=0):
+
+def skeletonize_components(mesh, soma_pt=None, soma_thresh=10000, invalidation_d=10000, cc_vertex_thresh=100):
     # find all the connected components in the mesh
     n_components, labels = sparse.csgraph.connected_components(mesh.csgraph,
                                                                directed=False,
                                                                return_labels=True)
-    comp_labels, comp_counts = np.unique(labels, return_counts = True)
+    comp_labels, comp_counts = np.unique(labels, return_counts=True)
 
     # variables to collect the paths, roots and path lengths
     all_paths = []
     roots = []
     tot_path_lengths = []
-
+    
+    if soma_pt is not None:
+        soma_d_o, soma_i = mesh.kdtree.query(soma_pt,
+                                             k=len(mesh.vertices),
+                                             distance_upper_bound=soma_thresh)
+        is_soma_pt = np.zeros(len(mesh.vertices), dtype=np.bool)
+        good_ds = ~np.isinf(soma_d_o)
+        is_soma_pt[soma_i[good_ds]] = True
+        soma_d = np.zeros(len(mesh.vertices))
+        soma_d[soma_i[good_ds]] = soma_d_o[good_ds]
+    else:
+        is_soma_pt = None
+        soma_d = None
     # loop over the components
     for k in trange(n_components):
         if comp_counts[k] > cc_vertex_thresh:
-            # get the mesh vertices involved in this component
-            vert_inds = np.where(labels == k)[0]
 
             # find the root using a soma position if you have it
             # it will fall back to a heuristic if the soma
             # is too far away for this component
-            root, root_ds, pred, valid = setup_root(mesh,
-                                                    soma_pt=soma_pt,
-                                                    soma_thresh=soma_thresh,
-                                                    valid_ind=vert_inds)
-            
+            root, root_ds, pred, valid = setup_root_new(mesh,
+                                                        is_soma_pt,
+                                                        soma_d,
+                                                        labels == k)
+
             # run teasar on this component
             paths, path_lengths = mesh_teasar(mesh,
                                               root=root,
@@ -273,8 +267,84 @@ def skeletonize_components(mesh, soma_pt=None, soma_thresh=7500, invalidation_d=
                 tot_path_lengths.append(path_lengths)
                 all_paths.append(paths)
                 roots.append(root)
+            
 
     return all_paths, roots, tot_path_lengths
+
+
+def setup_root_new(mesh, is_soma_pt=None, soma_d=None, is_valid=None):
+    if is_valid is not None:
+        valid = np.copy(is_valid)
+    else:
+        valid = np.ones(len(mesh.vertices), np.bool)
+    root = None
+    # soma mode
+    if is_soma_pt is not None:
+        # pick the first soma as root
+        
+        is_valid_root = is_soma_pt & valid
+        valid_root_inds = np.where(is_valid_root)[0]
+        if len(valid_root_inds) > 0:
+            min_valid_root = np.nanargmin(soma_d[valid_root_inds])
+            root = valid_root_inds[min_valid_root]
+            root_ds, pred = sparse.csgraph.dijkstra(mesh.csgraph,
+                                                    False,
+                                                    root,
+                                                    return_predecessors=True)
+        else:
+            start_ind = np.where(valid)[0][0]
+            root, target, pred, dm, root_ds = skeletonize.find_far_points(mesh,
+                                                              start_ind=start_ind)
+        valid[is_soma_pt] = False
+
+    if root is None:
+        # there is no soma close, so use far point heuristic
+        start_ind = np.where(valid)[0][0]
+        root, target, pred, dm, root_ds = find_far_points(mesh, start_ind=start_ind)
+    valid[root] = False
+    assert(np.all(~np.isinf(root_ds[valid])))
+    return root, root_ds, pred, valid
+
+
+def setup_root(mesh, soma_pt=None, soma_thresh=7500, valid_inds=None):
+    if valid_inds is not None:
+        valid = np.zeros(len(mesh.vertices), np.bool)
+        valid[valid_inds] = True
+    else:
+        valid = np.ones(len(mesh.vertices), np.bool)
+    root = None
+    # soma mode
+    if soma_pt is not None:
+        # pick the first soma as root
+        soma_d, soma_i = mesh.kdtree.query(soma_pt,
+                                           k=len(mesh.vertices),
+                                           distance_upper_bound=soma_thresh)
+        if valid_inds is not None:
+            soma_i, valid_soma_ind, soma_valid_ind = np.intersect1d(soma_i,
+                                                                    valid_inds,
+                                                                    return_indices=True)
+            soma_d = soma_d[valid_soma_ind]
+        if (len(soma_d) > 0):
+            min_d = np.min(soma_d)
+        else:
+            min_d = np.inf 
+        if (min_d < soma_thresh):
+            root = soma_i[np.argmin(soma_d)]
+            root_ds, pred = sparse.csgraph.dijkstra(mesh.csgraph,
+                                                    False,
+                                                    root,
+                                                    return_predecessors=True)
+        else:
+            if valid_inds is not None:
+                root, target, pred, dm, root_ds = find_far_points(mesh, start_ind=valid_inds[0])
+            else:
+                root, target, pred, dm, root_ds = find_far_points(mesh)
+    if root is None:
+        # there is no soma close, so use far point heuristic
+        root, target, pred, dm, root_ds = find_far_points(mesh)
+    valid[root] = False
+
+    return root, root_ds, pred, valid
 
 
 def mesh_teasar(mesh, root=None, valid=None, root_ds=None, root_pred=None, soma_pt=None,
@@ -282,14 +352,14 @@ def mesh_teasar(mesh, root=None, valid=None, root_ds=None, root_pred=None, soma_
     # if no root passed, then calculation one
     if root is None:
         root, root_ds, root_pred, valid = setup_root(mesh,
-                                                soma_pt=soma_pt,
-                                                soma_thresh=soma_thresh)
+                                                     soma_pt=soma_pt,
+                                                     soma_thresh=soma_thresh)
     # if root_ds have not be precalculated do so
     if root_ds is None:
         root_ds, root_pred = sparse.csgraph.dijkstra(mesh.csgraph,
-                                                False,
-                                                root,
-                                                return_predecessors=True)
+                                                     False,
+                                                     root,
+                                                     return_predecessors=True)
     # if certain vertices haven't been pre-invalidated start with just
     # the root vertex invalidated
     if valid is None:
@@ -299,8 +369,9 @@ def mesh_teasar(mesh, root=None, valid=None, root_ds=None, root_pred=None, soma_
         if (len(valid) != len(mesh.vertices)):
             raise Exception("valid must be length of vertices")
 
-    if np.sum(np.isinf(root_ds) | valid) != 0:
-        print(np.where(np.isinf(root_ds)))
+    total_to_visit = np.sum(valid)
+    if np.sum(np.isinf(root_ds) & valid) != 0:
+        print(np.where(np.isinf(root_ds) & valid))
         raise Exception("all valid vertices should be reachable from root")
 
     # vector to store each branch result
@@ -319,15 +390,16 @@ def mesh_teasar(mesh, root=None, valid=None, root_ds=None, root_pred=None, soma_
     start = time.time()
     time_arrays = [[], [], [], [], []]
 
-    with tqdm(total=len(valid)) as pbar:
+    with tqdm(total=total_to_visit) as pbar:
         # keep looping till all vertices have been invalidated
         while(np.sum(valid) > 0):
             k += 1
-
             t = time.time()
             # find the next target, farthest vertex from root
             # that has not been invalidated
-            target = np.argmax(root_ds*valid)
+            target = np.nanargmax(root_ds*valid)
+            if (np.isinf(root_ds[target])):
+                raise Exception('target cannot be reached')
             time_arrays[0].append(time.time()-t)
 
             t = time.time()
@@ -383,9 +455,10 @@ def mesh_teasar(mesh, root=None, valid=None, root_ds=None, root_pred=None, soma_
             t = time.time()
             # all such non infinite distances are within the invalidation
             # zone and should be marked invalid
+            marked = np.sum(valid & ~np.isinf(dm))
             valid[~np.isinf(dm)] = False
             # print out how many vertices are still valid
-            pbar.update(len(valid) - np.sum(valid))
+            pbar.update(marked)
             time_arrays[4].append(time.time()-t)
     # record the total time
     dt = time.time() - start
@@ -394,39 +467,6 @@ def mesh_teasar(mesh, root=None, valid=None, root_ds=None, root_pred=None, soma_
         return paths, path_lengths, time_arrays, dt
     else:
         return paths, path_lengths
-
-
-def setup_root(mesh, soma_pt=None, soma_thresh=7500, valid_ind=None):
-    if valid_ind is not None:
-        valid = np.zeros(len(mesh.vertices), np.bool)
-        valid[valid_ind] = True
-    else:
-        valid = np.ones(len(mesh.vertices), np.bool)
-    root = None
-    # soma mode
-    if soma_pt is not None:
-        # pick the first soma as root
-        soma_d, soma_i = mesh.kdtree.query(soma_pt,
-                                           k=len(mesh.vertices),
-                                           distance_upper_bound=soma_thresh)
-        if valid_ind is not None:
-            soma_i, valid_ind = np.intersect1d(soma_i,
-                                               valid_ind,
-                                               return_indices=True)
-            soma_d = soma_d[valid_ind]
-        if (np.min(soma_d) < soma_thresh):
-            root = soma_i[np.argmin(soma_d)]
-            valid[soma_i[~np.isinf(soma_d)]] = False
-            root_ds, pred = sparse.csgraph.dijkstra(mesh.csgraph,
-                                                    False,
-                                                    root,
-                                                    return_predecessors=True)
-    if root is None:
-        # there is no soma close, so use far point heuristic
-        root, target, pred, dm, root_ds = find_far_points(mesh)
-        valid[root] = 0
-
-    return root, root_ds, pred, valid
 
 
 def paths_to_edges(path_list):
@@ -501,13 +541,18 @@ def smooth_graph(verts, edges, neighborhood=2, iterations=100, r=.1):
         new_verts = A*new_verts
     return new_verts
 
+
 def collapse_soma_skeleton(soma_pt, verts, edges, soma_d_thresh=12000):
-    soma_pt_m = soma_pt[np.newaxis, :]
-    dv = np.linalg.norm(verts - soma_pt_m, axis=1)
-    soma_verts = np.where(dv < soma_d_thresh)[0]
-    new_verts = np.vstack((verts, soma_pt_m))
-    soma_i = verts.shape[0]
-    edges[np.isin(edges, soma_verts)] = soma_i
-    simple_verts, simple_edges = trimesh_vtk.remove_unused_verts(new_verts, edges)
-    good_edges = ~(simple_edges[:, 0] == simple_edges[:, 1])
-    return simple_verts, simple_edges[good_edges]
+    if soma_pt is not None:
+        soma_pt_m = soma_pt[np.newaxis, :]
+        dv = np.linalg.norm(verts - soma_pt_m, axis=1)
+        soma_verts = np.where(dv < soma_d_thresh)[0]
+        new_verts = np.vstack((verts, soma_pt_m))
+        soma_i = verts.shape[0]
+        edges[np.isin(edges, soma_verts)] = soma_i
+        simple_verts, simple_edges = trimesh_vtk.remove_unused_verts(new_verts, edges)
+        good_edges = ~(simple_edges[:, 0] == simple_edges[:, 1])
+        return simple_verts, simple_edges[good_edges]
+    else:
+        simple_verts, simple_edges = trimesh_vtk.remove_unused_verts(verts, edges)
+        return simple_verts, simple_edges
