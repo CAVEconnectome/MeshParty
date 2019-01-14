@@ -64,7 +64,9 @@ def skeletonize(mesh_meta, seg_id, soma_pt=None, soma_thresh=7500,
                 max_tip_d=2000, large_skel_path_threshold=5000,
                 cc_vertex_thresh=100, do_cross_section=False):
 
-    mesh = mesh_meta.mesh(seg_id=seg_id, merge_large_components=False)
+    mesh = mesh_meta.mesh(seg_id=seg_id,
+                          merge_large_components=False,
+                          remove_duplicate_vertices=False)
     mesh.stitch_overlapped_components()
 
     all_paths, roots, tot_path_lengths = skeletonize_components(mesh,
