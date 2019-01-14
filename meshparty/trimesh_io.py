@@ -16,7 +16,6 @@ from trimesh import caching, io
 from pymeshfix import _meshfix
 import vtk
 from tqdm import trange
-import igraph
 import rtree
 
 def read_mesh_h5(filename):
@@ -348,7 +347,6 @@ class Mesh(trimesh.Trimesh):
         self._mesh_edges = mesh_edges
         self._csgraph = None
         self._nxgraph = None
-        self._igraph = None
 
     @property
     def nxgraph(self):
@@ -361,12 +359,6 @@ class Mesh(trimesh.Trimesh):
         if self._csgraph is None:
             self._csgraph = self._create_csgraph()
         return self._csgraph
-
-    @property
-    def igraph(self):
-        if self._igraph is None:
-            self._igraph = self._create_igraph()
-        return self._igraph
 
     @property
     def n_vertices(self):
@@ -765,7 +757,6 @@ class Mesh(trimesh.Trimesh):
             self._mesh_edges = np.concatenate([self.edges, add_edges])
             self._csgraph = None
             self._nxgraph = None
-            self._igraph = None
 
         print("TIME MERGING: %.3fs" % (time.time() - time_start))
 
@@ -834,8 +825,6 @@ class Mesh(trimesh.Trimesh):
             self._mesh_edges = np.concatenate([self.edges, add_edges])
             self._csgraph = None
             self._nxgraph = None
-            self._igraph = None
-
 
         print("TIME MERGING: %.3fs" % (time.time() - time_start))
 
@@ -857,19 +846,6 @@ class Mesh(trimesh.Trimesh):
             weighted_graph[edge[1]][edge[0]]['weight'] = weights[i_edge]
 
         return weighted_graph
-
-    def _create_igraph(self):
-        if self.mesh_edges is not None:
-            edges = self.mesh_edges
-        else:
-            edges = self.edges
-
-        weights = np.linalg.norm(self.vertices[edges[:, 0]] -
-                                 self.vertices[edges[:, 1]], axis=1)
-
-        tl = np.hstack([self.edges, weights[:, np.newaxis]])
-        G = igraph.Graph.TupleList(tl, edge_attrs="weight")
-        return G
 
     def _create_csgraph(self):
         """ Computes csgraph """
