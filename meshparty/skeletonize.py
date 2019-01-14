@@ -58,9 +58,10 @@ def create_csgraph(vertices,
 
 class SkeletonForest():
     def __init__(self, vertices, edges, vertex_properties={}, edge_properties={}, root=None):
-        self._vertex_components = []
-        self._edge_components = []
+        self._vertex_components = np.full(len(vertices), None)
+        self._edge_components = np.full(len(edges), None)
         self._skeletons = []
+        self._kdtree = None
 
         vertices = np.array(vertices)
         edges = np.array(edges)
@@ -77,8 +78,8 @@ class SkeletonForest():
             vertex_properties_f = {vp_n: np.array(vp_v)[filters[0]] for vp_n, vp_v in vertex_properties.items()}
             edge_properties_f = {ep_n: np.array(ep_v)[filters[1]] for ep_n, ep_v in edge_properties.items()}
 
-            self._vertex_components.append(filters[0])
-            self._edge_components.append(filters[1])
+            self._vertex_components[filters[0]] = lbl
+            self._edge_components[filters[1]] = lbl
             if root in v_filter:
                 root_f = np.where(root==v_filter)[0][0]
             else:
@@ -89,12 +90,12 @@ class SkeletonForest():
         return self._skeletons[key]
 
     @property
-    def vertices_all(self):
+    def vertices(self):
         vs_list = [skeleton.vertices for skeleton in self._skeletons]
         return np.vstack(vs_list)
 
     @property
-    def edges_all(self):
+    def edges(self):
         edges_stacked = []
         n_shift = 0
         for skeleton in self._skeletons:
@@ -106,14 +107,20 @@ class SkeletonForest():
     def csgraph(self):    
         return create_csgraph(self.vertices_all, self.edges_all)
 
-    def vertex_property_all(self, property_name):
-        vp_list = [skeleton.vertex_properties[property_name] for skeleton in self._skeletons]
-        return np.vstack(vp_list)
+    def vertex_property(self, property_name):
+        vp_list = [skeleton.vertex_properties[property_name] for skeleton in self._skeletons if len(skeleton.vertices)>1]
+        return np.concatenate(vp_list)
 
-    def edge_property_all(self, property_name):
+    def edge_property(self, property_name):
         ep_list = [skeleton.edge_properties[property_name] for skeleton in self._skeletons]
-        return ep.vstack(ep_list)
+        return ep.concatenate(ep_list)
 
+    @property
+    def kdtree(self):
+        if self._kdtree is None:
+            self._kdtree = KDTree(self.vertices)
+        return self._kdtree
+    
 
     
 
@@ -177,8 +184,7 @@ class Skeleton:
     def kdtree(self):
         if self._kdtree is None:
             self._kdtree = spatial.cKDTree(self.vertices)
-        return self._kdtree
-    
+        return self._kdtree 
 
     def _create_default_root(self):
         r = find_far_points_graph(self._create_csgraph(directed=False))

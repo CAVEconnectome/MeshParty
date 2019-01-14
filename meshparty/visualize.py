@@ -28,6 +28,13 @@ def go_xyz_block(xyz, **kwargs):
                         **kwargs)
 
 
+def go_skeleton_forest(skf, color_by=None, **kwargs):
+    data = []
+    for sk in skf._skeletons:
+        data.append(go_skeleton(sk, color_by=color_by, **kwargs))
+    return data
+    
+
 def go_skeleton(sk, color_by=None, **kwargs):
     '''
     Make a skeleton graphics object for plotly.
