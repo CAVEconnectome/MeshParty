@@ -231,14 +231,9 @@ def skeletonize_components(mesh, soma_pt=None, soma_thresh=10000, invalidation_d
     tot_path_lengths = []
     
     if soma_pt is not None:
-        soma_d_o, soma_i = mesh.kdtree.query(soma_pt,
-                                             k=len(mesh.vertices),
-                                             distance_upper_bound=soma_thresh)
-        is_soma_pt = np.zeros(len(mesh.vertices), dtype=np.bool)
-        good_ds = ~np.isinf(soma_d_o)
-        is_soma_pt[soma_i[good_ds]] = True
-        soma_d = np.zeros(len(mesh.vertices))
-        soma_d[soma_i[good_ds]] = soma_d_o[good_ds]
+        soma_d = mesh.vertices - soma_pt[np.newaxis, :]
+        soma_d = np.linalg.norm(soma_d, axis=1)
+        is_soma_pt = soma_d<7500
     else:
         is_soma_pt = None
         soma_d = None
@@ -293,7 +288,7 @@ def setup_root_new(mesh, is_soma_pt=None, soma_d=None, is_valid=None):
                                                     return_predecessors=True)
         else:
             start_ind = np.where(valid)[0][0]
-            root, target, pred, dm, root_ds = skeletonize.find_far_points(mesh,
+            root, target, pred, dm, root_ds = find_far_points(mesh,
                                                               start_ind=start_ind)
         valid[is_soma_pt] = False
 
