@@ -8,7 +8,7 @@ from scipy.spatial import cKDTree as KDTree
 from copy import copy
 import pcst_fast  
 from tqdm import trange, tqdm
-from meshparty.skeletons import sk_utils
+from meshparty.skeletons import utils
 
 
 def recenter_verts(verts, edges, centers):
@@ -161,7 +161,7 @@ def merge_tips(mesh, all_paths, roots, tot_path_lengths,
 #     # with the original indices of the mesh
     orig_edges = []
     for paths, root in zip(all_paths, roots):
-        edges = paths_to_edges(paths)
+        edges = utils.paths_to_edges(paths)
         orig_edges.append(edges)
     orig_edges = np.vstack(orig_edges)
     # and add our new mst edges
@@ -255,14 +255,14 @@ def setup_root_new(mesh, is_soma_pt=None, soma_d=None, is_valid=None):
                                                     return_predecessors=True)
         else:
             start_ind = np.where(valid)[0][0]
-            root, target, pred, dm, root_ds = find_far_points(mesh,
+            root, target, pred, dm, root_ds = utils.find_far_points(mesh,
                                                               start_ind=start_ind)
         valid[is_soma_pt] = False
 
     if root is None:
         # there is no soma close, so use far point heuristic
         start_ind = np.where(valid)[0][0]
-        root, target, pred, dm, root_ds = find_far_points(mesh, start_ind=start_ind)
+        root, target, pred, dm, root_ds = utils.find_far_points(mesh, start_ind=start_ind)
     valid[root] = False
     assert(np.all(~np.isinf(root_ds[valid])))
     return root, root_ds, pred, valid
@@ -298,9 +298,9 @@ def setup_root(mesh, soma_pt=None, soma_thresh=7500, valid_inds=None):
                                                     return_predecessors=True)
         else:
             if valid_inds is not None:
-                root, target, pred, dm, root_ds = find_far_points(mesh, start_ind=valid_inds[0])
+                root, target, pred, dm, root_ds = utils.find_far_points(mesh, start_ind=valid_inds[0])
             else:
-                root, target, pred, dm, root_ds = find_far_points(mesh)
+                root, target, pred, dm, root_ds = utils.find_far_points(mesh)
     if root is None:
         # there is no soma close, so use far point heuristic
         root, target, pred, dm, root_ds = find_far_points(mesh)

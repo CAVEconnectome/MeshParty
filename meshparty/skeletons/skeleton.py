@@ -9,7 +9,7 @@ from copy import copy
 import pcst_fast  
 from tqdm import trange, tqdm
 
-from meshparty.skeletons import sk_utils
+from meshparty.skeletons import utils
 
 
 class SkeletonForest():
@@ -22,12 +22,12 @@ class SkeletonForest():
         vertices = np.array(vertices)
         edges = np.array(edges)
 
-        nc, v_lbls = sparse.csgraph.connected_components(sk_utils.create_csgraph(vertices, edges, euclidean_weight=False))
+        nc, v_lbls = sparse.csgraph.connected_components(utils.create_csgraph(vertices, edges, euclidean_weight=False))
         lbls, count = np.unique(v_lbls, return_counts=True)
         lbl_order = np.argsort(count)[::-1]
         for lbl in lbls[lbl_order]:
             v_filter = np.where(v_lbls==lbl)[0]
-            vertices_f, edges_f, filters = sk_utils.reduce_vertices(vertices,
+            vertices_f, edges_f, filters = utils.reduce_vertices(vertices,
                                                            edges,
                                                            v_filter=v_filter,
                                                            return_filter_inds=True)
@@ -61,7 +61,7 @@ class SkeletonForest():
 
     @property
     def csgraph(self):    
-        return sk_utils.create_csgraph(self.vertices_all, self.edges_all)
+        return utils.create_csgraph(self.vertices_all, self.edges_all)
 
     def vertex_property(self, property_name):
         vp_list = [skeleton.vertex_properties[property_name] for skeleton in self._skeletons if len(skeleton.vertices)>1]
@@ -141,7 +141,7 @@ class Skeleton:
         return self._kdtree 
 
     def _create_default_root(self):
-        r = sk_utils.find_far_points_graph(self._create_csgraph(directed=False))
+        r = utils.find_far_points_graph(self._create_csgraph(directed=False))
         self.reroot(r[0])
 
     def _parent_node(self, vind):
