@@ -16,7 +16,8 @@ from trimesh import caching, io
 from pymeshfix import _meshfix
 import vtk
 from tqdm import trange
-
+import igraph
+import rtree
 
 def read_mesh_h5(filename):
     """Reads a mesh's vertices, faces and normals from an hdf5 file"""
@@ -134,7 +135,7 @@ def get_frag_ids_from_endpoint(node_id, endpoint):
 def _download_meshes_thread(args):
     """ Helper to Download meshes into target directory """
     seg_ids, cv_path, target_dir, fmt, overwrite, mesh_endpoint, \
-        merge_large_components = args
+        merge_large_components, remove_duplicate_vertices = args
 
     cv = cloudvolume.CloudVolume(cv_path)
 
@@ -151,11 +152,11 @@ def _download_meshes_thread(args):
             frags = get_frag_ids_from_endpoint(seg_id, mesh_endpoint)
 
         try:
-            cv_mesh = cv.mesh.get(frags, remove_duplicate_vertices=False)
+            cv_mesh = cv.mesh.get(frags, remove_duplicate_vertices=remove_duplicate_vertices)
 
             mesh = Mesh(vertices=cv_mesh["vertices"],
                         faces=np.array(cv_mesh["faces"]).reshape(-1, 3),
-                        process=False)
+                        process=remove_duplicate_vertices)
 
             if merge_large_components:
                 mesh.merge_large_components()
@@ -173,7 +174,8 @@ def _download_meshes_thread(args):
 
 def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
                     mesh_endpoint=None, n_threads=1, verbose=False,
-                    merge_large_components=True, fmt="hdf5"):
+                    merge_large_components=True, remove_duplicate_vertices=True,
+                    fmt="hdf5"):
     """ Downloads meshes in target directory (in parallel)
 
     :param seg_ids: list of uint64s
@@ -184,6 +186,7 @@ def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
     :param n_threads: int
     :param verbose: bool
     :param merge_large_components: bool
+    :param remove_duplicate_vertices: bool
     :param fmt: str
         "h5" is highly recommended
     """
@@ -201,7 +204,8 @@ def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
     multi_args = []
     for seg_id_block in seg_id_blocks:
         multi_args.append([seg_id_block, cv_path, target_dir, fmt,
-                           overwrite, mesh_endpoint, merge_large_components])
+                           overwrite, mesh_endpoint, merge_large_components,
+                           remove_duplicate_vertices])
 
     if n_jobs == 1:
         mu.multiprocess_func(_download_meshes_thread,
@@ -266,7 +270,7 @@ class MeshMeta(object):
         return "%s/%d.h5" % (self.disk_cache_path, seg_id)
 
     def mesh(self, filename=None, seg_id=None, cache_mesh=True,
-             merge_large_components=True):
+             merge_large_components=True, remove_duplicate_vertices=True):
         """ Loads mesh either from cache, disk or google storage
 
         :param filename: str
@@ -278,6 +282,9 @@ class MeshMeta(object):
             if True: large (>100 vx) mesh connected components are linked
             and the additional edges strored in .mesh_edges
             this information is cached as well
+        :param remove_duplicate_vertices: bool
+            if True will merge vertices with the same coordinates and also
+            remove Nan and Inf values through trimesh process=True functionality
         :return: Mesh
         """
         assert filename is not None or \
@@ -288,7 +295,7 @@ class MeshMeta(object):
                 vertices, faces, normals, mesh_edges = read_mesh(filename)
 
                 mesh = Mesh(vertices=vertices, faces=faces, normals=normals,
-                            mesh_edges=mesh_edges, process=False)
+                            mesh_edges=mesh_edges, process=remove_duplicate_vertices)
 
                 if merge_large_components and mesh.mesh_edges is None:
                     mesh.merge_large_components()
@@ -302,7 +309,8 @@ class MeshMeta(object):
                 if os.path.exists(self._filename(seg_id)):
                     return self.mesh(filename=self._filename(seg_id),
                                      cache_mesh=cache_mesh,
-                                     merge_large_components=merge_large_components)
+                                     merge_large_components=merge_large_components,
+                                     remove_duplicate_vertices=remove_duplicate_vertices)
 
             if seg_id not in self._mesh_cache:
                 if self.mesh_endpoint is not None:
@@ -315,7 +323,7 @@ class MeshMeta(object):
 
                 mesh = Mesh(vertices=cv_mesh["vertices"],
                             faces=np.array(cv_mesh["faces"]).reshape(-1, 3),
-                            process=False)
+                            process=remove_duplicate_vertices)
 
                 if merge_large_components and mesh.mesh_edges is None:
                     mesh.merge_large_components()
@@ -687,19 +695,29 @@ class Mesh(trimesh.Trimesh):
                 return True
         return False
 
-    def stitch_overlapped_components(self):
+    def stitch_overlapped_components(self, buffer = 50):
         """ Finds edges between disconnected components that share
         vertices aligned along cartesian planes 
         """
         time_start = time.time()
+        p = rtree.index.Property()
+        p.dimension = 3
+        idx3d = rtree.index.Index(properties=p)
 
         ccs = sparse.csgraph.connected_components(self.csgraph)
         ccs_u, cc_sizes = np.unique(ccs[1], return_counts=True)
 
         kdtrees = []
         vertex_ids = []
+        coords = []
         for cc_id in ccs_u:
             m = ccs[1] == cc_id
+            verts = self.vertices[m, :]
+            mins = np.min(verts, axis=0)-buffer
+            maxs = np.max(verts, axis=0)+buffer
+            cs = (mins[0], mins[1], mins[2], maxs[0], maxs[1], maxs[2]) 
+            coords.append(cs)
+            idx3d.insert(cc_id, cs)
             vertex_ids.append(np.where(m)[0])
             v = self.vertices[m]
             kdtrees.append(spatial.cKDTree(v))
@@ -709,7 +727,10 @@ class Mesh(trimesh.Trimesh):
 
         add_edges = []
         for i_tree in trange(len(ccs_u) - 1):
-            for j_tree in range(i_tree + 1, len(ccs_u)):
+            cs = coords[i_tree]
+            overlaps = idx3d.intersection(cs)
+            j_tree_overlap = [o for o in overlaps if o in range(i_tree + 1, len(ccs_u))]
+            for j_tree in j_tree_overlap:
 
                 pairs = kdtrees[i_tree].query_ball_tree(kdtrees[j_tree],
                                                         0)
@@ -724,7 +745,7 @@ class Mesh(trimesh.Trimesh):
                     # test for coplanarity
                   
                     shared_verts = self.vertices[i_vs, :]
-                    if len(shared_verts) >= 3:
+                    if len(shared_verts) >= 4:
                         co_planar = self._is_coplanar(shared_verts)
                     else:
                         co_planar = False
