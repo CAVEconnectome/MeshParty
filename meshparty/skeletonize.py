@@ -183,7 +183,7 @@ class Skeleton:
     @property
     def kdtree(self):
         if self._kdtree is None:
-            self._kdtree = spatial.cKDTree(self.vertices)
+            self._kdtree = KDTree(self.vertices)
         return self._kdtree 
 
     def _create_default_root(self):
