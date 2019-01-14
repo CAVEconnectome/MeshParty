@@ -1,8 +1,5 @@
-
 import numpy as np
-from meshparty import trimesh_io, trimesh_vtk, skeletonize
 import plotly.graph_objs as go
-import vtk
 
 def go_xyz_block(xyz, **kwargs):
     '''

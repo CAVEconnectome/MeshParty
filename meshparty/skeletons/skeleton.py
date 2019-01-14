@@ -1,15 +1,11 @@
 from scipy import sparse
 import numpy as np
 import time
-from meshparty import trimesh_vtk
-from meshparty import trimesh_io
+from meshparty.skeletons import utils
 import pandas as pd
 from scipy.spatial import cKDTree as KDTree
 from copy import copy
-import pcst_fast  
-from tqdm import trange, tqdm
 
-from meshparty.skeletons import utils
 
 
 class SkeletonForest():
