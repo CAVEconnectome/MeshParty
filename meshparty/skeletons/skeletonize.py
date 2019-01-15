@@ -1,14 +1,11 @@
 from scipy import sparse
 import numpy as np
 import time
-from meshparty import trimesh_vtk
-from meshparty import trimesh_io
+from meshparty import trimesh_vtk, utils
 import pandas as pd
 from scipy.spatial import cKDTree as KDTree
-from copy import copy
-import pcst_fast  
+import pcst_fast
 from tqdm import trange, tqdm
-from meshparty.skeletons import utils
 
 
 def recenter_verts(verts, edges, centers):
@@ -256,7 +253,7 @@ def setup_root_new(mesh, is_soma_pt=None, soma_d=None, is_valid=None):
         else:
             start_ind = np.where(valid)[0][0]
             root, target, pred, dm, root_ds = utils.find_far_points(mesh,
-                                                              start_ind=start_ind)
+                                                                    start_ind=start_ind)
         valid[is_soma_pt] = False
 
     if root is None:
@@ -398,7 +395,7 @@ def mesh_teasar(mesh, root=None, valid=None, root_ds=None, root_pred=None, soma_
 
             t = time.time()
             # get the path from the target to branch point
-            path = get_path(target, branch, pred_t)
+            path = utils.get_path(target, branch, pred_t)
             visited_nodes += path[0:-1]
             # record its length
             assert(~np.isinf(ds[branch]))
