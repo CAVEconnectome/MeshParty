@@ -11,7 +11,11 @@ import cloudvolume
 from multiwrapper import multiprocessing_utils as mu
 
 import trimesh
-from trimesh import caching, io
+try:
+    from trimesh import exchange
+except ImportError:
+    from trimesh import io as exchange
+
 from pymeshfix import _meshfix
 from tqdm import trange
 
@@ -270,7 +274,8 @@ class MeshMeta(object):
         return "%s/%d.h5" % (self.disk_cache_path, seg_id)
 
     def mesh(self, filename=None, seg_id=None, cache_mesh=True,
-             merge_large_components=True, remove_duplicate_vertices=True):
+             merge_large_components=True, remove_duplicate_vertices=True,
+             overwrite_merge_large_components=False):
         """ Loads mesh either from cache, disk or google storage
 
         :param filename: str
@@ -285,6 +290,8 @@ class MeshMeta(object):
         :param remove_duplicate_vertices: bool
             if True will merge vertices with the same coordinates and also
             remove Nan and Inf values through trimesh process=True functionality
+        :param overwrite_merge_large_components: bool
+            if True: recalculate large components
         :return: Mesh
         """
         assert filename is not None or \
@@ -298,19 +305,27 @@ class MeshMeta(object):
                             mesh_edges=mesh_edges,
                             process=remove_duplicate_vertices)
 
-                if merge_large_components and mesh.mesh_edges is None:
+                if (merge_large_components and mesh.mesh_edges is None) or \
+                        overwrite_merge_large_components:
                     mesh.merge_large_components()
 
                 if cache_mesh and len(self._mesh_cache) < self.cache_size:
                     self._mesh_cache[filename] = mesh
             else:
                 mesh = self._mesh_cache[filename]
+
+            if self.disk_cache_path is not None and \
+                    overwrite_merge_large_components:
+                write_mesh_h5(filename, mesh.vertices,
+                              mesh.faces.flatten(),
+                              mesh_edges=mesh.mesh_edges)
         else:
             if self.disk_cache_path is not None:
                 if os.path.exists(self._filename(seg_id)):
                     return self.mesh(filename=self._filename(seg_id),
                                      cache_mesh=cache_mesh,
                                      merge_large_components=merge_large_components,
+                                     overwrite_merge_large_components=overwrite_merge_large_components,
                                      remove_duplicate_vertices=remove_duplicate_vertices)
 
             if seg_id not in self._mesh_cache:
@@ -327,7 +342,8 @@ class MeshMeta(object):
                             faces=np.array(cv_mesh["faces"]).reshape(-1, 3),
                             process=remove_duplicate_vertices)
 
-                if merge_large_components and mesh.mesh_edges is None:
+                if (merge_large_components and mesh.mesh_edges is None) or \
+                        overwrite_merge_large_components:
                     mesh.merge_large_components()
 
                 if cache_mesh and len(self._mesh_cache) < self.cache_size:
@@ -412,7 +428,7 @@ class Mesh(trimesh.Trimesh):
 
         :param filename: str
         """
-        io.export.export_mesh(self, filename)
+        exchange.export.export_mesh(self, filename)
 
     def get_local_views(self, n_points=None,
                         max_dist=np.inf,
@@ -574,61 +590,46 @@ class Mesh(trimesh.Trimesh):
                                     return_faces=return_faces,
                                     pc_norm=pc_norm)
 
-    def merge_large_components(self, size_threshold=100, max_dist=140):
-        """ Finds edges between disconnected components
+    def _filter_shapes(self, node_ids, shapes):
+        """ node_ids has to be sorted! """
+        if not isinstance(node_ids[0], list) and \
+                not isinstance(node_ids[0], np.ndarray):
+            node_ids = [node_ids]
+        ndim = shapes.shape[1]
+        if isinstance(node_ids, np.ndarray):
+            all_node_ids = node_ids.flatten()
+        else:
+            all_node_ids = np.concatenate(node_ids)
 
-        :param size_threshold: int
-        :param max_dist: float
-        """
-        time_start = time.time()
+        filter_ = np.in1d(shapes[:, 0], all_node_ids)
+        pre_filtered_shapes = shapes[filter_].copy()
+        for k in range(1, ndim):
+            filter_ = np.in1d(pre_filtered_shapes[:, k], all_node_ids)
+            pre_filtered_shapes = pre_filtered_shapes[filter_]
 
-        ccs = sparse.csgraph.connected_components(self.csgraph)
-        ccs_u, cc_sizes = np.unique(ccs[1], return_counts=True)
-        large_cc_ids = ccs_u[cc_sizes > size_threshold]
+        filtered_shapes = []
 
-        print(len(large_cc_ids))
+        for ns in node_ids:
+            f = pre_filtered_shapes[np.in1d(pre_filtered_shapes[:, 0], ns)]
+            for k in range(1, ndim):
+                f = f[np.in1d(f[:, k], ns)]
 
-        kdtrees = []
-        vertex_ids = []
-        for cc_id in large_cc_ids:
-            m = ccs[1] == cc_id
-            vertex_ids.append(np.where(m)[0])
-            v = self.vertices[m]
-            kdtrees.append(spatial.cKDTree(v))
+            f = np.unique(np.concatenate([f.flatten(), ns]),
+                          return_inverse=True)[1][:-len(ns)].reshape(-1, ndim)
 
-        close_by = np.ones([len(large_cc_ids), len(large_cc_ids)],
-                           dtype=np.bool)
+            filtered_shapes.append(f)
 
-        add_edges = []
-        for i_tree in trange(len(large_cc_ids) - 1):
-            for j_tree in range(i_tree + 1, len(large_cc_ids)):
+        return filtered_shapes
 
-                pairs = kdtrees[i_tree].query_ball_tree(kdtrees[j_tree],
-                                                        max_dist)
+    def _filter_faces(self, node_ids):
+        """ node_ids has to be sorted! """
+        return self._filter_shapes(node_ids, self.faces)
 
-                if np.any(pairs):
-                    is_close_by = True
+    def _filter_mesh_edges(self, node_ids):
+        """ node_ids has to be sorted! """
+        return self._filter_shapes(node_ids, self.mesh_edges)
 
-                    for i_p, p in enumerate(pairs):
-                        if len(p) > 0:
-                            add_edges.extend([[vertex_ids[i_tree][i_p],
-                                               vertex_ids[j_tree][v]]
-                                              for v in p])
-                else:
-                    is_close_by = False
-
-                close_by[i_tree, j_tree] = is_close_by
-                close_by[j_tree, i_tree] = is_close_by
-
-        if len(add_edges) > 0:
-            self._mesh_edges = np.concatenate([self.edges, add_edges])
-            self._csgraph = None
-            self._nxgraph = None
-
-        print("TIME MERGING: %.3fs" % (time.time() - time_start))
-
-    def get_local_meshes(self, n_points=None, max_dist=np.inf,
-                         center_node_ids=None,
+    def get_local_meshes(self, n_points, max_dist=np.inf, center_node_ids=None,
                          center_coords=None, pc_align=False, pc_norm=False,
                          fix_meshes=False):
         """ Extracts a local mesh
@@ -676,45 +677,6 @@ class Mesh(trimesh.Trimesh):
                                      center_coords=center_coord,
                                      pc_align=pc_align, pc_norm=pc_norm)[0]
 
-    def _filter_shapes(self, node_ids, shapes):
-        """ node_ids has to be sorted! """
-        if not isinstance(node_ids[0], list) and \
-                not isinstance(node_ids[0], np.ndarray):
-            node_ids = [node_ids]
-        ndim = shapes.shape[1]
-        if isinstance(node_ids, np.ndarray):
-            all_node_ids = node_ids.flatten()
-        else:
-            all_node_ids = np.concatenate(node_ids)
-
-        filter_ = np.in1d(shapes[:, 0], all_node_ids)
-        pre_filtered_shapes = shapes[filter_].copy()
-        for k in range(1, ndim):
-            filter_ = np.in1d(pre_filtered_shapes[:, k], all_node_ids)
-            pre_filtered_shapes = pre_filtered_shapes[filter_]
-
-        filtered_shapes = []
-
-        for ns in node_ids:
-            f = pre_filtered_shapes[np.in1d(pre_filtered_shapes[:, 0], ns)]
-            for k in range(1, ndim):
-                f = f[np.in1d(f[:, k], ns)]
-
-            f = np.unique(np.concatenate([f.flatten(), ns]),
-                          return_inverse=True)[1][:-len(ns)].reshape(-1, ndim)
-
-            filtered_shapes.append(f)
-
-        return filtered_shapes
-
-    def _filter_faces(self, node_ids):
-        """ node_ids has to be sorted! """
-        return self._filter_shapes(node_ids, self.faces)
-
-    def _filter_mesh_edges(self, node_ids):
-        """ node_ids has to be sorted! """
-        return self._filter_shapes(node_ids, self.mesh_edges)
-
     def _calc_pc_align(self, vertices, svd_solver, pc_norm=False):
         """ Calculates PC alignment """
 
@@ -728,6 +690,62 @@ class Mesh(trimesh.Trimesh):
                                 copy=False)
 
         return pca.fit_transform(vertices)
+
+    def merge_large_components(self, size_threshold=100, max_dist=1000,
+                               dist_step=100):
+        """ Finds edges between disconnected components
+
+        :param size_threshold: int
+        :param max_dist: float
+        """
+        time_start = time.time()
+
+        self._mesh_edges = None
+        self._csgraph = None
+
+        ccs = sparse.csgraph.connected_components(self.csgraph)
+        ccs_u, cc_sizes = np.unique(ccs[1], return_counts=True)
+        large_cc_ids = ccs_u[cc_sizes > size_threshold]
+
+        print(len(large_cc_ids))
+
+        kdtrees = []
+        vertex_ids = []
+        for cc_id in large_cc_ids:
+            m = ccs[1] == cc_id
+            vertex_ids.append(np.where(m)[0])
+            v = self.vertices[m]
+            kdtrees.append(spatial.cKDTree(v))
+
+        add_edges = []
+        for i_tree in range(len(large_cc_ids) - 1):
+            for j_tree in range(i_tree + 1, len(large_cc_ids)):
+                print("%d - %d      " % (i_tree, j_tree), end="\r")
+
+                if np.any(kdtrees[i_tree].query_ball_tree(kdtrees[j_tree], max_dist)):
+                    for this_dist in range(dist_step, max_dist + dist_step, dist_step):
+
+                        pairs = kdtrees[i_tree].query_ball_tree(kdtrees[j_tree],
+                                                                this_dist)
+
+                        if np.any(pairs):
+                            for i_p, p in enumerate(pairs):
+                                if len(p) > 0:
+                                    add_edges.extend([[vertex_ids[i_tree][i_p],
+                                                       vertex_ids[j_tree][v]]
+                                                      for v in p])
+                            break
+
+        print(f"Adding {len(add_edges)} new edges.")
+
+        if len(add_edges) > 0:
+            self._mesh_edges = np.concatenate([self.edges, add_edges])
+            self._csgraph = None
+            self._nxgraph = None
+        else:
+            self._mesh_edges = self.edges.copy()
+
+        print("TIME MERGING: %.3fs" % (time.time() - time_start))
 
     def _create_nxgraph(self):
         """ Computes networkx graph """
