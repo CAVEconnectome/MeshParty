@@ -302,3 +302,30 @@ def vtk_super_basic(actors, camera=None, do_save=False, folder=".", back_color=(
     renWin.Finalize()
 
     return ren
+
+
+def make_mesh_actor(mesh, color=(0, 1, 0),
+                    opacity=0.1,
+                    vertex_scalars=None,
+                    lut=None,
+                    calc_normals=True):
+
+    mesh_poly = trimesh_to_vtk(mesh.vertices, mesh.faces, mesh.mesh_edges)
+    if vertex_scalars is not None:
+        mesh_poly.GetPointData().SetScalars(numpy_to_vtk(vertex_scalars))
+    mesh_mapper = vtk.vtkPolyDataMapper()
+    if calc_normals:
+        norms = vtk.vtkTriangleMeshPointNormals()
+        norms.SetInputData(mesh_poly)
+        mesh_mapper.SetInputConnection(norms.GetOutputPort())
+    else:
+        mesh_mapper.SetInputData(mesh_poly)
+    mesh_actor = vtk.vtkActor()
+    
+    if lut is not None:
+        mesh_mapper.SetLookupTable(lut)
+    mesh_mapper.ScalarVisibilityOn()
+    mesh_actor.SetMapper(mesh_mapper)
+    mesh_actor.GetProperty().SetColor(*color)
+    mesh_actor.GetProperty().SetOpacity(opacity)
+    return mesh_actor
