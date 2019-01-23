@@ -1,11 +1,12 @@
 plyfile
 h5py
 numpy
-scipy
+scipy==1.2.0
 sklearn
 networkx
 multiwrapper
-trimesh
 cloud-volume
 pyassimp
-pymeshfix
+trimesh==2.35.48
+pytest==4.0.2
+python_jsonschema_objects==0.3.3
