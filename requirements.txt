@@ -10,3 +10,6 @@ pyassimp
 trimesh==2.35.48
 pytest==4.0.2
 python_jsonschema_objects==0.3.3
+pymeshfix
+vtk
+pcst_fast
