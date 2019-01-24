@@ -2,7 +2,6 @@ import numpy as np
 import h5py
 from scipy import spatial, sparse
 from sklearn import decomposition
-import plyfile
 import os
 import networkx as nx
 import requests
@@ -12,9 +11,15 @@ import cloudvolume
 from multiwrapper import multiprocessing_utils as mu
 
 import trimesh
-from trimesh import caching, io
+try:
+    from trimesh import exchange
+except ImportError:
+    from trimesh import io as exchange
 
 from pymeshfix import _meshfix
+from tqdm import trange
+
+from meshparty import utils
 
 
 def read_mesh_h5(filename):
@@ -83,9 +88,11 @@ def read_mesh_obj(filename):
     normals = []
 
     for line in open(filename, "r"):
-        if line.startswith('#'): continue
+        if line.startswith('#'):
+            continue
         values = line.split()
-        if not values: continue
+        if not values:
+            continue
         if values[0] == 'v':
             v = values[1:4]
             vertices.append(v)
@@ -131,7 +138,7 @@ def get_frag_ids_from_endpoint(node_id, endpoint):
 def _download_meshes_thread(args):
     """ Helper to Download meshes into target directory """
     seg_ids, cv_path, target_dir, fmt, overwrite, mesh_endpoint, \
-        merge_large_components = args
+        merge_large_components, remove_duplicate_vertices = args
 
     cv = cloudvolume.CloudVolume(cv_path)
 
@@ -148,10 +155,12 @@ def _download_meshes_thread(args):
             frags = get_frag_ids_from_endpoint(seg_id, mesh_endpoint)
 
         try:
-            cv_mesh = cv.mesh.get(frags)
+            cv_mesh = cv.mesh.get(frags,
+                                  remove_duplicate_vertices=remove_duplicate_vertices)
 
             mesh = Mesh(vertices=cv_mesh["vertices"],
-                        faces=np.array(cv_mesh["faces"]).reshape(-1, 3))
+                        faces=np.array(cv_mesh["faces"]).reshape(-1, 3),
+                        process=remove_duplicate_vertices)
 
             if merge_large_components:
                 mesh.merge_large_components()
@@ -169,7 +178,8 @@ def _download_meshes_thread(args):
 
 def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
                     mesh_endpoint=None, n_threads=1, verbose=False,
-                    merge_large_components=True, fmt="hdf5"):
+                    merge_large_components=True, remove_duplicate_vertices=True,
+                    fmt="hdf5"):
     """ Downloads meshes in target directory (in parallel)
 
     :param seg_ids: list of uint64s
@@ -180,6 +190,7 @@ def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
     :param n_threads: int
     :param verbose: bool
     :param merge_large_components: bool
+    :param remove_duplicate_vertices: bool
     :param fmt: str
         "h5" is highly recommended
     """
@@ -197,7 +208,8 @@ def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
     multi_args = []
     for seg_id_block in seg_id_blocks:
         multi_args.append([seg_id_block, cv_path, target_dir, fmt,
-                           overwrite, mesh_endpoint, merge_large_components])
+                           overwrite, mesh_endpoint, merge_large_components,
+                           remove_duplicate_vertices])
 
     if n_jobs == 1:
         mu.multiprocess_func(_download_meshes_thread,
@@ -229,7 +241,7 @@ class MeshMeta(object):
         self._disk_cache_path = disk_cache_path
         self._mesh_endpoint = mesh_endpoint
 
-        if not self.disk_cache_path is None:
+        if self.disk_cache_path is not None:
             if not os.path.exists(self.disk_cache_path):
                 os.makedirs(self.disk_cache_path)
 
@@ -262,7 +274,8 @@ class MeshMeta(object):
         return "%s/%d.h5" % (self.disk_cache_path, seg_id)
 
     def mesh(self, filename=None, seg_id=None, cache_mesh=True,
-             merge_large_components=True):
+             merge_large_components=True, remove_duplicate_vertices=True,
+             overwrite_merge_large_components=False):
         """ Loads mesh either from cache, disk or google storage
 
         :param filename: str
@@ -274,45 +287,63 @@ class MeshMeta(object):
             if True: large (>100 vx) mesh connected components are linked
             and the additional edges strored in .mesh_edges
             this information is cached as well
+        :param remove_duplicate_vertices: bool
+            if True will merge vertices with the same coordinates and also
+            remove Nan and Inf values through trimesh process=True functionality
+        :param overwrite_merge_large_components: bool
+            if True: recalculate large components
         :return: Mesh
         """
         assert filename is not None or \
-               (seg_id is not None and self.cv is not None)
+            (seg_id is not None and self.cv is not None)
 
         if filename is not None:
-            if not filename in self._mesh_cache:
+            if filename not in self._mesh_cache:
                 vertices, faces, normals, mesh_edges = read_mesh(filename)
 
                 mesh = Mesh(vertices=vertices, faces=faces, normals=normals,
-                            mesh_edges=mesh_edges)
+                            mesh_edges=mesh_edges,
+                            process=remove_duplicate_vertices)
 
-                if merge_large_components and mesh.mesh_edges is None:
+                if (merge_large_components and mesh.mesh_edges is None) or \
+                        overwrite_merge_large_components:
                     mesh.merge_large_components()
 
                 if cache_mesh and len(self._mesh_cache) < self.cache_size:
                     self._mesh_cache[filename] = mesh
             else:
                 mesh = self._mesh_cache[filename]
+
+            if self.disk_cache_path is not None and \
+                    overwrite_merge_large_components:
+                write_mesh_h5(filename, mesh.vertices,
+                              mesh.faces.flatten(),
+                              mesh_edges=mesh.mesh_edges)
         else:
             if self.disk_cache_path is not None:
                 if os.path.exists(self._filename(seg_id)):
                     return self.mesh(filename=self._filename(seg_id),
                                      cache_mesh=cache_mesh,
-                                     merge_large_components=merge_large_components)
+                                     merge_large_components=merge_large_components,
+                                     overwrite_merge_large_components=overwrite_merge_large_components,
+                                     remove_duplicate_vertices=remove_duplicate_vertices)
 
-            if not seg_id in self._mesh_cache:
+            if seg_id not in self._mesh_cache:
                 if self.mesh_endpoint is not None:
                     frags = get_frag_ids_from_endpoint(seg_id,
                                                        self.mesh_endpoint)
                 else:
                     frags = [seg_id]
 
-                cv_mesh = self.cv.mesh.get(frags)
+                cv_mesh = self.cv.mesh.get(frags,
+                                           remove_duplicate_vertices=False)
 
                 mesh = Mesh(vertices=cv_mesh["vertices"],
-                            faces=np.array(cv_mesh["faces"]).reshape(-1, 3))
+                            faces=np.array(cv_mesh["faces"]).reshape(-1, 3),
+                            process=remove_duplicate_vertices)
 
-                if merge_large_components and mesh.mesh_edges is None:
+                if (merge_large_components and mesh.mesh_edges is None) or \
+                        overwrite_merge_large_components:
                     mesh.merge_large_components()
 
                 if cache_mesh and len(self._mesh_cache) < self.cache_size:
@@ -397,9 +428,9 @@ class Mesh(trimesh.Trimesh):
 
         :param filename: str
         """
-        io.export.export_mesh(self, filename)
+        exchange.export.export_mesh(self, filename)
 
-    def get_local_views(self, n_points,
+    def get_local_views(self, n_points=None,
                         max_dist=np.inf,
                         sample_n_points=None,
                         fisheye=False,
@@ -453,8 +484,7 @@ class Mesh(trimesh.Trimesh):
 
         if sample_n_points is None:
             sample_n_points = n_points
-
-        if sample_n_points > n_points:
+        elif sample_n_points > n_points:
             assert not return_faces
         elif sample_n_points == n_points:
             pass
@@ -463,33 +493,37 @@ class Mesh(trimesh.Trimesh):
 
         center_coords = np.array(center_coords)
 
-        sample_n_points = np.min([sample_n_points, len(self.vertices)])
+        if sample_n_points is None:
+            sample_n_points = len(self.vertices)
+        else:
+            sample_n_points = np.min([sample_n_points, len(self.vertices)])
 
         dists, node_ids = self.kdtree.query(center_coords, sample_n_points,
                                             distance_upper_bound=max_dist,
                                             n_jobs=-1)
+        if n_points is not None:
+            if sample_n_points > n_points:
+                if fisheye:
+                    probs = 1 / dists
 
-        if sample_n_points > n_points:
-            if fisheye:
-                probs = 1 / dists
+                    new_dists = []
+                    new_node_ids = []
+                    ids = np.arange(0, sample_n_points, dtype=np.int)
+                    for i_sample in range(len(center_coords)):
+                        sample_ids = np.random.choice(ids, n_points,
+                                                      replace=False,
+                                                      p=probs[i_sample])
+                        new_dists.append(dists[i_sample, sample_ids])
+                        new_node_ids.append(node_ids[i_sample, sample_ids])
 
-                new_dists = []
-                new_node_ids = []
-                ids = np.arange(0, sample_n_points, dtype=np.int)
-                for i_sample in range(len(center_coords)):
-                    sample_ids = np.random.choice(ids, n_points, replace=False,
-                                                  p=probs[i_sample])
-                    new_dists.append(dists[i_sample, sample_ids])
-                    new_node_ids.append(node_ids[i_sample, sample_ids])
+                    dists = np.array(new_dists, dtype=np.float32)
+                    node_ids = np.array(new_node_ids, dtype=np.int)
+                else:
+                    ids = np.arange(0, sample_n_points, dtype=np.int)
+                    sample_ids = np.random.choice(ids, n_points, replace=False)
 
-                dists = np.array(new_dists, dtype=np.float32)
-                node_ids = np.array(new_node_ids, dtype=np.int)
-            else:
-                ids = np.arange(0, sample_n_points, dtype=np.int)
-                sample_ids = np.random.choice(ids, n_points, replace=False)
-
-                dists = dists[:, sample_ids]
-                node_ids = node_ids[:, sample_ids]
+                    dists = dists[:, sample_ids]
+                    node_ids = node_ids[:, sample_ids]
 
         if verbose:
             print(np.mean(dists, axis=1), np.max(dists, axis=1),
@@ -528,7 +562,7 @@ class Mesh(trimesh.Trimesh):
 
         return return_tuple
 
-    def get_local_view(self, n_points, max_dist=np.inf,
+    def get_local_view(self, n_points=None, max_dist=np.inf,
                        sample_n_points=None,
                        pc_align=False, center_node_id=None,
                        center_coord=None, method="kdtree", verbose=False,
@@ -556,37 +590,44 @@ class Mesh(trimesh.Trimesh):
                                     return_faces=return_faces,
                                     pc_norm=pc_norm)
 
-    def _filter_faces(self, node_ids):
+    def _filter_shapes(self, node_ids, shapes):
         """ node_ids has to be sorted! """
         if not isinstance(node_ids[0], list) and \
                 not isinstance(node_ids[0], np.ndarray):
             node_ids = [node_ids]
-
+        ndim = shapes.shape[1]
         if isinstance(node_ids, np.ndarray):
             all_node_ids = node_ids.flatten()
         else:
             all_node_ids = np.concatenate(node_ids)
 
-        filter_ = np.in1d(self.faces[:, 0], all_node_ids)
-        pre_filtered_faces = self.faces[filter_].copy()
-        filter_ = np.in1d(pre_filtered_faces[:, 1], all_node_ids)
-        pre_filtered_faces = pre_filtered_faces[filter_]
-        filter_ = np.in1d(pre_filtered_faces[:, 2], all_node_ids)
-        pre_filtered_faces = pre_filtered_faces[filter_]
+        filter_ = np.in1d(shapes[:, 0], all_node_ids)
+        pre_filtered_shapes = shapes[filter_].copy()
+        for k in range(1, ndim):
+            filter_ = np.in1d(pre_filtered_shapes[:, k], all_node_ids)
+            pre_filtered_shapes = pre_filtered_shapes[filter_]
 
-        filtered_faces = []
+        filtered_shapes = []
 
         for ns in node_ids:
-            f = pre_filtered_faces[np.in1d(pre_filtered_faces[:, 0], ns)]
-            f = f[np.in1d(f[:, 1], ns)]
-            f = f[np.in1d(f[:, 2], ns)]
+            f = pre_filtered_shapes[np.in1d(pre_filtered_shapes[:, 0], ns)]
+            for k in range(1, ndim):
+                f = f[np.in1d(f[:, k], ns)]
 
             f = np.unique(np.concatenate([f.flatten(), ns]),
-                          return_inverse=True)[1][:-len(ns)].reshape(-1, 3)
+                          return_inverse=True)[1][:-len(ns)].reshape(-1, ndim)
 
-            filtered_faces.append(f)
+            filtered_shapes.append(f)
 
-        return filtered_faces
+        return filtered_shapes
+
+    def _filter_faces(self, node_ids):
+        """ node_ids has to be sorted! """
+        return self._filter_shapes(node_ids, self.faces)
+
+    def _filter_mesh_edges(self, node_ids):
+        """ node_ids has to be sorted! """
+        return self._filter_shapes(node_ids, self.mesh_edges)
 
     def get_local_meshes(self, n_points, max_dist=np.inf, center_node_ids=None,
                          center_coords=None, pc_align=False, pc_norm=False,
@@ -610,7 +651,8 @@ class Mesh(trimesh.Trimesh):
                                                 pc_norm=pc_norm)
         vertices, _, faces = local_view_tuple
 
-        meshes = [Mesh(vertices=v, faces=f) for v, f in zip(vertices, faces)]
+        meshes = [Mesh(vertices=v, faces=f) for v, f in
+                  zip(vertices, faces)]
 
         if fix_meshes:
             for mesh in meshes:
@@ -619,7 +661,8 @@ class Mesh(trimesh.Trimesh):
 
         return meshes
 
-    def get_local_mesh(self, n_points, max_dist=np.inf, center_node_id=None,
+    def get_local_mesh(self, n_points=None, max_dist=np.inf,
+                       center_node_id=None,
                        center_coord=None, pc_align=True, pc_norm=False):
         """ Single version of get_local_meshes """
 
@@ -648,13 +691,17 @@ class Mesh(trimesh.Trimesh):
 
         return pca.fit_transform(vertices)
 
-    def merge_large_components(self, size_threshold=100, max_dist=140):
+    def merge_large_components(self, size_threshold=100, max_dist=1000,
+                               dist_step=100):
         """ Finds edges between disconnected components
 
         :param size_threshold: int
         :param max_dist: float
         """
         time_start = time.time()
+
+        self._mesh_edges = None
+        self._csgraph = None
 
         ccs = sparse.csgraph.connected_components(self.csgraph)
         ccs_u, cc_sizes = np.unique(ccs[1], return_counts=True)
@@ -670,30 +717,26 @@ class Mesh(trimesh.Trimesh):
             v = self.vertices[m]
             kdtrees.append(spatial.cKDTree(v))
 
-        close_by = np.ones([len(large_cc_ids), len(large_cc_ids)],
-                           dtype=np.bool)
-
         add_edges = []
         for i_tree in range(len(large_cc_ids) - 1):
             for j_tree in range(i_tree + 1, len(large_cc_ids)):
                 print("%d - %d      " % (i_tree, j_tree), end="\r")
 
-                pairs = kdtrees[i_tree].query_ball_tree(kdtrees[j_tree],
-                                                        max_dist)
+                if np.any(kdtrees[i_tree].query_ball_tree(kdtrees[j_tree], max_dist)):
+                    for this_dist in range(dist_step, max_dist + dist_step, dist_step):
 
-                if np.any(pairs):
-                    is_close_by = True
+                        pairs = kdtrees[i_tree].query_ball_tree(kdtrees[j_tree],
+                                                                this_dist)
 
-                    for i_p, p in enumerate(pairs):
-                        if len(p) > 0:
-                            add_edges.extend([[vertex_ids[i_tree][i_p],
-                                               vertex_ids[j_tree][v]]
-                                              for v in p])
-                else:
-                    is_close_by = False
+                        if np.any(pairs):
+                            for i_p, p in enumerate(pairs):
+                                if len(p) > 0:
+                                    add_edges.extend([[vertex_ids[i_tree][i_p],
+                                                       vertex_ids[j_tree][v]]
+                                                      for v in p])
+                            break
 
-                close_by[i_tree, j_tree] = is_close_by
-                close_by[j_tree, i_tree] = is_close_by
+        print(f"Adding {len(add_edges)} new edges.")
 
         if len(add_edges) > 0:
             self._mesh_edges = np.concatenate([self.edges, add_edges])
@@ -706,40 +749,20 @@ class Mesh(trimesh.Trimesh):
 
     def _create_nxgraph(self):
         """ Computes networkx graph """
-        if not self.mesh_edges is None:
+        if self.mesh_edges is not None:
             edges = self.mesh_edges
         else:
             edges = self.edges
 
-        weights = np.linalg.norm(self.vertices[edges[:, 0]] -
-                                 self.vertices[edges[:, 1]], axis=1)
-
-        weighted_graph = nx.Graph()
-        weighted_graph.add_edges_from(edges)
-
-        for i_edge, edge in enumerate(edges):
-            weighted_graph[edge[0]][edge[1]]['weight'] = weights[i_edge]
-            weighted_graph[edge[1]][edge[0]]['weight'] = weights[i_edge]
-
-        return weighted_graph
+        return utils.create_nxgraph(self.vertices, edges, euclidean_weight=True,
+                                    directed=False)
 
     def _create_csgraph(self):
         """ Computes csgraph """
-        if not self.mesh_edges is None:
+        if self.mesh_edges is not None:
             edges = self.mesh_edges
         else:
             edges = self.edges
 
-        weights = np.linalg.norm(self.vertices[edges[:, 0]] -
-                                 self.vertices[edges[:, 1]], axis=1)
-
-        edges = np.concatenate([edges.T, edges.T[[1, 0]]], axis=1)
-        weights = np.concatenate([weights, weights]).astype(dtype=np.float32)
-
-        csgraph = sparse.csr_matrix((weights, edges),
-                                    shape=[len(self.vertices), ] * 2,
-                                    dtype=np.float32)
-
-        return csgraph
-
-
+        return utils.create_csgraph(self.vertices, edges, euclidean_weight=True,
+                                    directed=False)
