@@ -6,7 +6,7 @@ sklearn
 networkx
 multiwrapper
 trimesh
-cloud-volume
+-e git+ssh:git@github.com/seung-lab/cloud-volume@graphene#egg=cloudvolume
 pyassimp
 pymeshfix
 vtk
