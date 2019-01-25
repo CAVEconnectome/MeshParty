@@ -319,9 +319,11 @@ class MeshMeta(object):
             if seg_id not in self._mesh_cache:
                 cv_mesh = self.cv.mesh.get([seg_id],
                                            remove_duplicate_vertices= remove_duplicate_vertices)
-
+                faces = np.array(cv_mesh["faces"])
+                if (len(faces.shape) == 1):
+                    faces = faces.reshape(-1, 3)
                 mesh = Mesh(vertices=cv_mesh["vertices"],
-                            faces=np.array(cv_mesh["faces"]).reshape(-1, 3),
+                            faces=faces,
                             process=remove_duplicate_vertices)
 
                 if (merge_large_components and mesh.mesh_edges is None) or \
@@ -333,7 +335,7 @@ class MeshMeta(object):
 
                 if self.disk_cache_path is not None:
                     write_mesh_h5(self._filename(seg_id), mesh.vertices,
-                                  mesh.faces.flatten(),
+                                  mesh.faces,
                                   mesh_edges=mesh.mesh_edges)
             else:
                 mesh = self._mesh_cache[seg_id]
