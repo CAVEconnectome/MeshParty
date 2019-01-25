@@ -137,10 +137,10 @@ def get_frag_ids_from_endpoint(node_id, endpoint):
 
 def _download_meshes_thread(args):
     """ Helper to Download meshes into target directory """
-    seg_ids, cv_path, target_dir, fmt, overwrite, mesh_endpoint, \
+    seg_ids, cv_path, target_dir, fmt, overwrite, \
         merge_large_components, remove_duplicate_vertices = args
 
-    cv = cloudvolume.CloudVolume(cv_path)
+    cv = cloudvolume.CloudVolumeFactory(cv_path)
 
     for seg_id in seg_ids:
         print('downloading {}'.format(seg_id))
@@ -149,17 +149,17 @@ def _download_meshes_thread(args):
             print('file exists {}'.format(target_file))
             continue
         print('file does not exist {}'.format(target_file))
-        frags = [np.uint64(seg_id)]
-
-        if mesh_endpoint is not None:
-            frags = get_frag_ids_from_endpoint(seg_id, mesh_endpoint)
-
+       
         try:
-            cv_mesh = cv.mesh.get(frags,
+            cv_mesh = cv.mesh.get([seg_id],
                                   remove_duplicate_vertices=remove_duplicate_vertices)
 
+            faces = np.array(cv_mesh["faces"])
+            if len(faces.shape) == 1:
+                faces = faces.reshape(-1, 3)
+
             mesh = Mesh(vertices=cv_mesh["vertices"],
-                        faces=np.array(cv_mesh["faces"]).reshape(-1, 3),
+                        faces=faces,
                         process=remove_duplicate_vertices)
 
             if merge_large_components:
@@ -177,7 +177,7 @@ def _download_meshes_thread(args):
 
 
 def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
-                    mesh_endpoint=None, n_threads=1, verbose=False,
+                    n_threads=1, verbose=False,
                     merge_large_components=True, remove_duplicate_vertices=True,
                     fmt="hdf5"):
     """ Downloads meshes in target directory (in parallel)
@@ -186,7 +186,6 @@ def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
     :param target_dir: str
     :param cv_path: str
     :param overwrite: bool
-    :param mesh_endpoint: str
     :param n_threads: int
     :param verbose: bool
     :param merge_large_components: bool
@@ -208,7 +207,7 @@ def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
     multi_args = []
     for seg_id_block in seg_id_blocks:
         multi_args.append([seg_id_block, cv_path, target_dir, fmt,
-                           overwrite, mesh_endpoint, merge_large_components,
+                           overwrite, merge_large_components,
                            remove_duplicate_vertices])
 
     if n_jobs == 1:
@@ -222,8 +221,7 @@ def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
 
 
 class MeshMeta(object):
-    def __init__(self, cache_size=400, cv_path=None, disk_cache_path=None,
-                 mesh_endpoint=None):
+    def __init__(self, cache_size=400, cv_path=None, disk_cache_path=None):
         """ Manager class to keep meshes in memory and seemingless download them
 
         :param cache_size: int
@@ -232,14 +230,12 @@ class MeshMeta(object):
         :param disk_cache_path: str
             meshes are dumped to this directory => should be equal to target_dir
             in download_meshes
-        :param mesh_endpoint: str
         """
         self._mesh_cache = {}
         self._cache_size = cache_size
         self._cv_path = cv_path
         self._cv = None
         self._disk_cache_path = disk_cache_path
-        self._mesh_endpoint = mesh_endpoint
 
         if self.disk_cache_path is not None:
             if not os.path.exists(self.disk_cache_path):
@@ -258,13 +254,9 @@ class MeshMeta(object):
         return self._disk_cache_path
 
     @property
-    def mesh_endpoint(self):
-        return self._mesh_endpoint
-
-    @property
     def cv(self):
         if self._cv is None and self.cv_path is not None:
-            self._cv = cloudvolume.CloudVolume(self.cv_path, parallel=10)
+            self._cv = cloudvolume.CloudVolumeFactory(self.cv_path, parallel=10)
 
         return self._cv
 
@@ -329,17 +321,13 @@ class MeshMeta(object):
                                      remove_duplicate_vertices=remove_duplicate_vertices)
 
             if seg_id not in self._mesh_cache:
-                if self.mesh_endpoint is not None:
-                    frags = get_frag_ids_from_endpoint(seg_id,
-                                                       self.mesh_endpoint)
-                else:
-                    frags = [seg_id]
-
-                cv_mesh = self.cv.mesh.get(frags,
-                                           remove_duplicate_vertices=False)
-
+                cv_mesh = self.cv.mesh.get([seg_id],
+                                           remove_duplicate_vertices= remove_duplicate_vertices)
+                faces = np.array(cv_mesh["faces"])
+                if (len(faces.shape) == 1):
+                    faces = faces.reshape(-1, 3)
                 mesh = Mesh(vertices=cv_mesh["vertices"],
-                            faces=np.array(cv_mesh["faces"]).reshape(-1, 3),
+                            faces=faces,
                             process=remove_duplicate_vertices)
 
                 if (merge_large_components and mesh.mesh_edges is None) or \
@@ -351,7 +339,7 @@ class MeshMeta(object):
 
                 if self.disk_cache_path is not None:
                     write_mesh_h5(self._filename(seg_id), mesh.vertices,
-                                  mesh.faces.flatten(),
+                                  mesh.faces,
                                   mesh_edges=mesh.mesh_edges)
             else:
                 mesh = self._mesh_cache[seg_id]
