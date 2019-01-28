@@ -21,7 +21,6 @@ from tqdm import trange
 
 from meshparty import utils
 
-
 def read_mesh_h5(filename):
     """Reads a mesh's vertices, faces and normals from an hdf5 file"""
     assert os.path.isfile(filename)
@@ -138,9 +137,9 @@ def get_frag_ids_from_endpoint(node_id, endpoint):
 def _download_meshes_thread(args):
     """ Helper to Download meshes into target directory """
     seg_ids, cv_path, target_dir, fmt, overwrite, \
-        merge_large_components, remove_duplicate_vertices = args
+        merge_large_components, remove_duplicate_vertices, map_gs_to_https = args
 
-    cv = cloudvolume.CloudVolumeFactory(cv_path)
+    cv = cloudvolume.CloudVolumeFactory(cv_path, map_gs_to_https=map_gs_to_https)
 
     for seg_id in seg_ids:
         print('downloading {}'.format(seg_id))
@@ -179,7 +178,7 @@ def _download_meshes_thread(args):
 def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
                     n_threads=1, verbose=False,
                     merge_large_components=True, remove_duplicate_vertices=True,
-                    fmt="hdf5"):
+                    map_gs_to_https=True, fmt="hdf5"):
     """ Downloads meshes in target directory (in parallel)
 
     :param seg_ids: list of uint64s
@@ -208,7 +207,7 @@ def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
     for seg_id_block in seg_id_blocks:
         multi_args.append([seg_id_block, cv_path, target_dir, fmt,
                            overwrite, merge_large_components,
-                           remove_duplicate_vertices])
+                           remove_duplicate_vertices, map_gs_to_https])
 
     if n_jobs == 1:
         mu.multiprocess_func(_download_meshes_thread,
@@ -254,9 +253,9 @@ class MeshMeta(object):
         return self._disk_cache_path
 
     @property
-    def cv(self):
+    def cv(self, map_gs_to_https=True):
         if self._cv is None and self.cv_path is not None:
-            self._cv = cloudvolume.CloudVolumeFactory(self.cv_path, parallel=10)
+            self._cv = cloudvolume.CloudVolumeFactory(self.cv_path, parallel=10, map_gs_to_https=map_gs_to_https)
 
         return self._cv
 
