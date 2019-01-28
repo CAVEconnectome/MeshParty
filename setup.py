@@ -22,7 +22,23 @@ def find_version(*file_paths):
 
 with open('requirements.txt', 'r') as f:
     required = f.read().splitlines()
+    print(required)
 
+dependency_links = []
+del_ls = []
+for i_l in range(len(required)):
+    l = required[i_l]
+    if l.startswith("-e"):
+        dependency_links.append(l.split("-e ")[-1])
+        del_ls.append(i_l)
+
+        required.append(l.split("=")[-1])
+
+for i_l in del_ls[::-1]:
+    del required[i_l]
+
+print(dependency_links)
+print(required)
 
 setup(
     version=find_version("meshparty", "__init__.py"),
@@ -34,5 +50,6 @@ setup(
     packages=['meshparty'],
     include_package_data=True,
     install_requires=required,
-    setup_requires=['pytest-runner']
+    setup_requires=['pytest-runner'],
+    dependency_links=dependency_links
 )
