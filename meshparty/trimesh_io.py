@@ -220,7 +220,8 @@ def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
 
 
 class MeshMeta(object):
-    def __init__(self, cache_size=400, cv_path=None, disk_cache_path=None):
+    def __init__(self, cache_size=400, cv_path=None, disk_cache_path=None,
+                 map_gs_to_https=True):
         """ Manager class to keep meshes in memory and seemingless download them
 
         :param cache_size: int
@@ -234,6 +235,7 @@ class MeshMeta(object):
         self._cache_size = cache_size
         self._cv_path = cv_path
         self._cv = None
+        self._map_gs_to_https = map_gs_to_https
         self._disk_cache_path = disk_cache_path
 
         if self.disk_cache_path is not None:
@@ -253,9 +255,10 @@ class MeshMeta(object):
         return self._disk_cache_path
 
     @property
-    def cv(self, map_gs_to_https=True):
+    def cv(self):
         if self._cv is None and self.cv_path is not None:
-            self._cv = cloudvolume.CloudVolumeFactory(self.cv_path, parallel=10, map_gs_to_https=map_gs_to_https)
+            self._cv = cloudvolume.CloudVolumeFactory(self.cv_path, parallel=10,
+                                        map_gs_to_https=self._map_gs_to_https)
 
         return self._cv
 
