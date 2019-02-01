@@ -15,7 +15,7 @@ addons:
         - gfortran
         - libassimp-dev
 install:
-  - pip install codecov numpy
+  - pip install codecov numpy --upgrade
   - pip install -r requirements.txt
   - pip install -r test_requirements.txt
 script:
