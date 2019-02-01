@@ -1,0 +1,28 @@
+language: python
+python:
+  - "3.5"
+  - "3.5-dev" # 3.5 development branch
+  - "3.6"
+  - "3.6-dev" # 3.6 development branch
+  - "3.7"
+# command to install dependencies
+addons:
+  apt:
+    packages:
+        - libblas-dev
+        - liblapack-dev
+        - libatlas-base-dev
+        - libopenblas-base
+        - libopenblas-dev
+        - gfortran
+install:
+  - pip install codecov
+  - pip install -r requirements.txt
+  - pip install -r test_requirements.txt
+script:
+  - python setup.py test # or py.test for Python versions 3.5 and below
+cache:   
+  pip: true                                                                    
+after_success:
+  - codecov -t 3f12d985-af62-455d-a11d-9669c039640d
+  - "BRANCHES_TO_MERGE_REGEX='develop' BRANCH_TO_MERGE_INTO=master GITHUB_REPO=fcollman/render-python .travis/merge_script.sh"
