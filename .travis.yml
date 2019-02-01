@@ -15,7 +15,11 @@ addons:
         - gfortran
         - libassimp-dev
 install:
-  - pip install codecov numpy --upgrade
+  - pip install codecov numpy cython --upgrade
+  - git clone https://github.com/akaszynski/pymeshfix
+  - cd pymeshfix
+  - pip install .
+  - cd ..
   - pip install -r requirements.txt
   - pip install -r test_requirements.txt
 script:
