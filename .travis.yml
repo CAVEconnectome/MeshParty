@@ -1,0 +1,26 @@
+language: python
+python:
+  - "3.6"
+  - "3.6-dev" # 3.6 development branch
+
+# command to install dependencies
+addons:
+  apt:
+    packages:
+        - libblas-dev
+        - liblapack-dev
+        - libatlas-base-dev
+        - libopenblas-base
+        - libopenblas-dev
+        - gfortran
+        - libassimp-dev
+install:
+  - pip install codecov numpy cython --upgrade
+  - pip install -r requirements.txt
+  - pip install -r test_requirements.txt
+script:
+  - python setup.py test # or py.test for Python versions 3.5 and below
+after_success:
+  - codecov -t 72712def-b073-4211-88e4-f7b4d5b0d1ba
+cache:
+  pip: true
