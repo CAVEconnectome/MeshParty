@@ -22,7 +22,4 @@ install:
 script:
   - python setup.py test # or py.test for Python versions 3.5 and below
 cache:   
-  pip: true                                                                    
-after_success:
-  - codecov -t 3f12d985-af62-455d-a11d-9669c039640d
-  - "BRANCHES_TO_MERGE_REGEX='develop' BRANCH_TO_MERGE_INTO=master GITHUB_REPO=fcollman/render-python .travis/merge_script.sh"
+  pip: true
