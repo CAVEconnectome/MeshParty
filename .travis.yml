@@ -15,6 +15,7 @@ addons:
         - libopenblas-base
         - libopenblas-dev
         - gfortran
+        - libassimp-dev
 install:
   - pip install codecov
   - pip install -r requirements.txt
