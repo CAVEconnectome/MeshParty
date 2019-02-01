@@ -3,7 +3,7 @@ import re
 import os
 import codecs
 from setuptools.command.test import test as TestCommand
-
+import sys
 
 class PyTest(TestCommand):
     user_options = [('pytest-args=', 'a', "Arguments to pass to pytest")]
@@ -76,5 +76,5 @@ setup(
     setup_requires=['pytest-runner'],
     dependency_links=dependency_links,
     tests_require=test_required,
-    cmdclass={'test': PyTest},)
-)
+    cmdclass={'test': PyTest},
+    )
