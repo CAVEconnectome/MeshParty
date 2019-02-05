@@ -2,6 +2,7 @@ import numpy as np
 import h5py
 from scipy import spatial, sparse
 from sklearn import decomposition
+from pykdtree.kdtree import KDTree
 import os
 import networkx as nx
 import requests
@@ -356,6 +357,7 @@ class Mesh(trimesh.Trimesh):
         self._mesh_edges = mesh_edges
         self._csgraph = None
         self._nxgraph = None
+        self._kdtree = None
 
     @property
     def nxgraph(self):
@@ -368,6 +370,12 @@ class Mesh(trimesh.Trimesh):
         if self._csgraph is None:
             self._csgraph = self._create_csgraph()
         return self._csgraph
+
+    @property
+    def kdtree(self):
+        if self._kdtree is None:
+            self._kdtree = KDTree(self.vertices)
+        return self._kdtree
 
     @property
     def n_vertices(self):
@@ -489,8 +497,7 @@ class Mesh(trimesh.Trimesh):
             sample_n_points = np.min([sample_n_points, len(self.vertices)])
 
         dists, node_ids = self.kdtree.query(center_coords, sample_n_points,
-                                            distance_upper_bound=max_dist,
-                                            n_jobs=-1)
+                                            distance_upper_bound=max_dist)
         if n_points is not None:
             if sample_n_points > n_points:
                 if fisheye:

@@ -1,6 +1,7 @@
 import numpy as np
 from meshparty import utils
 from scipy import spatial, sparse
+from pykdtree.kdtree import KDTree
 from copy import copy
 import json
 
@@ -74,18 +75,25 @@ class SkeletonForest:
         return np.vstack(vs_list)
 
     @property
+    def n_vertices(self):
+        return len(self.vertices)
+
+    @property
     def edges(self):
-        edges_stacked = []
-        n_shift = 0
-        for skeleton in self._skeletons:
-            edges_stacked.append(skeleton.edges + n_shift)
-            n_shift += skeleton.n_vertices
-        return np.vstack(edges_stacked)
+        return self._agglomerate_nodes_across_skeletons('edges')
+
+    @property
+    def end_points(self):
+        return self._agglomerate_nodes_across_skeletons('end_points')
+
+    @property
+    def branch_points(self):
+        return self._agglomerate_nodes_across_skeletons('branch_points')
 
     @property
     def kdtree(self):
         if self._kdtree is None:
-            self._kdtree = spatial.cKDTree(self.vertices)
+            self._kdtree = KDTree(self.vertices)
         return self._kdtree
 
     @property
@@ -100,11 +108,6 @@ class SkeletonForest:
             self._csgraph_binary = self._create_csgraph(euclidean_weight=False)
         return self._csgraph_binary
 
-    def _create_csgraph(self, euclidean_weight=True, directed=False):
-        return utils.create_csgraph(self.vertices, self.edges,
-                                    euclidean_weight=euclidean_weight,
-                                    directed=directed)
-
     def vertex_property(self, property_name):
         vp_list = [skeleton.vertex_properties[property_name]
                    for skeleton in self._skeletons if len(skeleton.vertices)>1]
@@ -115,6 +118,23 @@ class SkeletonForest:
                    for skeleton in self._skeletons]
         return np.concatenate(ep_list)
 
+    def _create_csgraph(self, euclidean_weight=True, directed=False):
+        return utils.create_csgraph(self.vertices, self.edges,
+                                    euclidean_weight=euclidean_weight,
+                                    directed=directed)
+
+    def _agglomerate_nodes_across_skeletons(self, property_name):
+        nodes_stacked = []
+        n_shift = 0
+        for skeleton in self._skeletons:
+            node_inds = getattr(skeleton, property_name)
+            if len(node_inds) > 0:
+                nodes_stacked.append(node_inds + n_shift)
+                n_shift += skeleton.n_vertices
+        if len(nodes_stacked) > 0:
+            return np.concatenate(nodes_stacked)
+        else:
+            return np.array([])
 
 
 class Skeleton:
@@ -181,7 +201,7 @@ class Skeleton:
     @property
     def kdtree(self):
         if self._kdtree is None:
-            self._kdtree = spatial.cKDTree(self.vertices)
+            self._kdtree = KDTree(self.vertices)
         return self._kdtree
 
     @property
