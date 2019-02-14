@@ -3,7 +3,7 @@ import numpy as np
 import time
 from meshparty import trimesh_vtk, utils
 import pandas as pd
-from scipy.spatial import cKDTree as KDTree
+from pykdtree.kdtree import KDTree
 import pcst_fast
 from tqdm import trange, tqdm
 
