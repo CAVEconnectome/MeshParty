@@ -45,7 +45,7 @@ class SkeletonForest:
         lbls, count = np.unique(v_lbls, return_counts=True)
         lbl_order = np.argsort(count)[::-1]
         for lbl in lbls[lbl_order]:
-            v_filter = np.where(v_lbls==lbl)[0]
+            v_filter = np.where(v_lbls == lbl)[0]
             vertices_f, edges_f, filters = utils.reduce_vertices(vertices,
                                                                  edges,
                                                                  v_filter=v_filter,
@@ -58,7 +58,7 @@ class SkeletonForest:
             self._vertex_components[filters[0]] = lbl
             self._edge_components[filters[1]] = lbl
             if root in v_filter:
-                root_f = np.where(root==v_filter)[0][0]
+                root_f = np.where(root == v_filter)[0][0]
             else:
                 root_f = None
             self._skeletons.append(Skeleton(vertices_f, edges_f,
@@ -110,7 +110,7 @@ class SkeletonForest:
 
     def vertex_property(self, property_name):
         vp_list = [skeleton.vertex_properties[property_name]
-                   for skeleton in self._skeletons if len(skeleton.vertices)>1]
+                   for skeleton in self._skeletons if len(skeleton.vertices) > 1]
         return np.concatenate(vp_list)
 
     def edge_property(self, property_name):
@@ -173,7 +173,7 @@ class Skeleton:
         if self._csgraph is None:
             self._csgraph = self._create_csgraph()
         return self._csgraph.copy()
-    
+
     @property
     def csgraph_binary(self):
         if self._csgraph_binary is None:
@@ -210,7 +210,6 @@ class Skeleton:
             self._create_branch_and_end_points()
         return self._branch_points.copy()
 
-
     @property
     def n_branch_points(self):
         if self._branch_points is None:
@@ -238,7 +237,7 @@ class Skeleton:
     def distance_to_root(self, indices):
         ds = sparse.csgraph.dijkstra(self.csgraph, directed=True,
                                      indices=indices)
-        return ds[:,self.root]
+        return ds[:, self.root]
 
     def path_to_root(self, v_ind):
         '''
@@ -301,13 +300,13 @@ class Skeleton:
                                     directed=directed)
 
     def _create_branch_and_end_points(self):
-        n_children = np.sum(self.csgraph_binary>0, axis=0).squeeze()
+        n_children = np.sum(self.csgraph_binary > 0, axis=0).squeeze()
         self._branch_points = np.flatnonzero(n_children > 1)
         self._end_points = np.flatnonzero(n_children == 0)
 
     def _single_path_length(self, path):
-        xs = self.vertices[ path[:-1] ]
-        ys = self.vertices[ path[1:] ]
+        xs = self.vertices[path[:-1]]
+        ys = self.vertices[path[1:]]
         return sum(np.linalg.norm(ys-xs))
 
     def _compute_paths(self):
@@ -318,7 +317,7 @@ class Skeleton:
                                         directed=True,
                                         indices=self.end_points,
                                         return_predecessors=True)
-        d_to_root = ds[:,self.root]
+        d_to_root = ds[:, self.root]
         end_point_order = np.argsort(d_to_root)[::-1]
         paths = []
 
