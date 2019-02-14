@@ -372,8 +372,8 @@ def mesh_teasar(mesh, root=None, valid=None, root_ds=None, root_pred=None, soma_
             raise Exception("valid must be length of vertices")
 
     if return_map == True:
+        mesh_to_skeleton_dist = np.full(len(mesh.vertices), np.inf)
         mesh_to_skeleton_map = np.full(len(mesh.vertices), np.nan)
-
 
     total_to_visit = np.sum(valid)
     if np.sum(np.isinf(root_ds) & valid) != 0:
@@ -462,10 +462,16 @@ def mesh_teasar(mesh, root=None, valid=None, root_ds=None, root_pred=None, soma_
             t = time.time()
             # all such non infinite distances are within the invalidation
             # zone and should be marked invalid
-            nodes_to_update = valid & ~np.isinf(dm)
+            nodes_to_update = ~np.isinf(dm)
             marked = np.sum(valid & ~np.isinf(dm))
             if return_map == True:
-                mesh_to_skeleton_map[nodes_to_update] = sources[nodes_to_update]
+                new_sources_closer = dm[nodes_to_update]<mesh_to_skeleton_dist[nodes_to_update]
+                mesh_to_skeleton_map[nodes_to_update] = np.where(new_sources_closer,
+                                                                 sources[nodes_to_update],
+                                                                 mesh_to_skeleton_map[nodes_to_update])
+                mesh_to_skeleton_dist[nodes_to_update] = np.where(new_sources_closer,
+                                                                  dm[nodes_to_update],
+                                                                  mesh_to_skeleton_dist[nodes_to_update])
 
             valid[~np.isinf(dm)] = False
 
