@@ -270,7 +270,7 @@ class MeshMeta(object):
 
     def mesh(self, filename=None, seg_id=None, cache_mesh=True,
              merge_large_components=True, remove_duplicate_vertices=True,
-             overwrite_merge_large_components=False):
+             overwrite_merge_large_components=False, filtered_mesh=False):
         """ Loads mesh either from cache, disk or google storage
 
         :param filename: str
@@ -317,11 +317,15 @@ class MeshMeta(object):
         else:
             if self.disk_cache_path is not None:
                 if os.path.exists(self._filename(seg_id)):
-                    return self.mesh(filename=self._filename(seg_id),
+                    mesh = self.mesh(filename=self._filename(seg_id),
                                      cache_mesh=cache_mesh,
                                      merge_large_components=merge_large_components,
                                      overwrite_merge_large_components=overwrite_merge_large_components,
                                      remove_duplicate_vertices=remove_duplicate_vertices)
+                    if filtered_mesh:
+                        return FilteredMesh(mesh.vertices, mesh.faces)
+                    else:
+                        return mesh
 
             if seg_id not in self._mesh_cache:
                 cv_mesh = self.cv.mesh.get(seg_id,
@@ -347,8 +351,10 @@ class MeshMeta(object):
             else:
                 mesh = self._mesh_cache[seg_id]
 
-        return mesh
-
+        if filtered_mesh:
+            return FilteredMesh(mesh.vertices, mesh.faces)
+        else:
+            return mesh
 
 class Mesh(trimesh.Trimesh):
     def __init__(self, *args, mesh_edges=None, **kwargs):
@@ -763,3 +769,81 @@ class Mesh(trimesh.Trimesh):
 
         return utils.create_csgraph(self.vertices, edges, euclidean_weight=True,
                                     directed=False)
+
+class FilteredMesh(Mesh):
+    def __init__(self, *args, node_filter=None, **kwargs):
+        if 'vertices' in kwargs:
+            self._vertices_all=kwargs.pop('vertices')
+        else:
+            self._vertices_all=args[0]
+
+        if 'faces' in kwargs:
+            self._faces_all=kwargs.pop('edges')
+        else:
+            self._faces_all=args[1] # If faces are in args, vertices must also have been in args
+
+        if node_filter is None:
+            node_filter = np.full(len(self._vertices_all), True, dtype=bool)
+        elif node_filter.dtype is not bool:
+            node_filter_inds = node_filter.copy()
+            node_filter = np.full(len(self._vertices_all), False, dtype=bool)
+            node_filter[node_filter_inds] = True
+        self._node_filter = node_filter
+
+        if any(self.node_filter == False):
+            nodes_f, faces_f = utils.reduce_vertices(self._vertices_all,
+                                                     self._faces_all,
+                                                     v_filter=self._node_filter)
+        else:
+            nodes_f, faces_f = self._vertices_all, self._faces_all
+
+        new_args = (nodes_f, faces_f)
+        if len(args)>2:
+            new_args += args[2:]
+        if kwargs.get('process', False):
+            print('No silent changing of the mesh is allowed')
+        kwargs['process'] = False
+        super(FilteredMesh, self).__init__(*new_args, **kwargs)
+
+    @property
+    def node_filter(self):
+        '''
+        Returns the node filter currently applied to the data
+        '''
+        return self._node_filter
+
+    @property
+    def indices_unfiltered(self):
+        '''
+        Gets the unfiltered indices of nodes in the filtered mesh 
+        '''
+        return np.flatnonzero(self._node_filter)
+
+    def add_filter(self, new_filter, **kwargs):
+        '''
+        Makes a new FilteredMesh by adding a new filter to the existing one.
+        '''
+        if np.size(new_filter) != np.size(self.node_filter):
+            if np.size(new_filter) == np.size(self.vertices): # Assume it's in the filtered frame
+                new_filter = self.map_slice_to_unfiltered(new_filter)
+            else:
+                raise ValueError('Incompatible shape')
+        joint_filter = self.node_filter * np.array(new_filter, dtype=bool)
+        return FilteredMesh(self._vertices_all,
+                            self._faces_all,
+                            node_filter=joint_filter,
+                            **kwargs)
+    
+    def map_indices_to_unfiltered(self, unmapped_indices):
+        '''
+        For a set of indices, returns the corresponding unfiltered indices
+        '''
+        return np.flatnonzero(self.node_filter)[unmapped_indices]
+
+    def map_slice_to_unfiltered(self, unmapped_slice):
+        '''
+        For a logical slice, returns the corresponding unfiltered logical slice
+        '''
+        full_slice = np.full(len(self.vertices), False)
+        full_slice[self.node_filter] = unmapped_slice
+        return full_slice

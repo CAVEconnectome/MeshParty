@@ -4,7 +4,7 @@ import networkx as nx
 import pcst_fast
 
 
-def connected_component_slice(G, ind=None):
+def connected_component_slice(G, ind=None, return_boolean=False):
     '''
     Gets a numpy slice of the connected component corresponding to a
     given index. If no index is specified, the slice is of the largest
@@ -17,8 +17,16 @@ def connected_component_slice(G, ind=None):
         label = label_vals[ind]
     else:
         label = labels[ind]
-    return np.where(labels == label)[0]
 
+    if return_boolean:
+        return labels == label
+    else:
+        return np.flatnonzero(labels == label)
+
+def indices_to_slice(inds, total_length):
+    v = np.full(total_lenth, False)
+    v[inds] = True
+    return v
 
 def find_far_points(trimesh, start_ind=None, multicomponent=False):
     '''
@@ -79,29 +87,34 @@ def edge_averaged_vertex_property(edge_property, vertices, edges):
     return np.nanmean(vertex_property, axis=1)
     
 
-def reduce_vertices(vertices, edges, v_filter=None, e_filter=None, return_filter_inds=False):
+def reduce_vertices(vertices, vertex_list, v_filter=None, e_filter=None, return_filter_inds=False):
     '''
     Given a vertex and edge list, filters them down and remaps indices in the edge list.
     If no v or e filters are given, reduces the vertex list down to only those vertices
     with edges in the edge list.
     '''
     if v_filter is None:
-        v_filter = np.unique(edges).astype(int)
+        v_filter = np.unique(vertex_list).astype(int)
+    if v_filter.dtype == bool:
+        v_filter = np.flatnonzero(v_filter)
     if e_filter is None:
-        e_filter_bool = np.isin(edges[:,0], v_filter) & np.isin(edges[:,1], v_filter)
-        e_filter = np.where(e_filter_bool)[0]
-    
+        e_filter_bool = np.all(np.isin(vertex_list, v_filter), axis=1)
+        e_filter = np.flatnonzero(e_filter_bool)
+
     vertices_n = vertices[v_filter]
     vmap = dict(zip(v_filter, np.arange(len(v_filter))))
     
-    edges_f = edges[e_filter].copy()
-    edges_n = np.stack((np.fromiter((vmap[x] for x in edges_f[:,0]), dtype=int),
-                        np.fromiter((vmap[x] for x in edges_f[:,1]), dtype=int))).T
+    # Remap to the reduced vertex indices
+    vertex_list_f = vertex_list[e_filter]
+    remapped_col = []
+    for i in range(np.shape(vertex_list_f)[1]):
+        remapped_col.append(np.fromiter((vmap[x] for x in vertex_list_f[:,i]), dtype=int))
+    vertex_list_n = np.stack(remapped_col).T
 
     if return_filter_inds:
-        return vertices_n, edges_n, (v_filter, e_filter)
+        return vertices_n, vertex_list_n, (v_filter, e_filter)
     else:
-        return vertices_n, edges_n
+        return vertices_n, vertex_list_n
 
 
 def create_csgraph(vertices, edges, euclidean_weight=True, directed=False):
