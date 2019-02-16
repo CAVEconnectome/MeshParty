@@ -102,14 +102,7 @@ def reduce_vertices(vertices, vertex_list, v_filter=None, e_filter=None, return_
         e_filter = np.flatnonzero(e_filter_bool)
 
     vertices_n = vertices[v_filter]
-    vmap = dict(zip(v_filter, np.arange(len(v_filter))))
-    
-    # Remap to the reduced vertex indices
-    vertex_list_f = vertex_list[e_filter]
-    remapped_col = []
-    for i in range(np.shape(vertex_list_f)[1]):
-        remapped_col.append(np.fromiter((vmap[x] for x in vertex_list_f[:,i]), dtype=int))
-    vertex_list_n = np.stack(remapped_col).T
+    vertex_list_n = filter_shapes(np.flatnonzero(v_filter), vertex_list[e_filter])
 
     if return_filter_inds:
         return vertices_n, vertex_list_n, (v_filter, e_filter)

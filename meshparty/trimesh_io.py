@@ -843,6 +843,6 @@ class FilteredMesh(Mesh):
         '''
         For a logical slice, returns the corresponding unfiltered logical slice
         '''
-        full_slice = np.full(len(self.vertices), False)
+        full_slice = np.full(self.unfiltered_size, False)
         full_slice[self.node_filter] = unmapped_slice
         return full_slice
