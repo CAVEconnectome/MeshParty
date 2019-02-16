@@ -593,44 +593,14 @@ class Mesh(trimesh.Trimesh):
                                     return_faces=return_faces,
                                     pc_norm=pc_norm)
 
-    def _filter_shapes(self, node_ids, shapes):
-        """ node_ids has to be sorted! """
-        if not isinstance(node_ids[0], list) and \
-                not isinstance(node_ids[0], np.ndarray):
-            node_ids = [node_ids]
-        ndim = shapes.shape[1]
-        if isinstance(node_ids, np.ndarray):
-            all_node_ids = node_ids.flatten()
-        else:
-            all_node_ids = np.concatenate(node_ids)
-
-        filter_ = np.in1d(shapes[:, 0], all_node_ids)
-        pre_filtered_shapes = shapes[filter_].copy()
-        for k in range(1, ndim):
-            filter_ = np.in1d(pre_filtered_shapes[:, k], all_node_ids)
-            pre_filtered_shapes = pre_filtered_shapes[filter_]
-
-        filtered_shapes = []
-
-        for ns in node_ids:
-            f = pre_filtered_shapes[np.in1d(pre_filtered_shapes[:, 0], ns)]
-            for k in range(1, ndim):
-                f = f[np.in1d(f[:, k], ns)]
-
-            f = np.unique(np.concatenate([f.flatten(), ns]),
-                          return_inverse=True)[1][:-len(ns)].reshape(-1, ndim)
-
-            filtered_shapes.append(f)
-
-        return filtered_shapes
 
     def _filter_faces(self, node_ids):
         """ node_ids has to be sorted! """
-        return self._filter_shapes(node_ids, self.faces)
+        return utils.filter_shapes(node_ids, self.faces)
 
     def _filter_mesh_edges(self, node_ids):
         """ node_ids has to be sorted! """
-        return self._filter_shapes(node_ids, self.mesh_edges)
+        return utils.filter_shapes(node_ids, self.mesh_edges)
 
     def get_local_meshes(self, n_points, max_dist=np.inf, center_node_ids=None,
                          center_coords=None, pc_align=False, pc_norm=False,
@@ -771,31 +741,43 @@ class Mesh(trimesh.Trimesh):
                                     directed=False)
 
 class FilteredMesh(Mesh):
-    def __init__(self, *args, node_filter=None, **kwargs):
+    def __init__(self, *args, node_filter=None, unfiltered_size=None, **kwargs):
         if 'vertices' in kwargs:
-            self._vertices_all=kwargs.pop('vertices')
+            vertices_all=kwargs.pop('vertices')
         else:
-            self._vertices_all=args[0]
+            vertices_all=args[0]
 
         if 'faces' in kwargs:
-            self._faces_all=kwargs.pop('edges')
+            faces_all=kwargs.pop('edges')
         else:
-            self._faces_all=args[1] # If faces are in args, vertices must also have been in args
+            faces_all=args[1] # If faces are in args, vertices must also have been in args
+
+        if unfiltered_size is None:
+            if node_filter is not None:
+                unfiltered_size = len(node_filter)
+            else:
+                unfiltered_size = len(vertices_all)
+        if unfiltered_size < len(vertices_all):
+            raise ValueError('Original size cannot be smaller than current size')
+        self._unfiltered_size = unfiltered_size
 
         if node_filter is None:
-            node_filter = np.full(len(self._vertices_all), True, dtype=bool)
+            node_filter = np.full(self.unfiltered_size, True, dtype=bool)
         elif node_filter.dtype is not bool:
             node_filter_inds = node_filter.copy()
-            node_filter = np.full(len(self._vertices_all), False, dtype=bool)
+            node_filter = np.full(self.unfiltered_size, False, dtype=bool)
             node_filter[node_filter_inds] = True
+        
+        if len(node_filter) != unfiltered_size:
+            raise ValueError('The node filter must be the same length as the unfiltered size')
+        
         self._node_filter = node_filter
 
         if any(self.node_filter == False):
-            nodes_f, faces_f = utils.reduce_vertices(self._vertices_all,
-                                                     self._faces_all,
-                                                     v_filter=self._node_filter)
+            nodes_f = vertices_all[self.node_filter]
+            faces_f = utils.filter_shapes(np.flatnonzero(self.node_filter), faces_all)[0]
         else:
-            nodes_f, faces_f = self._vertices_all, self._faces_all
+            nodes_f, faces_f = vertices_all, faces_all
 
         new_args = (nodes_f, faces_f)
         if len(args)>2:
@@ -817,7 +799,14 @@ class FilteredMesh(Mesh):
         '''
         Gets the unfiltered indices of nodes in the filtered mesh 
         '''
-        return np.flatnonzero(self._node_filter)
+        return np.flatnonzero(self.node_filter)
+
+    @property
+    def unfiltered_size(self):
+        '''
+        Returns the unfiltered number of nodes in the mesh
+        '''
+        return self._unfiltered_size
 
     def add_filter(self, new_filter, **kwargs):
         '''
@@ -829,9 +818,19 @@ class FilteredMesh(Mesh):
             else:
                 raise ValueError('Incompatible shape')
         joint_filter = self.node_filter * np.array(new_filter, dtype=bool)
-        return FilteredMesh(self._vertices_all,
-                            self._faces_all,
+
+        #Build dummy arrays out of the current mesh
+        vertices_unf = np.zeros((self.unfiltered_size, 3))
+        vertices_unf[self.node_filter] = self.vertices
+
+        faces_unf = np.empty(self.faces.shape)
+        for i in range(3):
+            faces_unf[:,i] = self.indices_unfiltered[self.faces[:,i]]
+
+        return FilteredMesh(vertices_unf,
+                            faces_unf,
                             node_filter=joint_filter,
+                            unfiltered_size=self.unfiltered_size,
                             **kwargs)
     
     def map_indices_to_unfiltered(self, unmapped_indices):

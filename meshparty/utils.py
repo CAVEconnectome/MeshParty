@@ -232,3 +232,35 @@ def get_steiner_mst(trimesh, positions, d_upper_bound=1000):
     for i in range(2):
         mst_edges_red[:, i] = np.searchsorted(mst_verts, new_edges[:, i])
     return mst_verts_red, mst_edges_red
+
+
+def filter_shapes(node_ids, shapes):
+    """ node_ids has to be sorted! """
+    if not isinstance(node_ids[0], list) and \
+            not isinstance(node_ids[0], np.ndarray):
+        node_ids = [node_ids]
+    ndim = shapes.shape[1]
+    if isinstance(node_ids, np.ndarray):
+        all_node_ids = node_ids.flatten()
+    else:
+        all_node_ids = np.concatenate(node_ids)
+
+    filter_ = np.in1d(shapes[:, 0], all_node_ids)
+    pre_filtered_shapes = shapes[filter_].copy()
+    for k in range(1, ndim):
+        filter_ = np.in1d(pre_filtered_shapes[:, k], all_node_ids)
+        pre_filtered_shapes = pre_filtered_shapes[filter_]
+
+    filtered_shapes = []
+
+    for ns in node_ids:
+        f = pre_filtered_shapes[np.in1d(pre_filtered_shapes[:, 0], ns)]
+        for k in range(1, ndim):
+            f = f[np.in1d(f[:, k], ns)]
+
+        f = np.unique(np.concatenate([f.flatten(), ns]),
+                      return_inverse=True)[1][:-len(ns)].reshape(-1, ndim)
+
+        filtered_shapes.append(f)
+
+    return filtered_shapes
