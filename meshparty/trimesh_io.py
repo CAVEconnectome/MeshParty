@@ -269,7 +269,7 @@ class MeshMeta(object):
         return "%s/%d.h5" % (self.disk_cache_path, seg_id)
 
     def mesh(self, filename=None, seg_id=None, cache_mesh=True,
-             merge_large_components=True, remove_duplicate_vertices=True,
+             merge_large_components=False, remove_duplicate_vertices=False,
              overwrite_merge_large_components=False, filtered_mesh=False):
         """ Loads mesh either from cache, disk or google storage
 
@@ -295,10 +295,13 @@ class MeshMeta(object):
         if filename is not None:
             if filename not in self._mesh_cache:
                 vertices, faces, normals, mesh_edges = read_mesh(filename)
-
-                mesh = Mesh(vertices=vertices, faces=faces, normals=normals,
-                            mesh_edges=mesh_edges,
-                            process=remove_duplicate_vertices)
+                if filtered_mesh:
+                    mesh = FilteredMesh(vertices=vertices, faces=faces, normals=normals,
+                                        mesh_edges=mesh_edges, process=False)
+                else:
+                    mesh = Mesh(vertices=vertices, faces=faces, normals=normals,
+                                mesh_edges=mesh_edges,
+                                process=remove_duplicate_vertices)
 
                 if (merge_large_components and mesh.mesh_edges is None) or \
                         overwrite_merge_large_components:
@@ -321,25 +324,29 @@ class MeshMeta(object):
                                      cache_mesh=cache_mesh,
                                      merge_large_components=merge_large_components,
                                      overwrite_merge_large_components=overwrite_merge_large_components,
-                                     remove_duplicate_vertices=remove_duplicate_vertices)
-                    if filtered_mesh:
-                        return FilteredMesh(mesh.vertices, mesh.faces)
-                    else:
-                        return mesh
+                                     remove_duplicate_vertices=remove_duplicate_vertices,
+                                     filtered_mesh=filtered_mesh)
+                    return mesh
 
             if seg_id not in self._mesh_cache:
                 cv_mesh = self.cv.mesh.get(seg_id,
-                                           remove_duplicate_vertices= remove_duplicate_vertices)
+                                           remove_duplicate_vertices = remove_duplicate_vertices)
                 faces = np.array(cv_mesh["faces"])
                 if (len(faces.shape) == 1):
                     faces = faces.reshape(-1, 3)
-                mesh = Mesh(vertices=cv_mesh["vertices"],
-                            faces=faces,
-                            process=remove_duplicate_vertices)
 
-                if (merge_large_components and mesh.mesh_edges is None) or \
-                        overwrite_merge_large_components:
-                    mesh.merge_large_components()
+                if filtered_mesh:
+                    mesh = FilteredMesh(vertices=cv_mesh["vertices"],
+                                        faces=faces,
+                                        process=False)
+                else:
+                    mesh = Mesh(vertices=cv_mesh["vertices"],
+                                faces=faces,
+                                process=remove_duplicate_vertices)
+
+                    if (merge_large_components and mesh.mesh_edges is None) or \
+                            overwrite_merge_large_components:
+                        mesh.merge_large_components()
 
                 if cache_mesh and len(self._mesh_cache) < self.cache_size:
                     self._mesh_cache[seg_id] = mesh
@@ -351,10 +358,7 @@ class MeshMeta(object):
             else:
                 mesh = self._mesh_cache[seg_id]
 
-        if filtered_mesh:
-            return FilteredMesh(mesh.vertices, mesh.faces)
-        else:
-            return mesh
+        return mesh
 
 class Mesh(trimesh.Trimesh):
     def __init__(self, *args, mesh_edges=None, **kwargs):
@@ -743,14 +747,15 @@ class Mesh(trimesh.Trimesh):
 class FilteredMesh(Mesh):
     def __init__(self, *args, node_filter=None, unfiltered_size=None, **kwargs):
         if 'vertices' in kwargs:
-            vertices_all=kwargs.pop('vertices')
+            vertices_all = kwargs.pop('vertices')
         else:
-            vertices_all=args[0]
+            vertices_all = args[0]
 
         if 'faces' in kwargs:
-            faces_all=kwargs.pop('edges')
+            faces_all = kwargs.pop('faces')
         else:
-            faces_all=args[1] # If faces are in args, vertices must also have been in args
+            # If faces are in args, vertices must also have been in args
+            faces_all = args[1]
 
         if unfiltered_size is None:
             if node_filter is not None:
@@ -767,10 +772,10 @@ class FilteredMesh(Mesh):
             node_filter_inds = node_filter.copy()
             node_filter = np.full(self.unfiltered_size, False, dtype=bool)
             node_filter[node_filter_inds] = True
-        
+
         if len(node_filter) != unfiltered_size:
             raise ValueError('The node filter must be the same length as the unfiltered size')
-        
+
         self._node_filter = node_filter
 
         if any(self.node_filter == False):
@@ -780,7 +785,7 @@ class FilteredMesh(Mesh):
             nodes_f, faces_f = vertices_all, faces_all
 
         new_args = (nodes_f, faces_f)
-        if len(args)>2:
+        if len(args) > 2:
             new_args += args[2:]
         if kwargs.get('process', False):
             print('No silent changing of the mesh is allowed')
@@ -797,7 +802,7 @@ class FilteredMesh(Mesh):
     @property
     def indices_unfiltered(self):
         '''
-        Gets the unfiltered indices of nodes in the filtered mesh 
+            Gets the unfiltered indices of nodes in the filtered mesh
         '''
         return np.flatnonzero(self.node_filter)
 
@@ -813,26 +818,27 @@ class FilteredMesh(Mesh):
         Makes a new FilteredMesh by adding a new filter to the existing one.
         '''
         if np.size(new_filter) != np.size(self.node_filter):
-            if np.size(new_filter) == np.size(self.vertices): # Assume it's in the filtered frame
+            # Assume it's in the filtered frame
+            if np.size(new_filter) == np.size(self.vertices):
                 new_filter = self.map_slice_to_unfiltered(new_filter)
             else:
                 raise ValueError('Incompatible shape')
         joint_filter = self.node_filter * np.array(new_filter, dtype=bool)
 
-        #Build dummy arrays out of the current mesh
+        # Build dummy arrays out of the current mesh
         vertices_unf = np.zeros((self.unfiltered_size, 3))
         vertices_unf[self.node_filter] = self.vertices
 
         faces_unf = np.empty(self.faces.shape)
         for i in range(3):
-            faces_unf[:,i] = self.indices_unfiltered[self.faces[:,i]]
+            faces_unf[:, i] = self.indices_unfiltered[self.faces[:, i]]
 
         return FilteredMesh(vertices_unf,
                             faces_unf,
                             node_filter=joint_filter,
                             unfiltered_size=self.unfiltered_size,
                             **kwargs)
-    
+
     def map_indices_to_unfiltered(self, unmapped_indices):
         '''
         For a set of indices, returns the corresponding unfiltered indices
