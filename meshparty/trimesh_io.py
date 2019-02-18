@@ -270,7 +270,7 @@ class MeshMeta(object):
 
     def mesh(self, filename=None, seg_id=None, cache_mesh=True,
              merge_large_components=False, remove_duplicate_vertices=False,
-             overwrite_merge_large_components=False, filtered_mesh=False):
+             overwrite_merge_large_components=False, masked_mesh=False):
         """ Loads mesh either from cache, disk or google storage
 
         :param filename: str
@@ -295,8 +295,8 @@ class MeshMeta(object):
         if filename is not None:
             if filename not in self._mesh_cache:
                 vertices, faces, normals, mesh_edges = read_mesh(filename)
-                if filtered_mesh:
-                    mesh = FilteredMesh(vertices=vertices, faces=faces, normals=normals,
+                if masked_mesh:
+                    mesh = MaskedMesh(vertices=vertices, faces=faces, normals=normals,
                                         mesh_edges=mesh_edges, process=False)
                 else:
                     mesh = Mesh(vertices=vertices, faces=faces, normals=normals,
@@ -325,7 +325,7 @@ class MeshMeta(object):
                                      merge_large_components=merge_large_components,
                                      overwrite_merge_large_components=overwrite_merge_large_components,
                                      remove_duplicate_vertices=remove_duplicate_vertices,
-                                     filtered_mesh=filtered_mesh)
+                                     masked_mesh=masked_mesh)
                     return mesh
 
             if seg_id not in self._mesh_cache:
@@ -335,8 +335,8 @@ class MeshMeta(object):
                 if (len(faces.shape) == 1):
                     faces = faces.reshape(-1, 3)
 
-                if filtered_mesh:
-                    mesh = FilteredMesh(vertices=cv_mesh["vertices"],
+                if masked_mesh:
+                    mesh = MaskedMesh(vertices=cv_mesh["vertices"],
                                         faces=faces,
                                         process=False)
                 else:
@@ -774,7 +774,7 @@ class MaskedMesh(Mesh):
             node_mask[node_mask_inds] = True
 
         if len(node_mask) != unmasked_size:
-            raise ValueError('The node filter must be the same length as the unfiltered size')
+            raise ValueError('The node mask must be the same length as the unmaked size')
 
         self._node_mask = node_mask
 
@@ -812,21 +812,21 @@ class MaskedMesh(Mesh):
     @property
     def unmasked_size(self):
         '''
-        Returns the unfiltered number of nodes in the mesh
+        Returns the unmasked number of nodes in the mesh
         '''
         return self._unmasked_size
 
     def add_mask(self, new_mask, **kwargs):
         '''
-        Makes a new FilteredMesh by adding a new filter to the existing one.
+        Makes a new MaskedMesh by adding a new make to the existing one.
         new_mask is a boolean array, either of the original length or the
         masked length (in which case it is padded with zeros appropriately).
         '''
         # We need to express the mask
         if np.size(new_mask) != np.size(self.node_mask):
-            # Assume it's in the filtered frame
+            # Assume it's in the masked frame
             if np.size(new_mask) == np.size(self.vertices):
-                new_mask = self.map_logical_to_unfiltered(new_mask)
+                new_mask = self.map_logical_to_unmasked(new_mask)
             else:
                 raise ValueError('Incompatible shape')
         joint_mask = self.node_mask * np.array(new_mask, dtype=bool)
@@ -837,9 +837,9 @@ class MaskedMesh(Mesh):
 
         faces_unmask = np.empty(self.faces.shape)
         for i in range(3):
-            faces_unmask[:, i] = self.indices_unfiltered[self.faces[:, i]]
+            faces_unmask[:, i] = self.indices_unmasked[self.faces[:, i]]
 
-        return FilteredMesh(vertices_unmask,
+        return MaskedMesh(vertices_unmask,
                             faces_unmask,
                             node_mask=joint_mask,
                             unmasked_size=self.unmasked_size,
@@ -848,13 +848,13 @@ class MaskedMesh(Mesh):
 
     def map_indices_to_unmasked(self, unmapped_indices):
         '''
-        For a set of indices, returns the corresponding unfiltered indices
+        For a set of indices, returns the corresponding unmasked indices
         '''
         return np.flatnonzero(self.node_mask)[unmapped_indices]
 
     def map_logical_to_unmasked(self, unmapped_logical):
         '''
-        For a logical slice, returns the corresponding unfiltered logical slice
+        For a logical slice, returns the corresponding unmasked logical slice
         '''
         full_logical = np.full(self.unmasked_size, False)
         full_logical[self.node_mask] = unmapped_logical
