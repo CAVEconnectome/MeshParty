@@ -745,7 +745,7 @@ class Mesh(trimesh.Trimesh):
                                     directed=False)
 
 class FilteredMesh(Mesh):
-    def __init__(self, *args, node_filter=None, unfiltered_size=None, **kwargs):
+    def __init__(self, *args, node_filter=None, unfiltered_size=None, mesh_edges=None, **kwargs):
         if 'vertices' in kwargs:
             vertices_all = kwargs.pop('vertices')
         else:
@@ -784,6 +784,9 @@ class FilteredMesh(Mesh):
         else:
             nodes_f, faces_f = vertices_all, faces_all
 
+        if mesh_edges is not None:
+            kwargs['mesh_edges'] = utils.filter_shapes(np.flatnonzero(self.node_filter), mesh_edges)[0]
+
         new_args = (nodes_f, faces_f)
         if len(args) > 2:
             new_args += args[2:]
@@ -791,6 +794,7 @@ class FilteredMesh(Mesh):
             print('No silent changing of the mesh is allowed')
         kwargs['process'] = False
         super(FilteredMesh, self).__init__(*new_args, **kwargs)
+
 
     @property
     def node_filter(self):
@@ -812,6 +816,9 @@ class FilteredMesh(Mesh):
         Returns the unfiltered number of nodes in the mesh
         '''
         return self._unfiltered_size
+
+    def _remap_mesh_edges(self):
+        if len(self.mesh_edges) > 0
 
     def add_filter(self, new_filter, **kwargs):
         '''
