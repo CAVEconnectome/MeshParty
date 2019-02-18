@@ -744,8 +744,8 @@ class Mesh(trimesh.Trimesh):
         return utils.create_csgraph(self.vertices, edges, euclidean_weight=True,
                                     directed=False)
 
-class FilteredMesh(Mesh):
-    def __init__(self, *args, node_filter=None, unfiltered_size=None, mesh_edges=None, **kwargs):
+class MaskedMesh(Mesh):
+    def __init__(self, *args, node_mask=None, unmasked_size=None, mesh_edges=None, **kwargs):
         if 'vertices' in kwargs:
             vertices_all = kwargs.pop('vertices')
         else:
@@ -757,35 +757,35 @@ class FilteredMesh(Mesh):
             # If faces are in args, vertices must also have been in args
             faces_all = args[1]
 
-        if unfiltered_size is None:
-            if node_filter is not None:
-                unfiltered_size = len(node_filter)
+        if unmasked_size is None:
+            if node_mask is not None:
+                unmasked_size = len(node_mask)
             else:
-                unfiltered_size = len(vertices_all)
-        if unfiltered_size < len(vertices_all):
+                unmasked_size = len(vertices_all)
+        if unmasked_size < len(vertices_all):
             raise ValueError('Original size cannot be smaller than current size')
-        self._unfiltered_size = unfiltered_size
+        self._unmasked_size = unmasked_size
 
-        if node_filter is None:
-            node_filter = np.full(self.unfiltered_size, True, dtype=bool)
-        elif node_filter.dtype is not bool:
-            node_filter_inds = node_filter.copy()
-            node_filter = np.full(self.unfiltered_size, False, dtype=bool)
-            node_filter[node_filter_inds] = True
+        if node_mask is None:
+            node_mask = np.full(self.unmasked_size, True, dtype=bool)
+        elif node_mask.dtype is not bool:
+            node_mask_inds = node_mask.copy()
+            node_mask = np.full(self.unmasked_size, False, dtype=bool)
+            node_mask[node_mask_inds] = True
 
-        if len(node_filter) != unfiltered_size:
+        if len(node_mask) != unmasked_size:
             raise ValueError('The node filter must be the same length as the unfiltered size')
 
-        self._node_filter = node_filter
+        self._node_mask = node_mask
 
-        if any(self.node_filter == False):
-            nodes_f = vertices_all[self.node_filter]
-            faces_f = utils.filter_shapes(np.flatnonzero(self.node_filter), faces_all)[0]
+        if any(self.node_mask == False):
+            nodes_f = vertices_all[self.node_mask]
+            faces_f = utils.filter_shapes(np.flatnonzero(self.node_mask), faces_all)[0]
         else:
             nodes_f, faces_f = vertices_all, faces_all
 
         if mesh_edges is not None:
-            kwargs['mesh_edges'] = utils.filter_shapes(np.flatnonzero(self.node_filter), mesh_edges)[0]
+            kwargs['mesh_edges'] = utils.filter_shapes(np.flatnonzero(self.node_mask), mesh_edges)[0]
 
         new_args = (nodes_f, faces_f)
         if len(args) > 2:
@@ -793,69 +793,69 @@ class FilteredMesh(Mesh):
         if kwargs.get('process', False):
             print('No silent changing of the mesh is allowed')
         kwargs['process'] = False
-        super(FilteredMesh, self).__init__(*new_args, **kwargs)
-
-
-    @property
-    def node_filter(self):
-        '''
-        Returns the node filter currently applied to the data
-        '''
-        return self._node_filter
+        super(MaskedMesh, self).__init__(*new_args, **kwargs)
 
     @property
-    def indices_unfiltered(self):
+    def node_mask(self):
         '''
-            Gets the unfiltered indices of nodes in the filtered mesh
+        Returns the node mask currently applied to the data
         '''
-        return np.flatnonzero(self.node_filter)
+        return self._node_mask
 
     @property
-    def unfiltered_size(self):
+    def indices_unmasked(self):
+        '''
+            Gets the indices of nodes in the filtered mesh in the unmasked array
+        '''
+        return np.flatnonzero(self.node_mask)
+
+    @property
+    def unmasked_size(self):
         '''
         Returns the unfiltered number of nodes in the mesh
         '''
-        return self._unfiltered_size
+        return self._unmasked_size
 
-    def _remap_mesh_edges(self):
-        if len(self.mesh_edges) > 0
-
-    def add_filter(self, new_filter, **kwargs):
+    def add_mask(self, new_mask, **kwargs):
         '''
         Makes a new FilteredMesh by adding a new filter to the existing one.
+        new_mask is a boolean array, either of the original length or the
+        masked length (in which case it is padded with zeros appropriately).
         '''
-        if np.size(new_filter) != np.size(self.node_filter):
+        # We need to express the mask
+        if np.size(new_mask) != np.size(self.node_mask):
             # Assume it's in the filtered frame
-            if np.size(new_filter) == np.size(self.vertices):
-                new_filter = self.map_slice_to_unfiltered(new_filter)
+            if np.size(new_mask) == np.size(self.vertices):
+                new_mask = self.map_logical_to_unfiltered(new_mask)
             else:
                 raise ValueError('Incompatible shape')
-        joint_filter = self.node_filter * np.array(new_filter, dtype=bool)
+        joint_mask = self.node_mask * np.array(new_mask, dtype=bool)
 
-        # Build dummy arrays out of the current mesh
-        vertices_unf = np.zeros((self.unfiltered_size, 3))
-        vertices_unf[self.node_filter] = self.vertices
+        # Build dummy arrays in the unmasked size out of the current mesh
+        vertices_unmask = np.zeros((self.unmasked_size, 3))
+        vertices_unmask[self.node_mask] = self.vertices
 
-        faces_unf = np.empty(self.faces.shape)
+        faces_unmask = np.empty(self.faces.shape)
         for i in range(3):
-            faces_unf[:, i] = self.indices_unfiltered[self.faces[:, i]]
+            faces_unmask[:, i] = self.indices_unfiltered[self.faces[:, i]]
 
-        return FilteredMesh(vertices_unf,
-                            faces_unf,
-                            node_filter=joint_filter,
-                            unfiltered_size=self.unfiltered_size,
+        return FilteredMesh(vertices_unmask,
+                            faces_unmask,
+                            node_mask=joint_mask,
+                            unmasked_size=self.unmasked_size,
+                            mesh_edges=self.mesh_edges,
                             **kwargs)
 
-    def map_indices_to_unfiltered(self, unmapped_indices):
+    def map_indices_to_unmasked(self, unmapped_indices):
         '''
         For a set of indices, returns the corresponding unfiltered indices
         '''
-        return np.flatnonzero(self.node_filter)[unmapped_indices]
+        return np.flatnonzero(self.node_mask)[unmapped_indices]
 
-    def map_slice_to_unfiltered(self, unmapped_slice):
+    def map_logical_to_unmasked(self, unmapped_logical):
         '''
         For a logical slice, returns the corresponding unfiltered logical slice
         '''
-        full_slice = np.full(self.unfiltered_size, False)
-        full_slice[self.node_filter] = unmapped_slice
-        return full_slice
+        full_logical = np.full(self.unmasked_size, False)
+        full_logical[self.node_mask] = unmapped_logical
+        return full_logical
