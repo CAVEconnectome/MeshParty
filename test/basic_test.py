@@ -86,5 +86,7 @@ def test_write_mesh(basic_mesh, tmpdir):
 
 def test_meta_mesh(cv_path, basic_mesh_id):
     mm = trimesh_io.MeshMeta(cv_path=cv_path)
-    mesh = mm.mesh(seg_id=basic_mesh_id)
+    mesh = mm.mesh(seg_id=basic_mesh_id,
+                   merge_large_components=False,
+                   remove_duplicate_vertices=False)
     assert(mesh is not None)
