@@ -6,6 +6,8 @@ import json
 import os
 import struct
 
+
+@pytest.fixture(scope='session')
 def basic_skeleton():
 
     vertices = np.array([[0, 0, 0],
