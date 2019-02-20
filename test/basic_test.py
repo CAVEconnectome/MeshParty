@@ -63,24 +63,45 @@ def cv(cv_path):
 
     yield cv
 
-
-@pytest.fixture(scope='session')
-def basic_mesh_id(cv, cv_folder, basic_mesh):
-    mesh_id = 100
+def write_mesh_to_cv(cv, cv_folder, mesh, mesh_id):
     mesh_dir = os.path.join(cv_folder, )
     if not os.path.isdir(mesh_dir):
         os.makedirs(mesh_dir)
-    n_vertices = basic_mesh.vertices.shape[0]
-    outs=struct.pack("=I", n_vertices) + basic_mesh.vertices.tobytes() + basic_mesh.faces.tobytes()
+    n_vertices = mesh.vertices.shape[0]
+    
+    vertices = np.array(mesh.vertices, dtype=np.float32)
+
+    vertex_index_format = [
+        np.uint32(n_vertices), # Number of vertices (3 coordinates)
+        vertices,
+        np.array(mesh.faces, dtype=np.uint32)
+    ]
+    outs= b''.join([array.tobytes() for array in vertex_index_format])
+
     with cloudvolume.Storage(cv.layer_cloudpath, progress=cv.progress) as stor:
         fname_man = os.path.join(cv.info['mesh'], f'{mesh_id}:0')
         frag_id = f'9{mesh_id}:0'
         fname = os.path.join(cv.info['mesh'], frag_id)
         d_man = {'fragments': [frag_id]}
         stor.put_json(fname_man, json.dumps(d_man))
-        stor.put_file(fname, outs)
-        print(fname, fname_man)
-        print(np.max(basic_mesh.faces))
+        stor.put_file(
+            file_path=fname,
+            content=outs,
+            compress=True
+        )
+
+
+@pytest.fixture(scope='session')
+def basic_mesh_id(cv, cv_folder, basic_mesh):
+    mesh_id = 100
+    write_mesh_to_cv(cv, cv_folder, basic_mesh, mesh_id)
+    yield mesh_id
+
+
+@pytest.fixture(scope='session')
+def full_cell_mesh_id(cv, cv_folder, full_cell_mesh):
+    mesh_id = 101
+    write_mesh_to_cv(cv, cv_folder, full_cell_mesh, mesh_id)
     yield mesh_id
 
 
@@ -92,16 +113,12 @@ def test_write_mesh(basic_mesh, tmpdir):
     new_mesh = trimesh_io.read_mesh_h5(filepath)
     assert(np.all(basic_mesh.vertices == new_mesh[0]))
 
-def test_write_mesh_full(full_cell_mesh, tmpdir):
 
-    filepath = str(tmpdir.join('full_cell.h5'))
-    trimesh_io.write_mesh_h5(filepath, full_cell_mesh.vertices, full_cell_mesh.faces)
-
-    new_mesh = trimesh_io.read_mesh_h5(filepath)
-    assert(np.all(full_cell_mesh.vertices == new_mesh[0]))
-
-
-# def test_meta_mesh(cv_path, basic_mesh_id):
-#     mm = trimesh_io.MeshMeta(cv_path=cv_path)
-#     mesh = mm.mesh(seg_id=basic_mesh_id)
-#     assert(mesh is not None)
+def test_meta_mesh(cv_path, basic_mesh_id, full_cell_mesh_id):
+    mm = trimesh_io.MeshMeta(cv_path=cv_path)
+    mesh = mm.mesh(seg_id=basic_mesh_id)
+    full_cell_mesh = mm.mesh(seg_id=full_cell_mesh_id,
+                             merge_large_components=False,
+                             remove_duplicate_vertices=False)
+    assert(mesh is not None)
+    #assert(full_cell_mesh is not None)
