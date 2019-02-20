@@ -6,6 +6,7 @@ import json
 import os
 import struct
 
+
 @pytest.fixture(scope='session')
 def basic_mesh():
 
@@ -19,6 +20,14 @@ def basic_mesh():
                       [3, 4, 2]], np.uint32)
     mesh = trimesh_io.Mesh(verts, faces, process=False)
     assert np.all(mesh.vertices == verts)
+    yield mesh
+
+
+@pytest.fixture(scope='session')
+def full_cell_mesh():
+    filepath = 'test/test_files/648518346349499581.h5'
+    vertices, faces, normals, mesh_edges = trimesh_io.read_mesh_h5(filepath)
+    mesh = trimesh_io.Mesh(vertices, faces, process=False)
     yield mesh
 
 
@@ -83,8 +92,16 @@ def test_write_mesh(basic_mesh, tmpdir):
     new_mesh = trimesh_io.read_mesh_h5(filepath)
     assert(np.all(basic_mesh.vertices == new_mesh[0]))
 
+def test_write_mesh_full(full_cell_mesh, tmpdir):
 
-def test_meta_mesh(cv_path, basic_mesh_id):
-    mm = trimesh_io.MeshMeta(cv_path=cv_path)
-    mesh = mm.mesh(seg_id=basic_mesh_id)
-    assert(mesh is not None)
+    filepath = str(tmpdir.join('full_cell.h5'))
+    trimesh_io.write_mesh_h5(filepath, full_cell_mesh.vertices, full_cell_mesh.faces)
+
+    new_mesh = trimesh_io.read_mesh_h5(filepath)
+    assert(np.all(full_cell_mesh.vertices == new_mesh[0]))
+
+
+# def test_meta_mesh(cv_path, basic_mesh_id):
+#     mm = trimesh_io.MeshMeta(cv_path=cv_path)
+#     mesh = mm.mesh(seg_id=basic_mesh_id)
+#     assert(mesh is not None)
