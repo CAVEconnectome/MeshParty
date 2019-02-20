@@ -167,7 +167,7 @@ def _download_meshes_thread(args):
 
             if fmt == "hdf5":
                 write_mesh_h5(f"{target_dir}/{seg_id}.h5", mesh.vertices,
-                              mesh.faces.flatten(),
+                          mesh.faces.flatten(),
                               mesh_edges=mesh.mesh_edges,
                               overwrite=overwrite)
             else:
@@ -859,3 +859,11 @@ class MaskedMesh(Mesh):
         full_logical = np.full(self.unmasked_size, False)
         full_logical[self.node_mask] = unmapped_logical
         return full_logical
+
+    def filter_unmasked_logical(self, unmasked_logical):
+        return unmasked_logical[self.node_mask]
+
+    def filter_unmasked_indices(self, unmasked_indices):
+        full_logical = np.full(self.unmasked_size, False)
+        full_logical[unmasked_indices] = True
+        return np.flatnonzero(self.filter_unmasked_logical(full_logical))
