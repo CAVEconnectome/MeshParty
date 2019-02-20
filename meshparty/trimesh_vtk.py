@@ -3,6 +3,17 @@ from vtk.util.numpy_support import numpy_to_vtk, numpy_to_vtkIdTypeArray, vtk_to
 import numpy as np
 
 
+def vtk_cellarray_to_shape(vtk_cellarray, ncells):
+    '''
+    Converts a vtkCellArray object (or its data) into a numpy array
+
+    '''
+    if isinstance(vtk_cellarray, vtk.vtkCellArray):
+        vtk_cellarray = vtk_cellarray.GetData()
+    cellarray = vtk_to_numpy(vtk_cellarray)
+    cellarray = cellarray.reshape(ncells, int(len(cellarray)/ncells))
+    return cellarray[:, 1:]
+
 def numpy_to_vtk_cells(mat):
     cells = vtk.vtkCellArray()
 
@@ -99,12 +110,6 @@ def trimesh_to_vtk(vertices, tris, mesh_edges=None):
         mesh.SetLines(edges)
 
     return mesh
-
-
-def vtk_cellarray_to_shape(vtk_cellarray, ncells):
-    cellarray = vtk_to_numpy(vtk_cellarray)
-    cellarray = cellarray.reshape(ncells, int(len(cellarray)/ncells))
-    return cellarray[:, 1:]
 
 
 def decimate_trimesh(trimesh, reduction=.1):
@@ -329,3 +334,32 @@ def make_mesh_actor(mesh, color=(0, 1, 0),
     mesh_actor.GetProperty().SetColor(*color)
     mesh_actor.GetProperty().SetOpacity(opacity)
     return mesh_actor
+
+
+def make_skeleton_actor(skeleton,
+                       edge_property=None,
+                       normalize_property=True,
+                       color=(0,0,0),
+                       line_width=3,
+                       lut_map=None):
+    sk_mesh = trimesh_vtk.graph_to_vtk(skeleton.vertices,
+                                       skeleton.edges)
+    mapper = vtk.vtkPolyDataMapper()
+    mapper.SetInputData(sk_mesh)
+    if edge_property is not None:
+        data = skeleton.edge_properties[edge_property]
+        if normalize_property:
+            data = data / np.nanmax(data)
+        sk_mesh.GetCellData().SetScalars(numpy_to_vtk(data))
+        lut = vtk.vtkLookupTable()
+        if lut_map is not None:
+            lut_map(lut)
+        lut.Build()
+        mapper.SetLookupTable(lut)
+
+    actor = vtk.vtkActor()
+    actor.SetMapper(mapper)
+    actor.GetProperty().SetLineWidth(line_width)
+    actor.GetProperty().SetColor(color)
+    return actor
+
