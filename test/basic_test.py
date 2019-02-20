@@ -121,4 +121,4 @@ def test_meta_mesh(cv_path, basic_mesh_id, full_cell_mesh_id):
                              merge_large_components=False,
                              remove_duplicate_vertices=False)
     assert(mesh is not None)
-    #assert(full_cell_mesh is not None)
+    assert(full_cell_mesh is not None)
