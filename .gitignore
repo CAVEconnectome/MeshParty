@@ -9,3 +9,4 @@ build/
 htmlcov/
 test-reports/
 .coverage
+.DS_Store
