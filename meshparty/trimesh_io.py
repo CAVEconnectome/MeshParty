@@ -818,7 +818,7 @@ class MaskedMesh(Mesh):
 
     def add_mask(self, new_mask, **kwargs):
         '''
-        Makes a new MaskedMesh by adding a new make to the existing one.
+        Makes a new MaskedMesh by adding a new mask to the existing one.
         new_mask is a boolean array, either of the original length or the
         masked length (in which case it is padded with zeros appropriately).
         '''
@@ -826,7 +826,7 @@ class MaskedMesh(Mesh):
         if np.size(new_mask) != np.size(self.node_mask):
             # Assume it's in the masked frame
             if np.size(new_mask) == np.size(self.vertices):
-                new_mask = self.map_logical_to_unmasked(new_mask)
+                new_mask = self.map_boolean_to_unmasked(new_mask)
             else:
                 raise ValueError('Incompatible shape')
         joint_mask = self.node_mask * np.array(new_mask, dtype=bool)
@@ -840,30 +840,38 @@ class MaskedMesh(Mesh):
             faces_unmask[:, i] = self.indices_unmasked[self.faces[:, i]]
 
         return MaskedMesh(vertices_unmask,
-                            faces_unmask,
-                            node_mask=joint_mask,
-                            unmasked_size=self.unmasked_size,
-                            mesh_edges=self.mesh_edges,
-                            **kwargs)
+                          faces_unmask,
+                          node_mask=joint_mask,
+                          unmasked_size=self.unmasked_size,
+                          mesh_edges=self.mesh_edges,
+                          **kwargs)
 
     def map_indices_to_unmasked(self, unmapped_indices):
         '''
-        For a set of indices, returns the corresponding unmasked indices
+        For a set of masked indices, returns the corresponding unmasked indices
         '''
         return np.flatnonzero(self.node_mask)[unmapped_indices]
 
-    def map_logical_to_unmasked(self, unmapped_logical):
+    def map_boolean_to_unmasked(self, unmapped_boolean):
         '''
-        For a logical slice, returns the corresponding unmasked logical slice
+        For a boolean index in the masked indices, returns the corresponding unmasked boolean index
         '''
-        full_logical = np.full(self.unmasked_size, False)
-        full_logical[self.node_mask] = unmapped_logical
-        return full_logical
+        full_boolean = np.full(self.unmasked_size, False)
+        full_boolean[self.node_mask] = unmapped_boolean
+        return full_boolean
 
-    def filter_unmasked_logical(self, unmasked_logical):
-        return unmasked_logical[self.node_mask]
+    def filter_unmasked_boolean(self, unmasked_boolean):
+        '''
+        For an unmasked boolean slice, returns a boolean slice filtered to the masked mesh
+        '''
+        return unmasked_boolean[self.node_mask]
 
     def filter_unmasked_indices(self, unmasked_indices):
-        full_logical = np.full(self.unmasked_size, False)
-        full_logical[unmasked_indices] = True
-        return np.flatnonzero(self.filter_unmasked_logical(full_logical))
+        '''
+        For an array of indices in the original mesh, returns the indices filtered and remapped
+        for the masked mesh.
+        '''
+
+        full_boolean = np.full(self.unmasked_size, False)
+        full_boolean[unmasked_indices] = True
+        return np.flatnonzero(self.filter_unmasked_boolean(full_boolean))
