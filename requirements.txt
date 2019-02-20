@@ -1,7 +1,7 @@
 plyfile
 h5py
 numpy
-scipy
+-e git+https://github.com/fcollman/scipy#egg=scipy
 sklearn
 networkx
 multiwrapper
