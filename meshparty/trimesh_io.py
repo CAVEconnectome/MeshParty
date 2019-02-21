@@ -150,7 +150,7 @@ def _download_meshes_thread(args):
         print('file does not exist {}'.format(target_file))
        
         try:
-            cv_mesh = cv.mesh.get([seg_id],
+            cv_mesh = cv.mesh.get(seg_id,
                                   remove_duplicate_vertices=remove_duplicate_vertices)
 
             faces = np.array(cv_mesh["faces"])
@@ -323,7 +323,7 @@ class MeshMeta(object):
                                      remove_duplicate_vertices=remove_duplicate_vertices)
 
             if seg_id not in self._mesh_cache:
-                cv_mesh = self.cv.mesh.get([seg_id],
+                cv_mesh = self.cv.mesh.get(seg_id,
                                            remove_duplicate_vertices= remove_duplicate_vertices)
                 faces = np.array(cv_mesh["faces"])
                 if (len(faces.shape) == 1):

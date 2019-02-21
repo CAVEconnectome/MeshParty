@@ -1,11 +1,22 @@
 # MeshParty
 
 ## Installation
+
+From pypi:
+```
+pip install meshparty
+```
+
+We try to keep the pypi version up to date. To install the git version do:
+
 ```
 git clone https://github.com/sdorkenw/MeshParty.git
 cd MeshParty
 pip install . --upgrade
 ```
+
+Be aware that this installs a specific cloudvolume branch to allow integration of the new pychunkedgraph format `graphene`.
+
 
 You might need to install assimp as well:
 ```
