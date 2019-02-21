@@ -5,11 +5,11 @@ import cloudvolume
 import json
 import os
 import struct
+import contextlib
 
 
-@pytest.fixture(scope='session')
-def basic_mesh():
-
+@contextlib.contextmanager
+def build_basic_mesh():
     verts = np.array([[0, 0, 0],
                       [1, 0, 0],
                       [0, 1, 0],
@@ -24,11 +24,58 @@ def basic_mesh():
 
 
 @pytest.fixture(scope='session')
-def full_cell_mesh():
+def basic_mesh():
+    with build_basic_mesh() as m:
+        yield m
+
+
+@contextlib.contextmanager
+def build_full_cell_mesh():
     filepath = 'test/test_files/648518346349499581.h5'
     vertices, faces, normals, mesh_edges = trimesh_io.read_mesh_h5(filepath)
     mesh = trimesh_io.Mesh(vertices, faces, process=False)
     yield mesh
+
+
+@pytest.fixture(scope='session')
+def full_cell_mesh():
+    with build_full_cell_mesh() as m:
+        yield m
+
+
+@contextlib.contextmanager
+def build_basic_cube_mesh():
+    verts = np.array([
+        [-1., -1.,  1.],
+        [-1., -1., -1.],
+        [1., -1., -1.],
+        [1., -1.,  1.],
+        [-1.,  1.,  1.],
+        [-1.,  1., -1.],
+        [1.,  1., -1.],
+        [1.,  1.,  1.]], dtype=np.float32)
+    faces = np.array([
+        [4, 5, 1],
+        [5, 6, 2],
+        [6, 7, 3],
+        [7, 4, 0],
+        [0, 1, 2],
+        [7, 6, 5],
+        [0, 4, 1],
+        [1, 5, 2],
+        [2, 6, 3],
+        [3, 7, 0],
+        [3, 0, 2],
+        [4, 7, 5]], np.uint32)
+    mesh = trimesh_io.Mesh(verts, faces, process=False)
+    assert np.all(mesh.vertices == verts)
+    yield mesh
+
+
+@pytest.fixture(scope='session')
+def basic_cube_mesh():
+    with build_basic_cube_mesh() as m:
+        yield m
 
 
 @pytest.fixture(scope='session')
@@ -68,7 +115,7 @@ def write_mesh_to_cv(cv, cv_folder, mesh, mesh_id):
     if not os.path.isdir(mesh_dir):
         os.makedirs(mesh_dir)
     n_vertices = mesh.vertices.shape[0]
-    
+
     vertices = np.array(mesh.vertices, dtype=np.float32)
 
     vertex_index_format = [
