@@ -10,7 +10,7 @@ import struct
 def basic_mesh():
 
     verts = np.array([[0, 0, 0],
-                      [1, 0, 0],
+                      [1, 0, 0], 
                       [0, 1, 0],
                       [1, 1, 0],
                       [0, 0, 1]], dtype=np.float32)
@@ -18,6 +18,23 @@ def basic_mesh():
                       [2, 3, 1],
                       [3, 4, 2]], np.uint32)
     mesh = trimesh_io.Mesh(verts, faces, process=False)
+    assert np.all(mesh.vertices == verts)
+    yield mesh
+
+@pytest.fixture(scope='session')
+def mesh_with_extra_edges():
+
+    verts = np.array([[0, 0, 0],
+                      [1, 0, 0], 
+                      [0, 1, 0],
+                      [1, 1, 0],
+                      [0, 0, 1]], dtype=np.float32)
+    faces = np.array([[0, 1, 2],
+                      [2, 3, 1],
+                      [3, 4, 2]], np.uint32)
+    ext_edges = np.array([[1,4],
+                          [2,4]])
+    mesh = trimesh_io.Mesh(verts, faces, mesh_edges=ext_edges, process=False)
     assert np.all(mesh.vertices == verts)
     yield mesh
 
