@@ -5,3 +5,7 @@ build/
 .eggs/
 *.egg-info
 *.pyc
+.vscode
+htmlcov/
+test-reports/
+.coverage

@@ -5,7 +5,12 @@ scipy==1.2.0
 sklearn
 networkx
 multiwrapper
+<<<<<<< HEAD
 cloud-volume
+=======
+trimesh
+-e git+https://github.com/seung-lab/cloud-volume.git@graphene#egg=cloud-volume
+>>>>>>> 88e409ff3f8fa41581f6f19947aae898f60f1b97
 pyassimp
 trimesh==2.35.48
 pytest==4.0.2
