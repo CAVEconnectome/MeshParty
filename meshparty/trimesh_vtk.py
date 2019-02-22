@@ -329,3 +329,43 @@ def make_mesh_actor(mesh, color=(0, 1, 0),
     mesh_actor.GetProperty().SetColor(*color)
     mesh_actor.GetProperty().SetOpacity(opacity)
     return mesh_actor
+
+
+def make_point_cloud_actor(xyz,
+                           size=100,
+                           color=(0,0,0),
+                           opacity=0.5):
+
+    points = vtk.vtkPoints()
+    points.SetData(numpy_to_vtk(xyz, deep=True))
+
+    pc = vtk.vtkPolyData()
+    pc.SetPoints(points)
+
+    if np.isscalar(size):
+        size = np.full(len(xyz), size)
+    elif len(size) != len(xyz):
+        raise ValueError('Size must be either a scalar or an len(xyz) x 1 array')
+    pc.GetPointData().SetScalars(numpy_to_vtk(size))
+
+    ss = vtk.vtkSphereSource()
+    ss.SetRadius(1)
+
+    glyph = vtk.vtkGlyph3D()
+    glyph.SetInputData(pc)
+
+    glyph.SetSourceConnection(ss.GetOutputPort())
+    glyph.SetScaleModeToScaleByScalar()
+    glyph.ScalingOn()
+    glyph.Update()
+
+    mapper = vtk.vtkPolyDataMapper()
+    mapper.SetInputConnection(glyph.GetOutputPort())
+
+    actor = vtk.vtkActor()
+    mapper.ScalarVisibilityOn()
+    actor.SetMapper(mapper)
+    actor.GetProperty().SetColor(*color)
+    actor.GetProperty().SetOpacity(opacity)
+
+    return actor

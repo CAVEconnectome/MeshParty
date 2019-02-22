@@ -7,6 +7,7 @@ import os
 import networkx as nx
 import requests
 import time
+from collections import defaultdict
 
 import cloudvolume
 from multiwrapper import multiprocessing_utils as mu
@@ -794,6 +795,7 @@ class MaskedMesh(Mesh):
             print('No silent changing of the mesh is allowed')
         kwargs['process'] = False
         super(MaskedMesh, self).__init__(*new_args, **kwargs)
+        self._index_map = None
 
     @property
     def node_mask(self):
@@ -850,7 +852,7 @@ class MaskedMesh(Mesh):
         '''
         For a set of masked indices, returns the corresponding unmasked indices
         '''
-        return np.flatnonzero(self.node_mask)[unmapped_indices]
+        return self.indices_unmasked[unmapped_indices]
 
     def map_boolean_to_unmasked(self, unmapped_boolean):
         '''
@@ -866,12 +868,21 @@ class MaskedMesh(Mesh):
         '''
         return unmasked_boolean[self.node_mask]
 
-    def filter_unmasked_indices(self, unmasked_indices):
+    def filter_unmasked_indices(self, unmasked_indices, include_outside=True):
         '''
         For an array of indices in the original mesh, returns the indices filtered and remapped
-        for the masked mesh.
+        for the masked mesh. Preserves the order of unmasked_indices.
         '''
+        filtered_indices = np.array([self.index_map[ind] for ind in unmasked_indices])
+        if include_outside:
+            return filtered_indices
+        else:
+            return filtered_indices[~np.isnan[filtered_indices]]
 
-        full_boolean = np.full(self.unmasked_size, False)
-        full_boolean[unmasked_indices] = True
-        return np.flatnonzero(self.filter_unmasked_boolean(full_boolean))
+    @property
+    def index_map(self):
+        if self._index_map is None:
+            self._index_map = defaultdict(lambda: np.nan)
+            for ii, index in enumerate(self.indices_unmasked):
+                self._index_map[index] = ii
+        return self._index_map
