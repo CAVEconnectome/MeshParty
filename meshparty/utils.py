@@ -4,7 +4,7 @@ import networkx as nx
 import pcst_fast
 
 
-def connected_component_slice(G, ind=None):
+def connected_component_slice(G, ind=None, return_boolean=False):
     '''
     Gets a numpy slice of the connected component corresponding to a
     given index. If no index is specified, the slice is of the largest
@@ -17,8 +17,16 @@ def connected_component_slice(G, ind=None):
         label = label_vals[ind]
     else:
         label = labels[ind]
-    return np.where(labels == label)[0]
 
+    if return_boolean:
+        return labels == label
+    else:
+        return np.flatnonzero(labels == label)
+
+def indices_to_slice(inds, total_length):
+    v = np.full(total_lenth, False)
+    v[inds] = True
+    return v
 
 def find_far_points(trimesh, start_ind=None, multicomponent=False):
     '''
@@ -79,29 +87,27 @@ def edge_averaged_vertex_property(edge_property, vertices, edges):
     return np.nanmean(vertex_property, axis=1)
     
 
-def reduce_vertices(vertices, edges, v_filter=None, e_filter=None, return_filter_inds=False):
+def reduce_vertices(vertices, vertex_list, v_filter=None, e_filter=None, return_filter_inds=False):
     '''
     Given a vertex and edge list, filters them down and remaps indices in the edge list.
     If no v or e filters are given, reduces the vertex list down to only those vertices
     with edges in the edge list.
     '''
     if v_filter is None:
-        v_filter = np.unique(edges).astype(int)
+        v_filter = np.unique(vertex_list).astype(int)
+    if v_filter.dtype == bool:
+        v_filter = np.flatnonzero(v_filter)
     if e_filter is None:
-        e_filter_bool = np.isin(edges[:,0], v_filter) & np.isin(edges[:,1], v_filter)
-        e_filter = np.where(e_filter_bool)[0]
-    
+        e_filter_bool = np.all(np.isin(vertex_list, v_filter), axis=1)
+        e_filter = np.flatnonzero(e_filter_bool)
+
     vertices_n = vertices[v_filter]
-    vmap = dict(zip(v_filter, np.arange(len(v_filter))))
-    
-    edges_f = edges[e_filter].copy()
-    edges_n = np.stack((np.fromiter((vmap[x] for x in edges_f[:,0]), dtype=int),
-                        np.fromiter((vmap[x] for x in edges_f[:,1]), dtype=int))).T
+    vertex_list_n = filter_shapes(np.flatnonzero(v_filter), vertex_list[e_filter])
 
     if return_filter_inds:
-        return vertices_n, edges_n, (v_filter, e_filter)
+        return vertices_n, vertex_list_n, (v_filter, e_filter)
     else:
-        return vertices_n, edges_n
+        return vertices_n, vertex_list_n
 
 
 def create_csgraph(vertices, edges, euclidean_weight=True, directed=False):
@@ -219,3 +225,35 @@ def get_steiner_mst(trimesh, positions, d_upper_bound=1000):
     for i in range(2):
         mst_edges_red[:, i] = np.searchsorted(mst_verts, new_edges[:, i])
     return mst_verts_red, mst_edges_red
+
+
+def filter_shapes(node_ids, shapes):
+    """ node_ids has to be sorted! """
+    if not isinstance(node_ids[0], list) and \
+            not isinstance(node_ids[0], np.ndarray):
+        node_ids = [node_ids]
+    ndim = shapes.shape[1]
+    if isinstance(node_ids, np.ndarray):
+        all_node_ids = node_ids.flatten()
+    else:
+        all_node_ids = np.concatenate(node_ids)
+
+    filter_ = np.in1d(shapes[:, 0], all_node_ids)
+    pre_filtered_shapes = shapes[filter_].copy()
+    for k in range(1, ndim):
+        filter_ = np.in1d(pre_filtered_shapes[:, k], all_node_ids)
+        pre_filtered_shapes = pre_filtered_shapes[filter_]
+
+    filtered_shapes = []
+
+    for ns in node_ids:
+        f = pre_filtered_shapes[np.in1d(pre_filtered_shapes[:, 0], ns)]
+        for k in range(1, ndim):
+            f = f[np.in1d(f[:, k], ns)]
+
+        f = np.unique(np.concatenate([f.flatten(), ns]),
+                      return_inverse=True)[1][:-len(ns)].reshape(-1, ndim)
+
+        filtered_shapes.append(f)
+
+    return filtered_shapes
