@@ -881,6 +881,9 @@ class MaskedMesh(Mesh):
 
     @property
     def index_map(self):
+        '''
+        A dict mapping global indices into the masked mesh indices.
+        '''
         if self._index_map is None:
             self._index_map = defaultdict(lambda: np.nan)
             for ii, index in enumerate(self.indices_unmasked):
