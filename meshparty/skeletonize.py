@@ -229,11 +229,11 @@ def skeletonize_components(mesh,
     all_paths = []
     roots = []
     tot_path_lengths = []
-    
+
     if soma_pt is not None:
         soma_d = mesh.vertices - soma_pt[np.newaxis, :]
         soma_d = np.linalg.norm(soma_d, axis=1)
-        is_soma_pt = soma_d<soma_thresh
+        is_soma_pt = soma_d < soma_thresh
     else:
         is_soma_pt = None
         soma_d = None

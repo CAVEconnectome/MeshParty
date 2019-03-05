@@ -335,8 +335,8 @@ class Skeleton:
 
     def _unvisited_path_on_tree(self, ind, visited):
         '''
-            Find path from ind to a visited node along G
-            Assumes that G[i,j] means i->j
+        Find path from ind to a visited node along G
+        Assumes that G[i,j] means i->j
         '''
         n_ind = ind
         path = [n_ind]
@@ -348,16 +348,16 @@ class Skeleton:
         return path, visited
 
     def _build_swc_array(self, node_labels, radius, xyz_scaling):
-
+        '''
+        Helper function for producing the numpy table for an swc.        
+        '''
         ds = self.distance_to_root
-
         order_old = np.argsort(ds)
+        order_map = dict(zip(order_old, new_ids))
+
         new_ids = np.arange(len(ds))
         node_labels = node_labels[order_old]
-        
         xyz = self.vertices[order_old]
-        
-        order_map = dict(zip(order_old, new_ids))
         par_ids = np.array([order_map.get(nid, -1) for nid in self._parent_node_array[order_old]])
 
         swc_dat = np.hstack((new_ids[:, np.newaxis],
@@ -369,20 +369,32 @@ class Skeleton:
 
     def export_to_swc(self, filename, node_labels=None, radius=None, header=None, xyz_scaling=1000):
         '''
-            Export a skeleton file to an swc file (see http://research.mssm.edu/cnic/swc.html)
-            n T x y z R P
+        Export a skeleton file to an swc file
+        (see http://research.mssm.edu/cnic/swc.html for swc definition)
+
+        :param filename: Name of the file to save the swc to
+        :param node_labels: None (default) or an interable of ints co-indexed with vertices.
+                            Corresponds to the swc node categories. Defaults to setting all
+                            nodes to label 3, dendrite.
+        :param radius: None (default) or an iterable of floats. This should be co-indexed with vertices.
+                       Radius values are assumed to be in the same units as the node vertices.
+        :param header: Dict, default None. Each key value pair in the dict becomes
+                       a parameter line in the swc header.
+        :param xyz_scaling: Number, default 1000. Down-scales spatial units from the skeleton's units to
+                            whatever is desired by the swc. E.g.
 
         '''
 
         if header is None:
             header_string = ''
         else:
-            header_string = '\n'.join(['{}: {}'.format(k,v) for k, v in header.items()])
+            header_string = '\n'.join(['{}: {}'.format(k, v) for k, v in header.items()])
 
         if radius is None:
-            radius = np.full(len(self.vertices), 1)
-        elif np.issubdtype( type(radius), int):
+            radius = np.full(len(self.vertices), 1000)
+        elif np.issubdtype(type(radius), int):
             radius = np.full(len(self.vertices), radius)
+        radius = radius / xyz_scaling
 
         if node_labels is None:
             node_labels = np.full(len(self.vertices), 3)
@@ -390,5 +402,5 @@ class Skeleton:
         swc_dat = self._build_swc_array(node_labels, radius, xyz_scaling)
 
         with open(filename, 'w') as f:
-            np.savetxt(f, swc_dat, delimiter = ' ', header=header_string, comments='#',
+            np.savetxt(f, swc_dat, delimiter=' ', header=header_string, comments='#',
                        fmt=['%i', '%i', '%.3f', '%.3f', '%.3f', '%.3f', '%i'])
