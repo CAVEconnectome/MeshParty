@@ -353,17 +353,18 @@ class Skeleton:
         '''
         ds = self.distance_to_root
         order_old = np.argsort(ds)
+        new_ids = np.arange(len(ds))
         order_map = dict(zip(order_old, new_ids))
 
-        new_ids = np.arange(len(ds))
         node_labels = node_labels[order_old]
         xyz = self.vertices[order_old]
+        radius = radius[order_old]
         par_ids = np.array([order_map.get(nid, -1) for nid in self._parent_node_array[order_old]])
 
         swc_dat = np.hstack((new_ids[:, np.newaxis],
                              node_labels[:, np.newaxis],
                              xyz / xyz_scaling,
-                             radius[:, np.newaxis],
+                             radius[:, np.newaxis] / xyz_scaling,
                              par_ids[:, np.newaxis]))
         return swc_dat
 
@@ -394,7 +395,6 @@ class Skeleton:
             radius = np.full(len(self.vertices), 1000)
         elif np.issubdtype(type(radius), int):
             radius = np.full(len(self.vertices), radius)
-        radius = radius / xyz_scaling
 
         if node_labels is None:
             node_labels = np.full(len(self.vertices), 3)
