@@ -1,4 +1,4 @@
-from scipy import sparse
+from scipy import sparse, spatial
 import numpy as np
 import time
 from meshparty import trimesh_vtk, utils
@@ -25,7 +25,7 @@ def skeletonize(mesh_meta, seg_id, soma_pt=None, soma_thresh=7500,
                 invalidation_d=10000, smooth_neighborhood=5,
                 max_tip_d=2000, large_skel_path_threshold=5000,
                 cc_vertex_thresh=100, do_cross_section=False,
-                return_map=False):
+                merge_components_at_tips=True, return_map=False):
 
     mesh = mesh_meta.mesh(seg_id=seg_id,
                           merge_large_components=False,
@@ -46,9 +46,14 @@ def skeletonize(mesh_meta, seg_id, soma_pt=None, soma_thresh=7500,
                                                                     cc_vertex_thresh=cc_vertex_thresh,
                                                                     return_map=return_map)
 
-    tot_edges = merge_tips(mesh, all_paths, roots, tot_path_lengths,
-                           large_skel_path_threshold=large_skel_path_threshold, max_tip_d=max_tip_d)
-
+    if merge_components_at_tips is True:
+        tot_edges = merge_tips(mesh, all_paths, roots, tot_path_lengths,
+                               large_skel_path_threshold=large_skel_path_threshold, max_tip_d=max_tip_d)
+    else:
+        all_edges = []
+        for comp_paths in all_paths:
+            all_edges.append(utils.paths_to_edges(comp_paths))
+        tot_edges = np.vstack(all_edges)
 
     skel_verts, skel_edges = trimesh_vtk.remove_unused_verts(mesh.vertices, tot_edges)
     smooth_verts = smooth_graph(skel_verts, skel_edges, neighborhood=smooth_neighborhood)
@@ -149,7 +154,7 @@ def merge_tips(mesh, all_paths, roots, tot_path_lengths,
     tip_prizes = np.concatenate(tip_prizes)
 
     # make a kdtree with all the tips
-    tip_tree = KDTree(all_tips)
+    tip_tree = spatial.cKDTree(all_tips)
     
     # find the tips near one another
     close_tips = tip_tree.query_pairs(max_tip_d, output_type='ndarray')
