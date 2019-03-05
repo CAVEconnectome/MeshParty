@@ -353,15 +353,15 @@ class Skeleton:
 
         order_old = np.argsort(ds)
         new_ids = np.arange(len(ds))
-
-        new_labels = np.full(len(ds), 0)
+        node_labels = node_labels[order_old]
+        
         xyz = self.vertices[order_old]
-
+        
         order_map = dict(zip(order_old, new_ids))
         par_ids = np.array([order_map.get(nid, -1) for nid in self._parent_node_array[order_old]])
 
         swc_dat = np.hstack((new_ids[:, np.newaxis],
-                             new_labels[:, np.newaxis],
+                             node_labels[:, np.newaxis],
                              xyz / xyz_scaling,
                              radius[:, np.newaxis],
                              par_ids[:, np.newaxis]))
@@ -383,6 +383,9 @@ class Skeleton:
             radius = np.full(len(self.vertices), 1)
         elif np.issubdtype( type(radius), int):
             radius = np.full(len(self.vertices), radius)
+
+        if node_labels is None:
+            node_labels = np.full(len(self.vertices), 3)
 
         swc_dat = self._build_swc_array(node_labels, radius, xyz_scaling)
 
