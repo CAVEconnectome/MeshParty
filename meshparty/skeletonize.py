@@ -26,11 +26,12 @@ def skeletonize(mesh_meta, seg_id, soma_pt=None, soma_thresh=7500,
                 max_tip_d=2000, large_skel_path_threshold=5000,
                 cc_vertex_thresh=100, do_cross_section=False,
                 merge_components_at_tips=True, return_map=False):
+    
 
     mesh = mesh_meta.mesh(seg_id=seg_id,
                           merge_large_components=False,
                           remove_duplicate_vertices=False)
-    #mesh.stitch_overlapped_components()
+
     if return_map is True:
         all_paths, roots, tot_path_lengths, mesh_to_skeleton_map = skeletonize_components(mesh,
                                                                     soma_pt=soma_pt,
@@ -69,6 +70,7 @@ def skeletonize(mesh_meta, seg_id, soma_pt=None, soma_thresh=7500,
     output_tuple = output_tuple + (smooth_verts,)
     
     if return_map:
+        mesh_to_skeleton_map = utils.filter_shapes(tot_edges, mesh_to_skeleton_map)
         output_tuple = output_tuple + (mesh_to_skeleton_map,)
 
     return output_tuple
@@ -231,7 +233,7 @@ def skeletonize_components(mesh,
     if soma_pt is not None:
         soma_d = mesh.vertices - soma_pt[np.newaxis, :]
         soma_d = np.linalg.norm(soma_d, axis=1)
-        is_soma_pt = soma_d<7500
+        is_soma_pt = soma_d<soma_thresh
     else:
         is_soma_pt = None
         soma_d = None

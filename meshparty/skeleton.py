@@ -45,7 +45,7 @@ class SkeletonForest:
         lbls, count = np.unique(v_lbls, return_counts=True)
         lbl_order = np.argsort(count)[::-1]
         for lbl in lbls[lbl_order]:
-            v_filter = np.where(v_lbls == lbl)[0]
+            v_filter = np.flatnonzero(v_lbls == lbl)
             vertices_f, edges_f, filters = utils.reduce_vertices(vertices,
                                                                  edges,
                                                                  v_filter=v_filter,
@@ -232,12 +232,13 @@ class Skeleton:
     def paths(self):
         if self._paths is None:
             self._paths = self._compute_paths()
-        return self._paths.copy()
+        return self._paths
 
-    def distance_to_root(self, indices):
-        ds = sparse.csgraph.dijkstra(self.csgraph, directed=True,
-                                     indices=indices)
-        return ds[:, self.root]
+    @property
+    def distance_to_root(self):
+        ds = sparse.csgraph.dijkstra(self.csgraph, directed=False,
+                                     indices=self.root)
+        return ds
 
     def path_to_root(self, v_ind):
         '''
@@ -345,3 +346,46 @@ class Skeleton:
             n_ind = self._parent_node(n_ind)
             path.append(n_ind)
         return path, visited
+
+    def _build_swc_array(self, node_labels, radius, xyz_scaling):
+
+        ds = self.distance_to_root
+
+        order_old = np.argsort(ds)
+        new_ids = np.arange(len(ds))
+
+        new_labels = np.full(len(ds), 0)
+        xyz = self.vertices[order_old]
+
+        order_map = dict(zip(order_old, new_ids))
+        par_ids = np.array([order_map.get(nid, -1) for nid in self._parent_node_array[order_old]])
+
+        swc_dat = np.hstack((new_ids[:, np.newaxis],
+                             new_labels[:, np.newaxis],
+                             xyz / xyz_scaling,
+                             radius[:, np.newaxis],
+                             par_ids[:, np.newaxis]))
+        return swc_dat
+
+    def export_to_swc(self, filename, node_labels=None, radius=None, header=None, xyz_scaling=1000):
+        '''
+            Export a skeleton file to an swc file (see http://research.mssm.edu/cnic/swc.html)
+            n T x y z R P
+
+        '''
+
+        if header is None:
+            header_string = ''
+        else:
+            header_string = '\n'.join(['{}: {}'.format(k,v) for k, v in header.items()])
+
+        if radius is None:
+            radius = np.full(len(self.vertices), 1)
+        elif np.issubdtype( type(radius), int):
+            radius = np.full(len(self.vertices), radius)
+
+        swc_dat = self._build_swc_array(node_labels, radius, xyz_scaling)
+
+        with open(filename, 'w') as f:
+            np.savetxt(f, swc_dat, delimiter = ' ', header=header_string, comments='#',
+                       fmt=['%i', '%i', '%.3f', '%.3f', '%.3f', '%.3f', '%i'])
