@@ -87,27 +87,28 @@ def edge_averaged_vertex_property(edge_property, vertices, edges):
     return np.nanmean(vertex_property, axis=1)
     
 
-def reduce_vertices(vertices, vertex_list, v_filter=None, e_filter=None, return_filter_inds=False):
+def reduce_vertices(vertices, vertex_shape, v_filter=None, e_filter=None, return_filter_inds=False):
     '''
     Given a vertex and edge list, filters them down and remaps indices in the edge list.
     If no v or e filters are given, reduces the vertex list down to only those vertices
-    with edges in the edge list.
+    with values in the vertex_shape object.
     '''
     if v_filter is None:
-        v_filter = np.unique(vertex_list).astype(int)
+        v_filter = np.unique(vertex_shape).astype(int)
     if v_filter.dtype == bool:
         v_filter = np.flatnonzero(v_filter)
     if e_filter is None:
-        e_filter_bool = np.all(np.isin(vertex_list, v_filter), axis=1)
+        # Take all edges that have both vertices in the kept indices
+        e_filter_bool = np.all(np.isin(vertex_shape, v_filter), axis=1)
         e_filter = np.flatnonzero(e_filter_bool)
 
     vertices_n = vertices[v_filter]
-    vertex_list_n = filter_shapes(np.flatnonzero(v_filter), vertex_list[e_filter])
+    vertex_shape_n = filter_shapes(v_filter, vertex_shape[e_filter])
 
     if return_filter_inds:
-        return vertices_n, vertex_list_n, (v_filter, e_filter)
+        return vertices_n, vertex_shape_n, (v_filter, e_filter)
     else:
-        return vertices_n, vertex_list_n
+        return vertices_n, vertex_shape_n
 
 
 def create_csgraph(vertices, edges, euclidean_weight=True, directed=False):
