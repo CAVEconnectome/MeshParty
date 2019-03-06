@@ -233,6 +233,9 @@ def filter_shapes(node_ids, shapes):
     if not isinstance(node_ids[0], list) and \
             not isinstance(node_ids[0], np.ndarray):
         node_ids = [node_ids]
+    # If shapes is 1d, make into an Nx1 2d-array.
+    if len(shapes.shape) == 1:
+        shapes = shapes[:, np.newaxis]
     ndim = shapes.shape[1]
     if isinstance(node_ids, np.ndarray):
         all_node_ids = node_ids.flatten()
@@ -258,3 +261,15 @@ def filter_shapes(node_ids, shapes):
         filtered_shapes.append(f)
 
     return filtered_shapes
+
+def nanfilter_shapes(node_ids, shapes):
+    '''
+    Wraps filter_shapes to handle cases with nans.
+    '''
+    long_shapes = shapes.ravel()
+    ind_rows = ~np.isnan(long_shapes)
+    new_inds = filter_shapes(node_ids, long_shapes[ind_rows])
+
+    filtered_shape = np.full(len(long_shapes), np.nan)
+    filtered_shape[ind_rows] = new_inds[0].ravel()
+    return filtered_shape.resize(shapes.shape)

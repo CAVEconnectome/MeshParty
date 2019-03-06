@@ -32,20 +32,16 @@ def skeletonize(mesh_meta, seg_id, soma_pt=None, soma_thresh=7500,
                           merge_large_components=False,
                           remove_duplicate_vertices=False)
 
+    skeletonize_output = skeletonize_components(mesh,
+                                                soma_pt=soma_pt,
+                                                soma_thresh=soma_thresh,
+                                                invalidation_d=invalidation_d,
+                                                cc_vertex_thresh=cc_vertex_thresh,
+                                                return_map=return_map)
     if return_map is True:
-        all_paths, roots, tot_path_lengths, mesh_to_skeleton_map = skeletonize_components(mesh,
-                                                                    soma_pt=soma_pt,
-                                                                    soma_thresh=soma_thresh,
-                                                                    invalidation_d=invalidation_d,
-                                                                    cc_vertex_thresh=cc_vertex_thresh,
-                                                                    return_map=return_map)
+        all_paths, roots, tot_path_lengths, mesh_to_skeleton_map = skeletonize_output
     else:
-        all_paths, roots, tot_path_lengths = skeletonize_components(mesh,
-                                                                    soma_pt=soma_pt,
-                                                                    soma_thresh=soma_thresh,
-                                                                    invalidation_d=invalidation_d,
-                                                                    cc_vertex_thresh=cc_vertex_thresh,
-                                                                    return_map=return_map)
+        all_paths, roots, tot_path_lengths = skeletonize_output
 
     if merge_components_at_tips is True:
         tot_edges = merge_tips(mesh, all_paths, roots, tot_path_lengths,
@@ -70,7 +66,7 @@ def skeletonize(mesh_meta, seg_id, soma_pt=None, soma_thresh=7500,
     output_tuple = output_tuple + (smooth_verts,)
     
     if return_map:
-        mesh_to_skeleton_map = utils.filter_shapes(tot_edges, mesh_to_skeleton_map)
+        mesh_to_skeleton_map = utils.nanfilter_shapes(np.unique(tot_edges.ravel()), mesh_to_skeleton_map)
         output_tuple = output_tuple + (mesh_to_skeleton_map,)
 
     return output_tuple
@@ -250,22 +246,17 @@ def skeletonize_components(mesh,
                                                         labels == k)
 
             # run teasar on this component
+            teasar_output = mesh_teasar(mesh,
+                                        root=root,
+                                        root_ds=root_ds,
+                                        root_pred=pred,
+                                        valid=valid,
+                                        invalidation_d=invalidation_d,
+                                        return_map=return_map)
             if return_map is False:
-                paths, path_lengths = mesh_teasar(mesh,
-                                                  root=root,
-                                                  root_ds=root_ds,
-                                                  root_pred=pred,
-                                                  valid=valid,
-                                                  invalidation_d=invalidation_d,
-                                                  return_map=return_map)
+                paths, path_lengths = tesar_output
             else:
-                paths, path_lengths, mesh_to_skeleton_map_single = mesh_teasar(mesh,
-                                                                        root=root,
-                                                                        root_ds=root_ds,
-                                                                        root_pred=pred,
-                                                                        valid=valid,
-                                                                        invalidation_d=invalidation_d,
-                                                                        return_map=return_map)
+                paths, path_lengths, mesh_to_skeleton_map_single = teasar_output
                 mesh_to_skeleton_map[~np.isnan(mesh_to_skeleton_map_single)] = mesh_to_skeleton_map_single[~np.isnan(mesh_to_skeleton_map_single)]
 
   
