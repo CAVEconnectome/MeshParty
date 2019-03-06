@@ -262,14 +262,18 @@ def filter_shapes(node_ids, shapes):
 
     return filtered_shapes
 
+
 def nanfilter_shapes(node_ids, shapes):
     '''
-    Wraps filter_shapes to handle cases with nans.
+    Wraps filter_shapes to handle shapes with nans.
     '''
+    if not any(np.isnan(shapes)):
+        return filter_shapes(node_ids, shapes)
+        
     long_shapes = shapes.ravel()
     ind_rows = ~np.isnan(long_shapes)
     new_inds = filter_shapes(node_ids, long_shapes[ind_rows])
 
     filtered_shape = np.full(len(long_shapes), np.nan)
     filtered_shape[ind_rows] = new_inds[0].ravel()
-    return filtered_shape.resize(shapes.shape)
+    return filtered_shape.reshape(shapes.shape)

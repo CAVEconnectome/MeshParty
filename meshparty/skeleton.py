@@ -30,6 +30,7 @@ class SkeletonForest:
     def __init__(self, vertices, edges, vertex_properties={},
                  edge_properties={}, root=None):
         self._vertex_components = np.full(len(vertices), None)
+        self._vertex_order = np.full(len(vertices), 0, dtype=int)  # Vertices needs to come back in the same order as the original
         self._edge_components = np.full(len(edges), None)
         self._skeletons = []
         self._kdtree = None
@@ -44,6 +45,8 @@ class SkeletonForest:
         nc, v_lbls = sparse.csgraph.connected_components(bin_csgraph)
         lbls, count = np.unique(v_lbls, return_counts=True)
         lbl_order = np.argsort(count)[::-1]
+
+        ind_base = 0
         for lbl in lbls[lbl_order]:
             v_filter = np.flatnonzero(v_lbls == lbl)
             vertices_f, edges_f, filters = utils.reduce_vertices(vertices,
@@ -61,6 +64,8 @@ class SkeletonForest:
                 root_f = np.where(root == v_filter)[0][0]
             else:
                 root_f = None
+            self._vertex_order[v_filter] = ind_base + np.arange(len(vertices_f))
+            ind_base += len(vertices_f)
             self._skeletons.append(Skeleton(vertices_f, edges_f,
                                             vertex_properties_f,
                                             edge_properties_f,
@@ -73,7 +78,7 @@ class SkeletonForest:
     def vertices(self):
         vs_list = [skeleton.vertices for skeleton in self._skeletons]
         return np.vstack(vs_list)
-
+    
     @property
     def n_vertices(self):
         return len(self.vertices)
@@ -136,6 +141,16 @@ class SkeletonForest:
         else:
             return np.array([])
 
+    def remap_vertex_list(self, vertex_list):
+        '''
+        Given a vertex list from the original coordinates, returns the version
+        for the internally managed vertex list
+        '''
+        new_vertex_list = np.full(len(vertex_list), np.nan)
+        new_vertex_list[~np.isnan(vertex_list)] = np.take(self._vertex_order,
+                                                          vertex_list[~np.isnan(vertex_list)].astype(int))
+        return new_vertex_list
+        
 
 class Skeleton:
     def __init__(self, vertices, edges, vertex_properties={},

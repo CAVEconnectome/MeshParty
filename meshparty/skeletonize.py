@@ -553,17 +553,30 @@ def smooth_graph(verts, edges, neighborhood=2, iterations=100, r=.1):
     return new_verts
 
 
-def collapse_soma_skeleton(soma_pt, verts, edges, soma_d_thresh=12000):
+def collapse_soma_skeleton(soma_pt, verts, edges, soma_d_thresh=12000, mesh_to_skeleton_map=None):
     if soma_pt is not None:
         soma_pt_m = soma_pt[np.newaxis, :]
         dv = np.linalg.norm(verts - soma_pt_m, axis=1)
         soma_verts = np.where(dv < soma_d_thresh)[0]
         new_verts = np.vstack((verts, soma_pt_m))
         soma_i = verts.shape[0]
-        edges[np.isin(edges, soma_verts)] = soma_i
-        simple_verts, simple_edges = trimesh_vtk.remove_unused_verts(new_verts, edges)
+        edges_m = edges.copy()
+        edges_m[np.isin(edges, soma_verts)] = soma_i
+        
+        simple_verts, simple_edges = trimesh_vtk.remove_unused_verts(new_verts, edges_m)
         good_edges = ~(simple_edges[:, 0] == simple_edges[:, 1])
-        return simple_verts, simple_edges[good_edges]
+
+        if mesh_to_skeleton_map is not None:
+            new_mesh_to_skeleton_map = mesh_to_skeleton_map.copy()
+            remap_rows = np.isin(mesh_to_skeleton_map, soma_verts)
+            new_mesh_to_skeleton_map[remap_rows] = soma_i
+            new_mesh_to_skeleton_map = utils.nanfilter_shapes(np.unique(edges_m.ravel()),
+                                                                        new_mesh_to_skeleton_map)
+
+        if mesh_to_skeleton_map is None:
+            return simple_verts, simple_edges[good_edges]
+        else:
+            return simple_verts, simple_edges[good_edges], new_mesh_to_skeleton_map
     else:
         simple_verts, simple_edges = trimesh_vtk.remove_unused_verts(verts, edges)
         return simple_verts, simple_edges
