@@ -4,6 +4,16 @@ import networkx as nx
 import pcst_fast
 
 
+def large_component_filter(mesh, size_thresh=1000):
+    '''
+    Creates a mesh filter without any connected components less than a size threshold
+    '''
+    cc, labels = sparse.csgraph.connected_components(mesh.csgraph, directed=False)
+    uids, counts = np.unique(labels, return_counts=True)
+    good_labels = uids[counts>size_thresh]
+    return np.in1d(labels, good_labels)
+
+
 def connected_component_slice(G, ind=None, return_boolean=False):
     '''
     Gets a numpy slice of the connected component corresponding to a
@@ -23,10 +33,41 @@ def connected_component_slice(G, ind=None, return_boolean=False):
     else:
         return np.flatnonzero(labels == label)
 
+
+def dist_from_line(pts, line_bound_pts, axis):
+    ps = (pts[:, axis] - line_bound_pts[0, axis]) / (line_bound_pts[1, axis] - line_bound_pts[0, axis])
+    line_pts = np.multiply(ps[:,np.newaxis], line_bound_pts[1] - line_bound_pts[0]) + line_bound_pts[0]
+    ds = np.linalg.norm(pts - line_pts, axis=1)
+    return ds
+
+
+def filter_close_to_line(mesh, line_bound_pts, line_dist_th, axis=1):
+    line_pt_ord = np.argsort(line_bound_pts[:,axis])
+    below_top = mesh.vertices[:,axis] > line_bound_pts[line_pt_ord[0], axis] 
+    above_bot = mesh.vertices[:,axis] < line_bound_pts[line_pt_ord[1], axis] 
+    ds = dist_from_ais_line( mesh.vertices, line_bound_pts, axis)
+    is_close = (ds < line_dist_th) & below_top & above_bot
+    return is_close
+
+
+def mutual_closest_edges(mesh_a, mesh_b, distance_upper_bound=250):
+    a_ds, a_inds = mesh_a.kdtree.query(mesh_b.vertices,
+                                       distance_upper_bound=distance_upper_bound)
+    b_ds, b_inds = mesh_b.kdtree.query(mesh_a.vertices,
+                                       distance_upper_bound=distance_upper_bound)
+    mutual_closest = b_inds[a_inds[b_inds[~np.isinf(b_ds)]]] == b_inds[~np.isinf(b_ds)]
+
+    a_closest = a_inds[b_inds[~np.isinf(b_ds)]][mutual_closest]
+    b_closest = b_inds[~np.isinf(b_ds)][mutual_closest]
+    potential_edges = np.unique(np.vstack((a_closest, b_closest)), axis=1).T
+    return potential_edges[:, 0], potential_edges[:, 1]
+
+
 def indices_to_slice(inds, total_length):
     v = np.full(total_lenth, False)
     v[inds] = True
     return v
+
 
 def find_far_points(trimesh, start_ind=None, multicomponent=False):
     '''
@@ -269,7 +310,7 @@ def nanfilter_shapes(node_ids, shapes):
     '''
     if not any(np.isnan(shapes)):
         return filter_shapes(node_ids, shapes)
-        
+
     long_shapes = shapes.ravel()
     ind_rows = ~np.isnan(long_shapes)
     new_inds = filter_shapes(node_ids, long_shapes[ind_rows])

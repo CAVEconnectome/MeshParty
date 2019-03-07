@@ -738,7 +738,7 @@ class Mesh(trimesh.Trimesh):
     def _create_csgraph(self):
         """ Computes csgraph """
         if self.mesh_edges is not None:
-            edges = self.mesh_edges
+            edges = np.vstack((self.edges, self.mesh_edges))
         else:
             edges = self.edges
 
