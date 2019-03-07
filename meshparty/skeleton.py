@@ -30,8 +30,9 @@ class SkeletonForest:
     def __init__(self, vertices, edges, vertex_properties={},
                  edge_properties={}, root=None):
         self._vertex_components = np.full(len(vertices), None)
-        self._vertex_order = np.full(len(vertices), 0, dtype=int)  # Vertices needs to come back in the same order as the original
+        self._vertex_order = np.full(len(vertices), 0, dtype=int)  # Original order of vertices
         self._edge_components = np.full(len(edges), None)
+        self._vertex_lists = {}
         self._skeletons = []
         self._kdtree = None
         self._csgraph = None
@@ -141,6 +142,17 @@ class SkeletonForest:
         else:
             return np.array([])
 
+    def add_vertex_list(self, name, vertex_list, remap_from_original_order=False):
+        if remap_from_original_order:
+            self._vertex_lists[name] = self.remap_vertex_list(vertex_list)
+        else:
+            self._vertex_lists[name] = vertex_list
+
+
+    @property
+    def vertex_lists(self):
+        return self._vertex_lists
+
     def remap_vertex_list(self, vertex_list):
         '''
         Given a vertex list from the original coordinates, returns the version
@@ -150,7 +162,7 @@ class SkeletonForest:
         new_vertex_list[~np.isnan(vertex_list)] = np.take(self._vertex_order,
                                                           vertex_list[~np.isnan(vertex_list)].astype(int))
         return new_vertex_list
-        
+
 
 class Skeleton:
     def __init__(self, vertices, edges, vertex_properties={},

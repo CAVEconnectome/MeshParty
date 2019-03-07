@@ -827,7 +827,7 @@ class MaskedMesh(Mesh):
         # We need to express the mask
         if np.size(new_mask) != np.size(self.node_mask):
             # Assume it's in the masked frame
-            if np.size(new_mask) == np.size(self.vertices):
+            if np.size(new_mask) == self.vertices.shape[0]:
                 new_mask = self.map_boolean_to_unmasked(new_mask)
             else:
                 raise ValueError('Incompatible shape')
