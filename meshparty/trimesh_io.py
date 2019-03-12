@@ -818,7 +818,7 @@ class MaskedMesh(Mesh):
         '''
         return self._unmasked_size
 
-    def add_mask(self, new_mask, **kwargs):
+    def apply_mask(self, new_mask, **kwargs):
         '''
         Makes a new MaskedMesh by adding a new mask to the existing one.
         new_mask is a boolean array, either of the original length or the
@@ -830,7 +830,7 @@ class MaskedMesh(Mesh):
             if np.size(new_mask) == self.vertices.shape[0]:
                 new_mask = self.map_boolean_to_unmasked(new_mask)
             else:
-                raise ValueError('Incompatible shape')
+                raise ValueError('Incompatible shape. Must be either original length or current length of vertices.')
         joint_mask = self.node_mask * np.array(new_mask, dtype=bool)
 
         # Build dummy arrays in the unmasked size out of the current mesh
@@ -868,16 +868,19 @@ class MaskedMesh(Mesh):
         '''
         return unmasked_boolean[self.node_mask]
 
-    def filter_unmasked_indices(self, unmasked_indices, include_outside=True):
+    def filter_unmasked_indices(self, unmasked_shape, include_outside=True):
         '''
         For an array of indices in the original mesh, returns the indices filtered and remapped
-        for the masked mesh. Preserves the order of unmasked_indices.
+        for the masked mesh. Nans out rows not in the mask. Preserves the order of unmasked_indices.
         '''
-        filtered_indices = np.array([self.index_map[ind] for ind in unmasked_indices])
+        filtered_shape = utils.filter_shapes(self.indices_unmasked, unmasked_shape)
         if include_outside:
-            return filtered_indices
-        else:
-            return filtered_indices[~np.isnan[filtered_indices]]
+            long_shape = unmasked_shape.ravel()
+            within_mask = self.node_mask[long_shape].reshape(unmasked_shape.shape)
+            filtered_shape_all = np.full(unmasked_shape.shape, np.nan)
+            filtered_shape_all[np.all(within_mask==True, axis=1)] = filtered_shape
+            filtered_shape = filtered_shape_all
+        return filtered_shape
 
     @property
     def index_map(self):

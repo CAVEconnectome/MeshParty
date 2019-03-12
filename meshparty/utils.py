@@ -318,3 +318,16 @@ def nanfilter_shapes(node_ids, shapes):
     filtered_shape = np.full(len(long_shapes), np.nan)
     filtered_shape[ind_rows] = new_inds[0].ravel()
     return filtered_shape.reshape(shapes.shape)
+
+
+def path_from_predecessors(Ps, ind_start):
+    """
+    Build a path from an initial index to a target node based
+    on the target node predecessor row from a shortest path query.
+    """
+    path = []
+    next_ind = ind_start
+    while next_ind != -9999:
+        path.append(next_ind)
+        next_ind = Ps[next_ind]
+    return np.array(path)
