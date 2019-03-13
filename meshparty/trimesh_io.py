@@ -369,6 +369,7 @@ class Mesh(trimesh.Trimesh):
         self._csgraph = None
         self._nxgraph = None
         self._kdtree = None
+        self._ckdtree = None
 
     @property
     def nxgraph(self):
@@ -387,6 +388,12 @@ class Mesh(trimesh.Trimesh):
         if self._kdtree is None:
             self._kdtree = KDTree(self.vertices)
         return self._kdtree
+
+    @property
+    def ckdtree(self):
+        if self._ckdtree is None:
+            self._ckdtree = spatial.cKDTree(self.vertices)
+        return self._ckdtree
 
     @property
     def n_vertices(self):
@@ -873,14 +880,17 @@ class MaskedMesh(Mesh):
         For an array of indices in the original mesh, returns the indices filtered and remapped
         for the masked mesh. Nans out rows not in the mask. Preserves the order of unmasked_indices.
         '''
-        filtered_shape = utils.filter_shapes(self.indices_unmasked, unmasked_shape)
+        filtered_shape = utils.filter_shapes(self.indices_unmasked, unmasked_shape)[0]
         if include_outside:
             long_shape = unmasked_shape.ravel()
             within_mask = self.node_mask[long_shape].reshape(unmasked_shape.shape)
             filtered_shape_all = np.full(unmasked_shape.shape, np.nan)
-            filtered_shape_all[np.all(within_mask==True, axis=1)] = filtered_shape
+            if within_mask.ndim==1:
+                filtered_shape_all[within_mask==True] = filtered_shape.squeeze()
+            else:
+                filtered_shape_all[np.all(within_mask==True, axis=1)] = filtered_shape
             filtered_shape = filtered_shape_all
-        return filtered_shape
+        return filtered_shape.squeeze()
 
     @property
     def index_map(self):
