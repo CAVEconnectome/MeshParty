@@ -254,7 +254,7 @@ def skeletonize_components(mesh,
                                         invalidation_d=invalidation_d,
                                         return_map=return_map)
             if return_map is False:
-                paths, path_lengths = tesar_output
+                paths, path_lengths = teasar_output
             else:
                 paths, path_lengths, mesh_to_skeleton_map_single = teasar_output
                 mesh_to_skeleton_map[~np.isnan(mesh_to_skeleton_map_single)] = mesh_to_skeleton_map_single[~np.isnan(mesh_to_skeleton_map_single)]
