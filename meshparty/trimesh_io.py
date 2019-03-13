@@ -875,7 +875,7 @@ class MaskedMesh(Mesh):
         '''
         return unmasked_boolean[self.node_mask]
 
-    def filter_unmasked_indices(self, unmasked_shape, include_outside=True):
+    def filter_unmasked_indices(self, unmasked_shape, include_outside=False):
         '''
         For an array of indices in the original mesh, returns the indices filtered and remapped
         for the masked mesh. Nans out rows not in the mask. Preserves the order of unmasked_indices.
@@ -889,8 +889,11 @@ class MaskedMesh(Mesh):
                 filtered_shape_all[within_mask==True] = filtered_shape.squeeze()
             else:
                 filtered_shape_all[np.all(within_mask==True, axis=1)] = filtered_shape
-            filtered_shape = filtered_shape_all
-        return filtered_shape.squeeze()
+            filtered_shape = filtered_shape_all.astype(int).squeeze()
+        else:
+            if unmasked_shape.ndim == 1:
+                filtered_shape = filtered_shape.reshape((len(filtered_shape),))
+        return filtered_shape
 
     @property
     def index_map(self):
