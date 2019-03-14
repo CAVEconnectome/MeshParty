@@ -28,7 +28,7 @@ def load_from_json(path, use_smooth_vertices=False):
 
 class SkeletonForest:
     def __init__(self, vertices, edges, vertex_properties={},
-                 edge_properties={}, root=None):
+                 edge_properties={}, vertex_lists={}, root=None):
         self._vertex_components = np.full(len(vertices), None)
         self._vertex_order = np.full(len(vertices), 0, dtype=int)  # Original order of vertices
         self._edge_components = np.full(len(edges), None)
@@ -37,6 +37,7 @@ class SkeletonForest:
         self._kdtree = None
         self._csgraph = None
         self._csgraph_binary = None
+        self._root = None
 
         vertices = np.array(vertices)
         edges = np.array(edges)
@@ -63,6 +64,7 @@ class SkeletonForest:
             self._edge_components[filters[1]] = lbl
             if root in v_filter:
                 root_f = np.where(root == v_filter)[0][0]
+                self._root = ind_base + root_f
             else:
                 root_f = None
             self._vertex_order[v_filter] = ind_base + np.arange(len(vertices_f))
@@ -71,6 +73,10 @@ class SkeletonForest:
                                             vertex_properties_f,
                                             edge_properties_f,
                                             root=root_f))
+
+        for list_name, indices in vertex_lists.items():
+            self.add_vertex_list(list_name, indices, remap_from_original_order=True)
+
 
     def __getitem__(self, key):
         return self._skeletons[key]
@@ -114,12 +120,32 @@ class SkeletonForest:
             self._csgraph_binary = self._create_csgraph(euclidean_weight=False)
         return self._csgraph_binary
 
-    def vertex_property(self, property_name):
+    @property
+    def vertex_properties(self):
+        vp = {}
+        for vp_name in self._skeletons[0].vertex_properties.keys(): 
+            vp[vp_name] = self._vertex_property(vp_name)
+        return vp
+
+    @property
+    def edge_properties(self):
+        ep = {}
+        for ep_name in self._skeletons[0].edge_properties.keys(): 
+            ep[ep_name] = self._edge_property(ep_name)
+        return ep
+
+
+    @property
+    def root(self):
+        return self._root
+    
+
+    def _vertex_property(self, property_name):
         vp_list = [skeleton.vertex_properties[property_name]
                    for skeleton in self._skeletons if len(skeleton.vertices) > 1]
         return np.concatenate(vp_list)
 
-    def edge_property(self, property_name):
+    def _edge_property(self, property_name):
         ep_list = [skeleton.edge_properties[property_name]
                    for skeleton in self._skeletons]
         return np.concatenate(ep_list)
