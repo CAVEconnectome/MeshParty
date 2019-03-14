@@ -148,7 +148,7 @@ def _download_meshes_thread(args):
             print('file exists {}'.format(target_file))
             continue
         print('file does not exist {}'.format(target_file))
-       
+
         try:
             cv_mesh = cv.mesh.get(seg_id,
                                   remove_duplicate_vertices=remove_duplicate_vertices)
@@ -392,11 +392,14 @@ class Mesh(trimesh.Trimesh):
         """
         if self.body_count > 1:
             tin = _meshfix.PyTMesh(verbose)
-            tin.LoadArray(self.vertices, self.faces)
-            tin.RemoveSmallestComponents()
+            # tin.LoadArray(self.vertices, self.faces)
+            tin.load_array(self.vertices, self.faces)
+            tin.remove_smallest_components()
+            # tin.RemoveSmallestComponents()
 
             # Check if volume is 0 after isolated components have been removed
-            self.vertices, self.faces = tin.ReturnArrays()
+            # self.vertices, self.faces = tin.ReturnArrays()
+            self.vertices, self.faces = tin.return_arrays()
 
             self.fix_normals()
 
@@ -407,9 +410,11 @@ class Mesh(trimesh.Trimesh):
             wiggle = np.random.randn(self.n_vertices * 3).reshape(-1, 3) * 10
             self.vertices += wiggle
 
-        self.vertices, self.faces = _meshfix.CleanFromVF(self.vertices,
-                                                         self.faces,
-                                                         verbose=verbose)
+        # self.vertices, self.faces = _meshfix.CleanFromVF(self.vertices,
+        #                                                  self.faces,
+        #                                                  verbose=verbose)
+        self.vertices, self.faces = _meshfix.clean_from_arrays(
+            self.vertices, self.faces, verbose=verbose)
 
         self.fix_normals()
 
