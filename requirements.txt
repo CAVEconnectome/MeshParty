@@ -9,5 +9,6 @@ trimesh
 -e git+https://github.com/seung-lab/cloud-volume.git@graphene#egg=cloud-volume
 pyassimp
 pymeshfix
+pykdtree
 vtk
 pcst_fast

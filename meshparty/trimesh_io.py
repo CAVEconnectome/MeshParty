@@ -2,10 +2,12 @@ import numpy as np
 import h5py
 from scipy import spatial, sparse
 from sklearn import decomposition
+from pykdtree.kdtree import KDTree
 import os
 import networkx as nx
 import requests
 import time
+from collections import defaultdict
 
 import cloudvolume
 from multiwrapper import multiprocessing_utils as mu
@@ -166,7 +168,7 @@ def _download_meshes_thread(args):
 
             if fmt == "hdf5":
                 write_mesh_h5(f"{target_dir}/{seg_id}.h5", mesh.vertices,
-                              mesh.faces.flatten(),
+                          mesh.faces.flatten(),
                               mesh_edges=mesh.mesh_edges,
                               overwrite=overwrite)
             else:
@@ -269,7 +271,7 @@ class MeshMeta(object):
 
     def mesh(self, filename=None, seg_id=None, cache_mesh=True,
              merge_large_components=True, remove_duplicate_vertices=True,
-             overwrite_merge_large_components=False):
+             overwrite_merge_large_components=False, masked_mesh=False):
         """ Loads mesh either from cache, disk or google storage
 
         :param filename: str
@@ -294,10 +296,13 @@ class MeshMeta(object):
         if filename is not None:
             if filename not in self._mesh_cache:
                 vertices, faces, normals, mesh_edges = read_mesh(filename)
-
-                mesh = Mesh(vertices=vertices, faces=faces, normals=normals,
-                            mesh_edges=mesh_edges,
-                            process=remove_duplicate_vertices)
+                if masked_mesh:
+                    mesh = MaskedMesh(vertices=vertices, faces=faces, normals=normals,
+                                        mesh_edges=mesh_edges, process=False)
+                else:
+                    mesh = Mesh(vertices=vertices, faces=faces, normals=normals,
+                                mesh_edges=mesh_edges,
+                                process=remove_duplicate_vertices)
 
                 if (merge_large_components and mesh.mesh_edges is None) or \
                         overwrite_merge_large_components:
@@ -316,25 +321,33 @@ class MeshMeta(object):
         else:
             if self.disk_cache_path is not None:
                 if os.path.exists(self._filename(seg_id)):
-                    return self.mesh(filename=self._filename(seg_id),
+                    mesh = self.mesh(filename=self._filename(seg_id),
                                      cache_mesh=cache_mesh,
                                      merge_large_components=merge_large_components,
                                      overwrite_merge_large_components=overwrite_merge_large_components,
-                                     remove_duplicate_vertices=remove_duplicate_vertices)
+                                     remove_duplicate_vertices=remove_duplicate_vertices,
+                                     masked_mesh=masked_mesh)
+                    return mesh
 
             if seg_id not in self._mesh_cache:
                 cv_mesh = self.cv.mesh.get(seg_id,
-                                           remove_duplicate_vertices= remove_duplicate_vertices)
+                                           remove_duplicate_vertices = remove_duplicate_vertices)
                 faces = np.array(cv_mesh["faces"])
                 if (len(faces.shape) == 1):
                     faces = faces.reshape(-1, 3)
-                mesh = Mesh(vertices=cv_mesh["vertices"],
-                            faces=faces,
-                            process=remove_duplicate_vertices)
 
-                if (merge_large_components and mesh.mesh_edges is None) or \
-                        overwrite_merge_large_components:
-                    mesh.merge_large_components()
+                if masked_mesh:
+                    mesh = MaskedMesh(vertices=cv_mesh["vertices"],
+                                        faces=faces,
+                                        process=False)
+                else:
+                    mesh = Mesh(vertices=cv_mesh["vertices"],
+                                faces=faces,
+                                process=remove_duplicate_vertices)
+
+                    if (merge_large_components and mesh.mesh_edges is None) or \
+                            overwrite_merge_large_components:
+                        mesh.merge_large_components()
 
                 if cache_mesh and len(self._mesh_cache) < self.cache_size:
                     self._mesh_cache[seg_id] = mesh
@@ -348,7 +361,6 @@ class MeshMeta(object):
 
         return mesh
 
-
 class Mesh(trimesh.Trimesh):
     def __init__(self, *args, mesh_edges=None, **kwargs):
         super(Mesh, self).__init__(*args, **kwargs)
@@ -356,6 +368,8 @@ class Mesh(trimesh.Trimesh):
         self._mesh_edges = mesh_edges
         self._csgraph = None
         self._nxgraph = None
+        self._kdtree = None
+        self._ckdtree = None
 
     @property
     def nxgraph(self):
@@ -368,6 +382,18 @@ class Mesh(trimesh.Trimesh):
         if self._csgraph is None:
             self._csgraph = self._create_csgraph()
         return self._csgraph
+
+    @property
+    def kdtree(self):
+        if self._kdtree is None:
+            self._kdtree = KDTree(self.vertices)
+        return self._kdtree
+
+    @property
+    def ckdtree(self):
+        if self._ckdtree is None:
+            self._ckdtree = spatial.cKDTree(self.vertices)
+        return self._ckdtree
 
     @property
     def n_vertices(self):
@@ -489,8 +515,7 @@ class Mesh(trimesh.Trimesh):
             sample_n_points = np.min([sample_n_points, len(self.vertices)])
 
         dists, node_ids = self.kdtree.query(center_coords, sample_n_points,
-                                            distance_upper_bound=max_dist,
-                                            n_jobs=-1)
+                                            distance_upper_bound=max_dist)
         if n_points is not None:
             if sample_n_points > n_points:
                 if fisheye:
@@ -580,44 +605,14 @@ class Mesh(trimesh.Trimesh):
                                     return_faces=return_faces,
                                     pc_norm=pc_norm)
 
-    def _filter_shapes(self, node_ids, shapes):
-        """ node_ids has to be sorted! """
-        if not isinstance(node_ids[0], list) and \
-                not isinstance(node_ids[0], np.ndarray):
-            node_ids = [node_ids]
-        ndim = shapes.shape[1]
-        if isinstance(node_ids, np.ndarray):
-            all_node_ids = node_ids.flatten()
-        else:
-            all_node_ids = np.concatenate(node_ids)
-
-        filter_ = np.in1d(shapes[:, 0], all_node_ids)
-        pre_filtered_shapes = shapes[filter_].copy()
-        for k in range(1, ndim):
-            filter_ = np.in1d(pre_filtered_shapes[:, k], all_node_ids)
-            pre_filtered_shapes = pre_filtered_shapes[filter_]
-
-        filtered_shapes = []
-
-        for ns in node_ids:
-            f = pre_filtered_shapes[np.in1d(pre_filtered_shapes[:, 0], ns)]
-            for k in range(1, ndim):
-                f = f[np.in1d(f[:, k], ns)]
-
-            f = np.unique(np.concatenate([f.flatten(), ns]),
-                          return_inverse=True)[1][:-len(ns)].reshape(-1, ndim)
-
-            filtered_shapes.append(f)
-
-        return filtered_shapes
 
     def _filter_faces(self, node_ids):
         """ node_ids has to be sorted! """
-        return self._filter_shapes(node_ids, self.faces)
+        return utils.filter_shapes(node_ids, self.faces)
 
     def _filter_mesh_edges(self, node_ids):
         """ node_ids has to be sorted! """
-        return self._filter_shapes(node_ids, self.mesh_edges)
+        return utils.filter_shapes(node_ids, self.mesh_edges)
 
     def get_local_meshes(self, n_points, max_dist=np.inf, center_node_ids=None,
                          center_coords=None, pc_align=False, pc_norm=False,
@@ -750,9 +745,163 @@ class Mesh(trimesh.Trimesh):
     def _create_csgraph(self):
         """ Computes csgraph """
         if self.mesh_edges is not None:
-            edges = self.mesh_edges
+            edges = np.vstack((self.edges, self.mesh_edges))
         else:
             edges = self.edges
 
         return utils.create_csgraph(self.vertices, edges, euclidean_weight=True,
                                     directed=False)
+
+class MaskedMesh(Mesh):
+    def __init__(self, *args, node_mask=None, unmasked_size=None, mesh_edges=None, **kwargs):
+        if 'vertices' in kwargs:
+            vertices_all = kwargs.pop('vertices')
+        else:
+            vertices_all = args[0]
+
+        if 'faces' in kwargs:
+            faces_all = kwargs.pop('faces')
+        else:
+            # If faces are in args, vertices must also have been in args
+            faces_all = args[1]
+
+        if unmasked_size is None:
+            if node_mask is not None:
+                unmasked_size = len(node_mask)
+            else:
+                unmasked_size = len(vertices_all)
+        if unmasked_size < len(vertices_all):
+            raise ValueError('Original size cannot be smaller than current size')
+        self._unmasked_size = unmasked_size
+
+        if node_mask is None:
+            node_mask = np.full(self.unmasked_size, True, dtype=bool)
+        elif node_mask.dtype is not bool:
+            node_mask_inds = node_mask.copy()
+            node_mask = np.full(self.unmasked_size, False, dtype=bool)
+            node_mask[node_mask_inds] = True
+
+        if len(node_mask) != unmasked_size:
+            raise ValueError('The node mask must be the same length as the unmaked size')
+
+        self._node_mask = node_mask
+
+        if any(self.node_mask == False):
+            nodes_f = vertices_all[self.node_mask]
+            faces_f = utils.filter_shapes(np.flatnonzero(self.node_mask), faces_all)[0]
+        else:
+            nodes_f, faces_f = vertices_all, faces_all
+
+        if mesh_edges is not None:
+            kwargs['mesh_edges'] = utils.filter_shapes(np.flatnonzero(self.node_mask), mesh_edges)[0]
+
+        new_args = (nodes_f, faces_f)
+        if len(args) > 2:
+            new_args += args[2:]
+        if kwargs.get('process', False):
+            print('No silent changing of the mesh is allowed')
+        kwargs['process'] = False
+        super(MaskedMesh, self).__init__(*new_args, **kwargs)
+        self._index_map = None
+
+    @property
+    def node_mask(self):
+        '''
+        Returns the node mask currently applied to the data
+        '''
+        return self._node_mask
+
+    @property
+    def indices_unmasked(self):
+        '''
+            Gets the indices of nodes in the filtered mesh in the unmasked array
+        '''
+        return np.flatnonzero(self.node_mask)
+
+    @property
+    def unmasked_size(self):
+        '''
+        Returns the unmasked number of nodes in the mesh
+        '''
+        return self._unmasked_size
+
+    def apply_mask(self, new_mask, **kwargs):
+        '''
+        Makes a new MaskedMesh by adding a new mask to the existing one.
+        new_mask is a boolean array, either of the original length or the
+        masked length (in which case it is padded with zeros appropriately).
+        '''
+        # We need to express the mask
+        if np.size(new_mask) != np.size(self.node_mask):
+            # Assume it's in the masked frame
+            if np.size(new_mask) == self.vertices.shape[0]:
+                new_mask = self.map_boolean_to_unmasked(new_mask)
+            else:
+                raise ValueError('Incompatible shape. Must be either original length or current length of vertices.')
+        joint_mask = self.node_mask * np.array(new_mask, dtype=bool)
+
+        # Build dummy arrays in the unmasked size out of the current mesh
+        vertices_unmask = np.zeros((self.unmasked_size, 3))
+        vertices_unmask[self.node_mask] = self.vertices
+
+        faces_unmask = np.empty(self.faces.shape)
+        for i in range(3):
+            faces_unmask[:, i] = self.indices_unmasked[self.faces[:, i]]
+
+        return MaskedMesh(vertices_unmask,
+                          faces_unmask,
+                          node_mask=joint_mask,
+                          unmasked_size=self.unmasked_size,
+                          mesh_edges=self.mesh_edges,
+                          **kwargs)
+
+    def map_indices_to_unmasked(self, unmapped_indices):
+        '''
+        For a set of masked indices, returns the corresponding unmasked indices
+        '''
+        return self.indices_unmasked[unmapped_indices]
+
+    def map_boolean_to_unmasked(self, unmapped_boolean):
+        '''
+        For a boolean index in the masked indices, returns the corresponding unmasked boolean index
+        '''
+        full_boolean = np.full(self.unmasked_size, False)
+        full_boolean[self.node_mask] = unmapped_boolean
+        return full_boolean
+
+    def filter_unmasked_boolean(self, unmasked_boolean):
+        '''
+        For an unmasked boolean slice, returns a boolean slice filtered to the masked mesh
+        '''
+        return unmasked_boolean[self.node_mask]
+
+    def filter_unmasked_indices(self, unmasked_shape, include_outside=False):
+        '''
+        For an array of indices in the original mesh, returns the indices filtered and remapped
+        for the masked mesh. Nans out rows not in the mask. Preserves the order of unmasked_indices.
+        '''
+        filtered_shape = utils.filter_shapes(self.indices_unmasked, unmasked_shape)[0]
+        if include_outside:
+            long_shape = unmasked_shape.ravel()
+            within_mask = self.node_mask[long_shape].reshape(unmasked_shape.shape)
+            filtered_shape_all = np.full(unmasked_shape.shape, np.nan)
+            if within_mask.ndim==1:
+                filtered_shape_all[within_mask==True] = filtered_shape.squeeze()
+            else:
+                filtered_shape_all[np.all(within_mask==True, axis=1)] = filtered_shape
+            filtered_shape = filtered_shape_all.astype(int).squeeze()
+        else:
+            if unmasked_shape.ndim == 1:
+                filtered_shape = filtered_shape.reshape((len(filtered_shape),))
+        return filtered_shape
+
+    @property
+    def index_map(self):
+        '''
+        A dict mapping global indices into the masked mesh indices.
+        '''
+        if self._index_map is None:
+            self._index_map = defaultdict(lambda: np.nan)
+            for ii, index in enumerate(self.indices_unmasked):
+                self._index_map[index] = ii
+        return self._index_map

@@ -4,7 +4,17 @@ import networkx as nx
 import pcst_fast
 
 
-def connected_component_slice(G, ind=None):
+def large_component_filter(mesh, size_thresh=1000):
+    '''
+    Creates a mesh filter without any connected components less than a size threshold
+    '''
+    cc, labels = sparse.csgraph.connected_components(mesh.csgraph, directed=False)
+    uids, counts = np.unique(labels, return_counts=True)
+    good_labels = uids[counts>size_thresh]
+    return np.in1d(labels, good_labels)
+
+
+def connected_component_slice(G, ind=None, return_boolean=False):
     '''
     Gets a numpy slice of the connected component corresponding to a
     given index. If no index is specified, the slice is of the largest
@@ -17,7 +27,46 @@ def connected_component_slice(G, ind=None):
         label = label_vals[ind]
     else:
         label = labels[ind]
-    return np.where(labels == label)[0]
+
+    if return_boolean:
+        return labels == label
+    else:
+        return np.flatnonzero(labels == label)
+
+
+def dist_from_line(pts, line_bound_pts, axis):
+    ps = (pts[:, axis] - line_bound_pts[0, axis]) / (line_bound_pts[1, axis] - line_bound_pts[0, axis])
+    line_pts = np.multiply(ps[:,np.newaxis], line_bound_pts[1] - line_bound_pts[0]) + line_bound_pts[0]
+    ds = np.linalg.norm(pts - line_pts, axis=1)
+    return ds
+
+
+def filter_close_to_line(mesh, line_bound_pts, line_dist_th, axis=1):
+    line_pt_ord = np.argsort(line_bound_pts[:,axis])
+    below_top = mesh.vertices[:,axis] > line_bound_pts[line_pt_ord[0], axis] 
+    above_bot = mesh.vertices[:,axis] < line_bound_pts[line_pt_ord[1], axis] 
+    ds = dist_from_ais_line( mesh.vertices, line_bound_pts, axis)
+    is_close = (ds < line_dist_th) & below_top & above_bot
+    return is_close
+
+
+def mutual_closest_edges(mesh_a, mesh_b, distance_upper_bound=250):
+    a_ds, a_inds = mesh_a.kdtree.query(mesh_b.vertices,
+                                       distance_upper_bound=distance_upper_bound)
+    b_ds, b_inds = mesh_b.kdtree.query(mesh_a.vertices,
+                                       distance_upper_bound=distance_upper_bound)
+    mutual_closest = b_inds[a_inds[b_inds[~np.isinf(b_ds)]]] == b_inds[~np.isinf(b_ds)]
+
+    a_closest = a_inds[b_inds[~np.isinf(b_ds)]][mutual_closest]
+    b_closest = b_inds[~np.isinf(b_ds)][mutual_closest]
+    potential_edges = np.unique(np.vstack((a_closest, b_closest)), axis=1).T
+    return potential_edges[:, 0], potential_edges[:, 1]
+
+
+def indices_to_slice(inds, total_length):
+    v = np.full(total_lenth, False)
+    v[inds] = True
+    return v
 
 
 def find_far_points(trimesh, start_ind=None, multicomponent=False):
@@ -79,29 +128,28 @@ def edge_averaged_vertex_property(edge_property, vertices, edges):
     return np.nanmean(vertex_property, axis=1)
     
 
-def reduce_vertices(vertices, edges, v_filter=None, e_filter=None, return_filter_inds=False):
+def reduce_vertices(vertices, vertex_shape, v_filter=None, e_filter=None, return_filter_inds=False):
     '''
     Given a vertex and edge list, filters them down and remaps indices in the edge list.
     If no v or e filters are given, reduces the vertex list down to only those vertices
-    with edges in the edge list.
+    with values in the vertex_shape object.
     '''
     if v_filter is None:
-        v_filter = np.unique(edges).astype(int)
+        v_filter = np.unique(vertex_shape).astype(int)
+    if v_filter.dtype == bool:
+        v_filter = np.flatnonzero(v_filter)
     if e_filter is None:
-        e_filter_bool = np.isin(edges[:,0], v_filter) & np.isin(edges[:,1], v_filter)
-        e_filter = np.where(e_filter_bool)[0]
-    
+        # Take all edges that have both vertices in the kept indices
+        e_filter_bool = np.all(np.isin(vertex_shape, v_filter), axis=1)
+        e_filter = np.flatnonzero(e_filter_bool)
+
     vertices_n = vertices[v_filter]
-    vmap = dict(zip(v_filter, np.arange(len(v_filter))))
-    
-    edges_f = edges[e_filter].copy()
-    edges_n = np.stack((np.fromiter((vmap[x] for x in edges_f[:,0]), dtype=int),
-                        np.fromiter((vmap[x] for x in edges_f[:,1]), dtype=int))).T
+    vertex_shape_n = filter_shapes(v_filter, vertex_shape[e_filter])
 
     if return_filter_inds:
-        return vertices_n, edges_n, (v_filter, e_filter)
+        return vertices_n, vertex_shape_n, (v_filter, e_filter)
     else:
-        return vertices_n, edges_n
+        return vertices_n, vertex_shape_n
 
 
 def create_csgraph(vertices, edges, euclidean_weight=True, directed=False):
@@ -219,3 +267,67 @@ def get_steiner_mst(trimesh, positions, d_upper_bound=1000):
     for i in range(2):
         mst_edges_red[:, i] = np.searchsorted(mst_verts, new_edges[:, i])
     return mst_verts_red, mst_edges_red
+
+
+def filter_shapes(node_ids, shapes):
+    """ node_ids has to be sorted! """
+    if not isinstance(node_ids[0], list) and \
+            not isinstance(node_ids[0], np.ndarray):
+        node_ids = [node_ids]
+    # If shapes is 1d, make into an Nx1 2d-array.
+    if len(shapes.shape) == 1:
+        shapes = shapes[:, np.newaxis]
+    ndim = shapes.shape[1]
+    if isinstance(node_ids, np.ndarray):
+        all_node_ids = node_ids.flatten()
+    else:
+        all_node_ids = np.concatenate(node_ids)
+
+    filter_ = np.in1d(shapes[:, 0], all_node_ids)
+    pre_filtered_shapes = shapes[filter_].copy()
+    for k in range(1, ndim):
+        filter_ = np.in1d(pre_filtered_shapes[:, k], all_node_ids)
+        pre_filtered_shapes = pre_filtered_shapes[filter_]
+
+    filtered_shapes = []
+
+    for ns in node_ids:
+        f = pre_filtered_shapes[np.in1d(pre_filtered_shapes[:, 0], ns)]
+        for k in range(1, ndim):
+            f = f[np.in1d(f[:, k], ns)]
+
+        f = np.unique(np.concatenate([f.flatten(), ns]),
+                      return_inverse=True)[1][:-len(ns)].reshape(-1, ndim)
+
+        filtered_shapes.append(f)
+
+    return filtered_shapes
+
+
+def nanfilter_shapes(node_ids, shapes):
+    '''
+    Wraps filter_shapes to handle shapes with nans.
+    '''
+    if not any(np.isnan(shapes)):
+        return filter_shapes(node_ids, shapes)
+
+    long_shapes = shapes.ravel()
+    ind_rows = ~np.isnan(long_shapes)
+    new_inds = filter_shapes(node_ids, long_shapes[ind_rows])
+
+    filtered_shape = np.full(len(long_shapes), np.nan)
+    filtered_shape[ind_rows] = new_inds[0].ravel()
+    return filtered_shape.reshape(shapes.shape)
+
+
+def path_from_predecessors(Ps, ind_start):
+    """
+    Build a path from an initial index to a target node based
+    on the target node predecessor row from a shortest path query.
+    """
+    path = []
+    next_ind = ind_start
+    while next_ind != -9999:
+        path.append(next_ind)
+        next_ind = Ps[next_ind]
+    return np.array(path)
