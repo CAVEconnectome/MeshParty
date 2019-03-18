@@ -5,6 +5,13 @@ from meshparty import skeleton
 
 
 def write_skeleton_h5(sk, filename, overwrite=False):
+    '''
+    Write a skeleton and its properties to an hdf5 file.
+
+    :param sk: Skeleton
+    :param filename: String. Filename of skeleton file.
+    :param overwrite: Boolean, (default False). Allows overwriting.
+    '''
     write_skeleton_h5_by_part(filename, sk.vertices, sk.edges,
                               sk.vertex_properties, sk.edge_properties,
                               sk.vertex_lists, sk.root, overwrite=overwrite)
@@ -66,6 +73,11 @@ def read_skeleton_h5_by_part(filename):
 
 
 def read_skeleton_h5(filename):
+    '''
+    Reads a skeleton and its properties from an hdf5 file.
+
+    :param filename: String. Filename of skeleton file.
+    '''
     vertices, edges, vertex_properties, edge_properties, vertex_lists, root = read_skeleton_h5_by_part(
         filename)
     return skeleton.SkeletonForest(vertices=vertices,
