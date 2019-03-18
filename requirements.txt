@@ -8,7 +8,7 @@ multiwrapper
 trimesh
 -e git+https://github.com/seung-lab/cloud-volume.git@graphene#egg=cloud-volume
 pyassimp
-pymeshfix
+pymeshfix>=0.12.3
 pykdtree
 vtk
 pcst_fast
