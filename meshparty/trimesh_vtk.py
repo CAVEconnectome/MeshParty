@@ -51,7 +51,7 @@ def graph_to_vtk(vertices, edges):
       to a vtkPolyData object
 
         :param vertices: a Nx3 numpy array of vertex locations
-        :param eges: a Mx2 numpy array of vertex connectivity
+        :param edges: a Mx2 numpy array of vertex connectivity
         where the values are the indexes of connected vertices
 
         :return: vtkPolyData
@@ -283,7 +283,7 @@ def vtk_super_basic(actors, camera=None, do_save=False, folder=".", back_color=(
     ren.SetBackground(*back_color)
     # create a renderwindowinteractor
     iren = vtk.vtkRenderWindowInteractor()
-    iren.SetRenderWindow(renWin)
+    iren.SetRenderWindow(renWin)    
 
     for a in actors:
         # assign actor to the renderer
@@ -314,14 +314,14 @@ def make_mesh_actor(mesh, color=(0, 1, 0),
     if vertex_scalars is not None:
         mesh_poly.GetPointData().SetScalars(numpy_to_vtk(vertex_scalars))
     mesh_mapper = vtk.vtkPolyDataMapper()
-    if calc_normals:
+    if calc_normals and mesh.mesh_edges is None:
         norms = vtk.vtkTriangleMeshPointNormals()
         norms.SetInputData(mesh_poly)
         mesh_mapper.SetInputConnection(norms.GetOutputPort())
     else:
         mesh_mapper.SetInputData(mesh_poly)
     mesh_actor = vtk.vtkActor()
-    
+
     if lut is not None:
         mesh_mapper.SetLookupTable(lut)
     mesh_mapper.ScalarVisibilityOn()
@@ -329,3 +329,93 @@ def make_mesh_actor(mesh, color=(0, 1, 0),
     mesh_actor.GetProperty().SetColor(*color)
     mesh_actor.GetProperty().SetOpacity(opacity)
     return mesh_actor
+
+
+def vtk_skeleton_actor(sk,
+                       edge_property=None,
+                       normalize_property=True,
+                       color=(0, 0, 0),
+                       line_width=3,
+                       opacity=0.7,
+                       lut_map=None):
+    sk_mesh = graph_to_vtk(sk.vertices, sk.edges)
+    mapper = vtk.vtkPolyDataMapper()
+    mapper.SetInputData(sk_mesh)
+    if edge_property is not None:
+        data = sk.edge_properties[edge_property]
+        if normalize_property:
+            data = data / np.nanmax(data)
+        sk_mesh.GetCellData().SetScalars(numpy_to_vtk(data))
+        lut = vtk.vtkLookupTable()
+        if lut_map is not None:
+            lut_map(lut)
+        lut.Build()
+        mapper.SetLookupTable(lut)
+
+    actor = vtk.vtkActor()
+    actor.SetMapper(mapper)
+    actor.GetProperty().SetLineWidth(line_width)
+    actor.GetProperty().SetOpacity(opacity)
+    actor.GetProperty().SetColor(color)
+    return actor
+
+
+def make_point_cloud_actor(xyz,
+                           size=100,
+                           color=(0, 0, 0),
+                           opacity=0.5):
+
+    points = vtk.vtkPoints()
+    points.SetData(numpy_to_vtk(xyz, deep=True))
+
+    pc = vtk.vtkPolyData()
+    pc.SetPoints(points)
+
+    if np.isscalar(size):
+        size = np.full(len(xyz), size)
+    elif len(size) != len(xyz):
+        raise ValueError('Size must be either a scalar or an len(xyz) x 1 array')
+    pc.GetPointData().SetScalars(numpy_to_vtk(size))
+
+    ss = vtk.vtkSphereSource()
+    ss.SetRadius(1)
+
+    glyph = vtk.vtkGlyph3D()
+    glyph.SetInputData(pc)
+
+    glyph.SetSourceConnection(ss.GetOutputPort())
+    glyph.SetScaleModeToScaleByScalar()
+    glyph.ScalingOn()
+    glyph.Update()
+
+    mapper = vtk.vtkPolyDataMapper()
+    mapper.SetInputConnection(glyph.GetOutputPort())
+
+    actor = vtk.vtkActor()
+    mapper.ScalarVisibilityOn()
+    actor.SetMapper(mapper)
+    actor.GetProperty().SetColor(*color)
+    actor.GetProperty().SetOpacity(opacity)
+
+    return actor
+
+def vtk_linked_point_actor(vertices_a, inds_a,
+                           vertices_b, inds_b,
+                           line_width=1, color=(0, 0, 0), opacity=0.2):
+    if len(inds_a) != len(inds_b):
+        raise ValueError('Linked points must have the same length')
+
+    link_verts = np.vstack((vertices_a[inds_a], vertices_b[inds_b]))
+    link_edges = np.vstack((np.arange(len(inds_a)),
+                            len(inds_a)+np.arange(len(inds_b))))
+    link_poly = trimesh_vtk.graph_to_vtk(link_verts, link_edges.T)
+
+    mapper = vtk.vtkPolyDataMapper()
+    mapper.SetInputData(link_poly)
+
+    link_actor = vtk.vtkActor()
+    link_actor.SetMapper(mapper)
+    link_actor.GetProperty().SetLineWidth(line_width)
+    link_actor.GetProperty().SetColor(color)
+    link_actor.GetProperty().SetOpacity(opacity)
+    return link_actor
