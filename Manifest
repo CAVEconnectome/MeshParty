@@ -1,3 +1,4 @@
 include requirements.txt
 include test_requirements.txt
-LICENCE
+include LICENCE
+include README.md
