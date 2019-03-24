@@ -853,11 +853,18 @@ class MaskedMesh(Mesh):
         for i in range(3):
             faces_unmask[:, i] = self.indices_unmasked[self.faces[:, i]]
 
+        if self.mesh_edges is not None:
+            mesh_edges_unmask = np.empty(self.mesh_edges.shape)
+            for i in range(self.mesh_edges.shape[1]):
+                mesh_edges_unmask[:, i] = self.indices_unmasked[self.mesh_edges[:, i]]
+        else:
+            mesh_edges_unmask = None
+
         return MaskedMesh(vertices_unmask,
                           faces_unmask,
                           node_mask=joint_mask,
                           unmasked_size=self.unmasked_size,
-                          mesh_edges=self.mesh_edges,
+                          mesh_edges=mesh_edges_unmask,
                           **kwargs)
 
     def map_indices_to_unmasked(self, unmapped_indices):
