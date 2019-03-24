@@ -85,7 +85,7 @@ class SkeletonForest:
     def vertices(self):
         vs_list = [skeleton.vertices for skeleton in self._skeletons]
         return np.vstack(vs_list)
-    
+
     @property
     def n_vertices(self):
         return len(self.vertices)
@@ -123,14 +123,14 @@ class SkeletonForest:
     @property
     def vertex_properties(self):
         vp = {}
-        for vp_name in self._skeletons[0].vertex_properties.keys(): 
+        for vp_name in self._skeletons[0].vertex_properties.keys():
             vp[vp_name] = self._vertex_property(vp_name)
         return vp
 
     @property
     def edge_properties(self):
         ep = {}
-        for ep_name in self._skeletons[0].edge_properties.keys(): 
+        for ep_name in self._skeletons[0].edge_properties.keys():
             ep[ep_name] = self._edge_property(ep_name)
         return ep
 
@@ -138,7 +138,7 @@ class SkeletonForest:
     @property
     def root(self):
         return self._root
-    
+
 
     def _vertex_property(self, property_name):
         vp_list = [skeleton.vertex_properties[property_name]
@@ -400,27 +400,6 @@ class Skeleton:
             path.append(n_ind)
         return path, visited
 
-    def _build_swc_array(self, node_labels, radius, xyz_scaling):
-        '''
-        Helper function for producing the numpy table for an swc.        
-        '''
-        ds = self.distance_to_root
-        order_old = np.argsort(ds)
-        new_ids = np.arange(len(ds))
-        order_map = dict(zip(order_old, new_ids))
-
-        node_labels = node_labels[order_old]
-        xyz = self.vertices[order_old]
-        radius = radius[order_old]
-        par_ids = np.array([order_map.get(nid, -1) for nid in self._parent_node_array[order_old]])
-
-        swc_dat = np.hstack((new_ids[:, np.newaxis],
-                             node_labels[:, np.newaxis],
-                             xyz / xyz_scaling,
-                             radius[:, np.newaxis] / xyz_scaling,
-                             par_ids[:, np.newaxis]))
-        return swc_dat
-
     def export_to_swc(self, filename, node_labels=None, radius=None, header=None, xyz_scaling=1000):
         '''
         Export a skeleton file to an swc file
@@ -435,25 +414,8 @@ class Skeleton:
         :param header: Dict, default None. Each key value pair in the dict becomes
                        a parameter line in the swc header.
         :param xyz_scaling: Number, default 1000. Down-scales spatial units from the skeleton's units to
-                            whatever is desired by the swc. E.g.
-
+                            whatever is desired by the swc. E.g. nm to microns has scaling=1000.
         '''
 
-        if header is None:
-            header_string = ''
-        else:
-            header_string = '\n'.join(['{}: {}'.format(k, v) for k, v in header.items()])
-
-        if radius is None:
-            radius = np.full(len(self.vertices), 1000)
-        elif np.issubdtype(type(radius), int):
-            radius = np.full(len(self.vertices), radius)
-
-        if node_labels is None:
-            node_labels = np.full(len(self.vertices), 3)
-
-        swc_dat = self._build_swc_array(node_labels, radius, xyz_scaling)
-
-        with open(filename, 'w') as f:
-            np.savetxt(f, swc_dat, delimiter=' ', header=header_string, comments='#',
-                       fmt=['%i', '%i', '%.3f', '%.3f', '%.3f', '%.3f', '%i'])
+        skeleton_io.export_to_swc(self, filename, node_labels=node_labels,
+                                  radius=radius, header=header, xyz_scaling=xyz_scaling)

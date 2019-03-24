@@ -271,7 +271,8 @@ class MeshMeta(object):
 
     def mesh(self, filename=None, seg_id=None, cache_mesh=True,
              merge_large_components=True, remove_duplicate_vertices=True,
-             overwrite_merge_large_components=False, masked_mesh=False):
+             overwrite_merge_large_components=False, mend_cross_chunk=True,
+             force_download=False, masked_mesh=False):
         """ Loads mesh either from cache, disk or google storage
 
         :param filename: str
@@ -319,7 +320,7 @@ class MeshMeta(object):
                               mesh.faces.flatten(),
                               mesh_edges=mesh.mesh_edges)
         else:
-            if self.disk_cache_path is not None:
+            if self.disk_cache_path is not None and force_download is False:
                 if os.path.exists(self._filename(seg_id)):
                     mesh = self.mesh(filename=self._filename(seg_id),
                                      cache_mesh=cache_mesh,
@@ -329,9 +330,10 @@ class MeshMeta(object):
                                      masked_mesh=masked_mesh)
                     return mesh
 
-            if seg_id not in self._mesh_cache:
+            if seg_id not in self._mesh_cache or force_download is True:
                 cv_mesh = self.cv.mesh.get(seg_id,
-                                           remove_duplicate_vertices = remove_duplicate_vertices)
+                                           remove_duplicate_vertices=remove_duplicate_vertices,
+                                           mend_cross_chunk=mend_cross_chunk)
                 faces = np.array(cv_mesh["faces"])
                 if (len(faces.shape) == 1):
                     faces = faces.reshape(-1, 3)
@@ -781,24 +783,24 @@ class MaskedMesh(Mesh):
 
         if node_mask is None:
             node_mask = np.full(self.unmasked_size, True, dtype=bool)
-        elif node_mask.dtype is not bool:
+        elif node_mask.dtype is not np.dtype('bool'):
             node_mask_inds = node_mask.copy()
             node_mask = np.full(self.unmasked_size, False, dtype=bool)
             node_mask[node_mask_inds] = True
 
         if len(node_mask) != unmasked_size:
-            raise ValueError('The node mask must be the same length as the unmaked size')
+            raise ValueError('The node mask must be the same length as the unmasked size')
 
         self._node_mask = node_mask
 
         if any(self.node_mask == False):
             nodes_f = vertices_all[self.node_mask]
-            faces_f = utils.filter_shapes(np.flatnonzero(self.node_mask), faces_all)[0]
+            faces_f = utils.filter_shapes(np.flatnonzero(node_mask), faces_all)[0]
         else:
             nodes_f, faces_f = vertices_all, faces_all
 
         if mesh_edges is not None:
-            kwargs['mesh_edges'] = utils.filter_shapes(np.flatnonzero(self.node_mask), mesh_edges)[0]
+            kwargs['mesh_edges'] = utils.filter_shapes(np.flatnonzero(node_mask), mesh_edges)[0]
 
         new_args = (nodes_f, faces_f)
         if len(args) > 2:

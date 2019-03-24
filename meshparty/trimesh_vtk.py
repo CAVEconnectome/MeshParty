@@ -129,7 +129,7 @@ def remove_unused_verts(verts, faces):
     faces = MxK numpy array of connected shapes (i.e. edges or tris)
     (entries are indices into verts)
 
-    returns: 
+    returns:
     new_verts, new_face
     a filtered set of vertices and reindexed set of faces
     """
@@ -258,7 +258,7 @@ def make_vtk_skeleton_from_paths(verts, paths):
     return mesh
 
 
-def vtk_super_basic(actors, camera=None, do_save=False, folder=".", back_color=(.1, .1, .1),
+def vtk_super_basic(actors, camera=None, do_save=False, filename=None, back_color=(.1, .1, .1),
                     VIDEO_WIDTH=1080, VIDEO_HEIGHT=720):
     """
     Create a window, renderer, interactor, add the actors and start the thing
@@ -274,6 +274,9 @@ def vtk_super_basic(actors, camera=None, do_save=False, folder=".", back_color=(
 
     # create a rendering window and renderer
     ren = vtk.vtkRenderer()
+    if camera is not None:
+        ren.SetActiveCamera(camera)
+
     renWin = vtk.vtkRenderWindow()
     renWin.AddRenderer(ren)
     renWin.SetSize(VIDEO_WIDTH, VIDEO_HEIGHT)
@@ -282,7 +285,7 @@ def vtk_super_basic(actors, camera=None, do_save=False, folder=".", back_color=(
     ren.SetBackground(*back_color)
     # create a renderwindowinteractor
     iren = vtk.vtkRenderWindowInteractor()
-    iren.SetRenderWindow(renWin)    
+    iren.SetRenderWindow(renWin)
 
     for a in actors:
         # assign actor to the renderer
@@ -297,11 +300,23 @@ def vtk_super_basic(actors, camera=None, do_save=False, folder=".", back_color=(
         camera.ViewingRaysModified()
     renWin.Render()
 
-    trackCamera = vtk.vtkInteractorStyleTrackballCamera()
-    iren.SetInteractorStyle(trackCamera)
-    # enable user interface interactor
-    iren.Initialize()
-    iren.Start()
+    if do_save is False:
+        trackCamera = vtk.vtkInteractorStyleTrackballCamera()
+        iren.SetInteractorStyle(trackCamera)
+        # enable user interface interactor
+        iren.Initialize()
+        iren.Start()
+    if do_save is True:
+        renWin.OffScreenRenderingOn()
+        w2if = vtk.vtkWindowToImageFilter()
+        w2if.SetInput(renWin)
+        w2if.Update()
+
+        writer = vtk.vtkPNGWriter()
+        writer.SetFileName(filename)
+        writer.SetInputData(w2if.GetOutput())
+        writer.Write()
+
     renWin.Finalize()
 
     return ren
@@ -488,7 +503,7 @@ def vtk_linked_point_actor(vertices_a, inds_a,
     link_verts = np.vstack((vertices_a[inds_a], vertices_b[inds_b]))
     link_edges = np.vstack((np.arange(len(inds_a)),
                             len(inds_a)+np.arange(len(inds_b))))
-    link_poly = trimesh_vtk.graph_to_vtk(link_verts, link_edges.T)
+    link_poly = graph_to_vtk(link_verts, link_edges.T)
 
     mapper = vtk.vtkPolyDataMapper()
     mapper.SetInputData(link_poly)
@@ -499,3 +514,21 @@ def vtk_linked_point_actor(vertices_a, inds_a,
     link_actor.GetProperty().SetColor(color)
     link_actor.GetProperty().SetOpacity(opacity)
     return link_actor
+
+
+def vtk_oriented_camera(pt_pair, backoff=100):
+    '''
+    Given a vector defined by a pair of points (from the first row to the second),
+    generate a camera with that vector as up and zoomed out to contain the full extent,
+    centered at the center point between them.
+    '''
+    camera = vtk.vtkCamera()
+    vup=np.diff(pt_pair, axis=0)
+    vup=vup/np.linalg.norm(vup)
+    pt_center=np.mean(pt_pair, axis=0)
+    pt_backoff = np.copy(pt_center)
+    pt_backoff[2] -= backoff * 1000
+    camera.SetFocalPoint(*pt_center)
+    camera.SetViewUp(*vup)
+    camera.SetPosition(*pt_backoff)
+    return camera
