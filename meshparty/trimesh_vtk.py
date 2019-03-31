@@ -279,6 +279,7 @@ def vtk_super_basic(actors, camera=None, do_save=False, folder=".", back_color=(
     renWin.SetSize(VIDEO_WIDTH, VIDEO_HEIGHT)
     if camera is not None:
         ren.SetActiveCamera(camera)
+        ren.ResetCameraClippingRange()
 
     ren.SetBackground(*back_color)
     # create a renderwindowinteractor
