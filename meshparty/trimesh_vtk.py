@@ -305,6 +305,83 @@ def vtk_super_basic(actors, camera=None, do_save=False, folder=".", back_color=(
     return ren
 
 
+def vtk_camera_from_quat(pos_nm, orient_quat, camera_distance=10000, ngl_correct=True):
+    """define a vtk camera with a particular orientation
+        Parameters
+        ----------
+        pos_nm: np.array, list, tuple
+            an iterator of length 3 containing the focus point of the camera
+        orient_quat: np.array, list, tuple
+            a len(4) quatenerion (x,y,z,w) describing the rotation of the camera
+            such as returned by neuroglancer x,y,z,w all in [0,1] range
+        camera_distance: float
+            the desired distance from pos_nm to the camera (default = 10000 nm)
+
+        Returns
+        -------
+        vtk.vtkCamera
+            a vtk camera setup according to these rules
+    """
+    camera = vtk.vtkCamera()
+    # define the quaternion in vtk, note the swapped order
+    # w,x,y,z instead of x,y,z,w
+    quat_vtk=vtk.vtkQuaterniond(orient_quat[3],
+                                orient_quat[0],
+                                orient_quat[1],
+                                orient_quat[2])
+    # use this to define a rotation matrix in x,y,z
+    # right handed units
+    M = np.zeros((3, 3), dtype=np.float32)
+    quat_vtk.ToMatrix3x3(M)
+    # the default camera orientation is y up
+    up = [0, 1, 0]
+    # calculate default camera position is backed off in positive z 
+    pos = [0, 0, camera_distance]
+    
+    # set the camera rototation by applying the rotation matrix
+    camera.SetViewUp(*np.dot(M,up))
+    # set the camera position by applying the rotation matrix
+    camera.SetPosition(*np.dot(M,pos))
+    if ngl_correct:
+        # neuroglancer has positive y going down
+        # so apply these azimuth and roll corrections
+        # to fix orientatins
+        camera.Azimuth(-180)
+        camera.Roll(180)
+
+    # shift the camera posiiton and focal position
+    # to be centered on the desired location
+    p=camera.GetPosition()
+    p_new = np.array(p)+pos_nm
+    camera.SetPosition(*p_new)
+    camera.SetFocalPoint(*pos_nm)
+    return camera
+
+def vtk_camera_from_ngl_state(state_d, zoom_factor=300.0):
+    """define a vtk camera from a neuroglancer state dictionary
+        Parameters
+        ----------
+        state_d: dict
+            an neuroglancer state dictionary
+        zoom_factor: float
+            how much to multiply zoom by to get camera backoff distance
+            default = 300 > ngl_zoom = 1 > 300 nm backoff distance
+
+        Returns
+        -------
+        vtk.vtkCamera
+            a vtk camera setup that mathces this state
+    """
+
+    orient = state_d.get('perspectiveOrientation', [0.0,0.0,0.0,1.0])
+    zoom = state_d.get('perspectiveZoom', 10.0)
+    position = state_d['navigation']['pose']['position']
+    pos_nm = np.array(position['voxelCoordinates'])*position['voxelSize']
+    camera = vtk_camera_from_quat(pos_nm, orient, zoom*zoom_factor, ngl_correct=True)
+    
+    return camera
+
+
 def make_mesh_actor(mesh, color=(0, 1, 0),
                     opacity=0.1,
                     vertex_scalars=None,
