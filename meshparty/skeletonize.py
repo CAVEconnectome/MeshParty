@@ -21,16 +21,79 @@ def recenter_verts(verts, edges, centers):
     return new_verts
 
 
-def skeletonize(mesh_meta, seg_id, soma_pt=None, soma_thresh=7500,
+def skeletonize_mesh(mesh, soma_pt=None, soma_thresh=7500,
                 invalidation_d=10000, smooth_neighborhood=5,
                 max_tip_d=2000, large_skel_path_threshold=5000,
                 cc_vertex_thresh=100, do_cross_section=False,
+                collapse_soma=True,
                 merge_components_at_tips=True, return_map=False):
-    
+    """ function to turn a trimesh object of a neuron into a skeleton
+    Parameters
+    ----------
+    mesh: meshparty.trimesh_io.Mesh
+        the mesh to skeletonize, defaults assume vertices in nm
+    soma_pt: np.array
+        a length 3 array specifying to soma location to make the root
+        default=None, in which case a heuristic root will be chosen
+        in units of mesh vertices
+    soma_thresh: float
+        distance in mesh vertex units over which to consider mesh 
+        vertices close to soma_pt to belong to soma
+        these vertices will automatically be invalidated and no
+        skeleton branches will attempt to reach them.
+        This distance will also be used to collapse all skeleton
+        points within this distance to the soma_pt root if collpase_soma
+        is true. (default=7500 (nm))
+    invalidation_d: float
+        the distance along the mesh to invalidate when applying TEASAR
+        like algorithm.  Controls how detailed a structure the skeleton
+        algorithm reaches. default (10000 (nm))
+    smooth_neighborhood: int
+        the neighborhood in edge hopes over which to smooth skeleton locations.
+        This controls the smoothing of the skeleton
+        (default 5)
+    max_tip_d: float
+        the maximum distance to consider merging tips over.
+        This controls the MST based tip merging algorithm presently implemented
+        (default 100 (nm))
+    large_skel_path_threshold: int
+        the threshold in terms of skeleton vertices that skeletons will be
+        nominated for tip merging.  Smaller skeleton fragments 
+        will not be merged at their tips (default 5000)
+    cc_vertex_thresh: int
+        the threshold in terms of vertex numbers that connected components
+        of the mesh will be considered for skeletonization. mesh connected
+        components with fewer than these number of vertices will be ignored
+        by skeletonization algorithm. (default 100)
+    do_cross_section: bool
+        whether to perform a post-processing step that uses vtk to calculate
+        a cross section of the mesh at each skeleton vertex.  This is then
+        used to move the skeleton vertex to the center of this cross section.
+        The resulting skeleton is then smoothed and the cross sections returned.
+        This works well for unbranched structures but fails generally at branch points
+        (default False)
+    collapse_soma: bool
+        whether to collapse all skeleton vertices within soma_d of soma_pt
+        to soma_pt. Only applies if soma_pt passed. (default True)
+    merge_components_at_tips: bool
+        whether to perform tip merging as a post processing step
+        (default True)
+    return_map: bool
+        whether to return a map of how each mesh vertex maps onto each skeleton vertex
+        based upon how it was invalidated.
 
-    mesh = mesh_meta.mesh(seg_id=seg_id,
-                          merge_large_components=False,
-                          remove_duplicate_vertices=False)
+    Returns
+        skel_verts: np.array
+            a Nx3 matrix of skeleton vertex positions
+        skel_edges: np.array
+            a Kx2 matrix of skeleton edge indices into skel_verts
+        smooth_verts: np.array
+            a Nx3 matrix of vertex positions after smoothing
+        (cross_sections): np.array
+            a N long verctor of cross sectional areas (only if do_cross_sections=True)
+        (mesh_to_skeleton_map): np.array
+            a Mx2 map of mesh vertex indices to skeleton vertex indices
+    """
 
     skeletonize_output = skeletonize_components(mesh,
                                                 soma_pt=soma_pt,
@@ -55,21 +118,51 @@ def skeletonize(mesh_meta, seg_id, soma_pt=None, soma_thresh=7500,
     skel_verts, skel_edges = trimesh_vtk.remove_unused_verts(mesh.vertices, tot_edges)
     smooth_verts = smooth_graph(skel_verts, skel_edges, neighborhood=smooth_neighborhood)
 
-    output_tuple = skel_verts, skel_edges
-
     if do_cross_section:
         cross_sections, centers = trimesh_vtk.calculate_cross_sections(mesh, smooth_verts, skel_edges)
         center_verts = recenter_verts(smooth_verts, skel_edges, centers)
-        smooth_center_verts = smooth_graph(center_verts, skel_edges, neighborhood=smooth_neighborhood)
-        output_tuple = output_tuple + (cross_sections,)
-    
-    output_tuple = output_tuple + (smooth_verts,)
-    
+        smooth_center_verts = smooth_graph(center_verts, skel_edges, neighborhood=smooth_neighborhood)   
+      
     if return_map:
         mesh_to_skeleton_map = utils.nanfilter_shapes(np.unique(tot_edges.ravel()), mesh_to_skeleton_map)
+        
+    else:
+        mesh_to_skeleton_map=None
+
+    if (collapse_soma) & (soma_pt is not None):
+        collapse_out = collapse_soma_skeleton(soma_pt, skel_verts, skel_edges,
+                                                       soma_d_thresh=soma_thresh,
+                                                       mesh_to_skeleton_map=mesh_to_skeleton_map)
+        if mesh_to_skeleton_map is None:
+            (skel_verts, skel_edges) = collapse_out
+        else:
+            (skel_verts, skel_edges, mesh_to_skeleton_map) = collapse_out
+    
+    output_tuple = (skel_verts, skel_edges, smooth_verts)
+    if do_cross_section:
+        output_tuple = output_tuple + (cross_sections,)
+    if return_map:
         output_tuple = output_tuple + (mesh_to_skeleton_map,)
 
     return output_tuple
+
+
+def skeletonize(mesh_meta, seg_id, soma_pt=None, soma_thresh=7500,
+                invalidation_d=10000, smooth_neighborhood=5,
+                max_tip_d=2000, large_skel_path_threshold=5000,
+                cc_vertex_thresh=100, do_cross_section=False,
+                merge_components_at_tips=True, return_map=False):
+    
+
+    mesh = mesh_meta.mesh(seg_id=seg_id,
+                          merge_large_components=False,
+                          remove_duplicate_vertices=False)
+
+    return skeletonize_mesh(mesh, soma_pt=soma_pt, soma_thresh=soma_thresh,
+                invalidation_d=invalidation_d, smooth_neighborhood=smooth_neighborhood,
+                max_tip_d=max_tip_d, large_skel_path_threshold=large_skel_path_threshold,
+                cc_vertex_thresh=cc_vertex_thresh, do_cross_section=do_cross_section,
+                merge_components_at_tips=merge_components_at_tips, return_map=return_map)
 
 
 def skeletonize_axon(mesh_meta, axon_id, invalidation_d=5000, smooth_neighborhood=5,
