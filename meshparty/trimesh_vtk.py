@@ -277,9 +277,7 @@ def vtk_super_basic(actors, camera=None, do_save=False, folder=".", back_color=(
     renWin = vtk.vtkRenderWindow()
     renWin.AddRenderer(ren)
     renWin.SetSize(VIDEO_WIDTH, VIDEO_HEIGHT)
-    if camera is not None:
-        ren.SetActiveCamera(camera)
-        ren.ResetCameraClippingRange()
+
 
     ren.SetBackground(*back_color)
     # create a renderwindowinteractor
@@ -293,6 +291,10 @@ def vtk_super_basic(actors, camera=None, do_save=False, folder=".", back_color=(
     # render
     if camera is None:
         ren.ResetCamera()
+    else:
+        ren.SetActiveCamera(camera)
+        ren.ResetCameraClippingRange()
+        camera.ViewingRaysModified()
     renWin.Render()
 
     trackCamera = vtk.vtkInteractorStyleTrackballCamera()
