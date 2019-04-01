@@ -274,6 +274,7 @@ def vtk_super_basic(actors, camera=None, do_save=False, filename=None, back_colo
 
     # create a rendering window and renderer
     ren = vtk.vtkRenderer()
+
     if camera is not None:
         ren.SetActiveCamera(camera)
 
@@ -300,12 +301,16 @@ def vtk_super_basic(actors, camera=None, do_save=False, filename=None, back_colo
         camera.ViewingRaysModified()
     renWin.Render()
 
+
     if do_save is False:
         trackCamera = vtk.vtkInteractorStyleTrackballCamera()
         iren.SetInteractorStyle(trackCamera)
         # enable user interface interactor
         iren.Initialize()
+        iren.Render()
         iren.Start()
+
+
     if do_save is True:
         renWin.OffScreenRenderingOn()
         w2if = vtk.vtkWindowToImageFilter()
@@ -455,44 +460,69 @@ def vtk_skeleton_actor(sk,
     return actor
 
 
+def neuron_actors(mesh, pre_syn_positions=None, post_syn_positions=None,
+                  mesh_color=(0.459, 0.439, 0.702), pre_color=(0.994, 0.098, 0.106), post_color=(0.176, 0.996, 0.906),
+                  mesh_opacity=0.8, pre_opacity=1, post_opacity=1,
+                  pre_size=400, post_size=400):
+    mesh_actor = make_mesh_actor(mesh, color=mesh_color, opacity=mesh_opacity)
+    nrn_act = [mesh_actor]
+    if pre_syn_positions is not None:
+        pre_actor = make_point_cloud_actor(pre_syn_positions, size=pre_size, color=pre_color, opacity=pre_opacity)
+        nrn_act.append(pre_actor)
+    if post_syn_positions is not None:
+        post_actor = make_point_cloud_actor(post_syn_positions, size=post_size, color=post_color, opacity=post_opacity)
+        nrn_act.append(post_actor)
+    return nrn_act
+
+
 def make_point_cloud_actor(xyz,
                            size=100,
-                           color=(0, 0, 0),
+                           color=(0,0,0),
                            opacity=0.5):
-
     points = vtk.vtkPoints()
     points.SetData(numpy_to_vtk(xyz, deep=True))
 
-    pc = vtk.vtkPolyData()
-    pc.SetPoints(points)
+    scales = vtk.vtkFloatArray()
+    scales.SetName('scale')
+
+    clr = vtk.vtkFloatArray()
+    clr.SetName('color')
+
+    colormap = vtk.vtkLookupTable()
+    colormap.SetNumberOfTableValues(1)
+    colormap.SetTableValue(0, color[0], color[1], color[2], opacity)
 
     if np.isscalar(size):
         size = np.full(len(xyz), size)
     elif len(size) != len(xyz):
         raise ValueError('Size must be either a scalar or an len(xyz) x 1 array')
-    pc.GetPointData().SetScalars(numpy_to_vtk(size))
+    for ii in range(len(xyz)):
+        scales.InsertNextValue(size[ii])
+        clr.InsertNextValue(0)
+
+    grid = vtk.vtkUnstructuredGrid()
+    grid.SetPoints(points)
+    grid.GetPointData().AddArray(scales)
+    grid.GetPointData().SetActiveScalars('scale')
+    grid.GetPointData().AddArray(clr)
 
     ss = vtk.vtkSphereSource()
     ss.SetRadius(1)
 
     glyph = vtk.vtkGlyph3D()
-    glyph.SetInputData(pc)
-
+    glyph.SetInputData(grid)
     glyph.SetSourceConnection(ss.GetOutputPort())
-    glyph.SetScaleModeToScaleByScalar()
-    glyph.ScalingOn()
-    glyph.Update()
 
     mapper = vtk.vtkPolyDataMapper()
     mapper.SetInputConnection(glyph.GetOutputPort())
+    mapper.SetScalarRange(0,0)
+    mapper.SelectColorArray('color')
+    mapper.SetLookupTable(colormap)
 
     actor = vtk.vtkActor()
-    mapper.ScalarVisibilityOn()
     actor.SetMapper(mapper)
-    actor.GetProperty().SetColor(*color)
-    actor.GetProperty().SetOpacity(opacity)
-
     return actor
+
 
 def vtk_linked_point_actor(vertices_a, inds_a,
                            vertices_b, inds_b,
