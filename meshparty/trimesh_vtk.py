@@ -258,7 +258,7 @@ def make_vtk_skeleton_from_paths(verts, paths):
     return mesh
 
 
-def vtk_super_basic(actors, camera=None, do_save=False, filename=None, back_color=(.1, .1, .1),
+def vtk_super_basic(actors, camera=None, do_save=False, filename=None, scale=4, back_color=(.1, .1, .1),
                     VIDEO_WIDTH=1080, VIDEO_HEIGHT=720):
     """
     Create a window, renderer, interactor, add the actors and start the thing
@@ -313,6 +313,7 @@ def vtk_super_basic(actors, camera=None, do_save=False, filename=None, back_colo
     if do_save is True:
         renWin.OffScreenRenderingOn()
         w2if = vtk.vtkWindowToImageFilter()
+        w2if.SetScale(scale)
         w2if.SetInput(renWin)
         w2if.Update()
 
@@ -545,18 +546,21 @@ def vtk_linked_point_actor(vertices_a, inds_a,
     return link_actor
 
 
-def vtk_oriented_camera(pt_pair, backoff=100):
+def vtk_oriented_camera(center, up_vector=(0, -1, 0), backoff=500, backoff_vector=(0,0,1)):
     '''
-    Given a vector defined by a pair of points (from the first row to the second),
-    generate a camera with that vector as up and zoomed out to contain the full extent,
-    centered at the center point between them.
+    Generate a camera pointed at a specific location, oriented with a given up
+    direction, set to a backoff.
     '''
     camera = vtk.vtkCamera()
-    vup=np.diff(pt_pair, axis=0)
+
+    pt_center = center
+
+    vup=np.array(up_vector)
     vup=vup/np.linalg.norm(vup)
-    pt_center=np.mean(pt_pair, axis=0)
-    pt_backoff = np.copy(pt_center)
-    pt_backoff[2] -= backoff * 1000
+
+    bv = np.array(backoff_vector)
+    pt_backoff = pt_center - backoff * 1000 * bv
+
     camera.SetFocalPoint(*pt_center)
     camera.SetViewUp(*vup)
     camera.SetPosition(*pt_backoff)
