@@ -274,7 +274,6 @@ def vtk_super_basic(actors, camera=None, do_save=False, filename=None, back_colo
 
     # create a rendering window and renderer
     ren = vtk.vtkRenderer()
-
     if camera is not None:
         ren.SetActiveCamera(camera)
 
