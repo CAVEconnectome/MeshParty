@@ -23,7 +23,7 @@ from tqdm import trange
 
 from meshparty import utils
 
-def read_mesh_h5(filename):
+def read_mesh_h5(filename, masked_mesh=False):
     """Reads a mesh's vertices, faces and normals from an hdf5 file"""
     assert os.path.isfile(filename)
 
@@ -44,11 +44,18 @@ def read_mesh_h5(filename):
         else:
             mesh_edges = None
 
-    return vertices, faces, normals, mesh_edges
+        if masked_mesh:
+            if "node_mask" in f.keys():
+                node_mask = f["node_mask"].value
+            else:
+                node_mask = None
+            return vertices, faces, normals, mesh_edges, node_mask
+        else:
+            return vertices, faces, normals, mesh_edges
 
 
 def write_mesh_h5(filename, vertices, faces,
-                  normals=None, mesh_edges=None, overwrite=False):
+                  normals=None, mesh_edges=None, node_mask=None, overwrite=False):
     """Writes a mesh's vertices, faces (and normals) to an hdf5 file"""
 
     if os.path.isfile(filename):
@@ -67,19 +74,26 @@ def write_mesh_h5(filename, vertices, faces,
         if mesh_edges is not None:
             f.create_dataset("mesh_edges", data=mesh_edges, compression="gzip")
 
+        if node_mask is not None:
+            f.create_dataset("node_mask", data=node_mask, compression="gzip")
 
-def read_mesh(filename):
+
+def read_mesh(filename, masked_mesh=False):
     """Reads a mesh's vertices, faces and normals from obj or h5 file"""
 
     if filename.endswith(".obj"):
         vertices, faces, normals = read_mesh_obj(filename)
         mesh_edges = None
     elif filename.endswith(".h5"):
-        vertices, faces, normals, mesh_edges = read_mesh_h5(filename)
+        mesh_data = read_mesh_h5(filename, masked_mesh)
+        if masked_mesh:
+            vertices, faces, normals, mesh_edges, node_mask = mesh_data
+            return vertices, faces, normals, mesh_edges, node_mask
+        else:
+            vertices, faces, normals, mesh_edges = mesh_data
+            return vertices, faces, normals, mesh_edges
     else:
         raise Exception("Unknown filetype")
-
-    return vertices, faces, normals, mesh_edges
 
 
 def read_mesh_obj(filename):
@@ -271,7 +285,7 @@ class MeshMeta(object):
 
     def mesh(self, filename=None, seg_id=None, cache_mesh=True,
              merge_large_components=True, remove_duplicate_vertices=True,
-             overwrite_merge_large_components=False, mend_cross_chunk=True,
+             overwrite_merge_large_components=False,
              force_download=False, masked_mesh=False):
         """ Loads mesh either from cache, disk or google storage
 
@@ -296,11 +310,13 @@ class MeshMeta(object):
 
         if filename is not None:
             if filename not in self._mesh_cache:
-                vertices, faces, normals, mesh_edges = read_mesh(filename)
+                mesh_data = read_mesh(filename, masked_mesh=masked_mesh)
                 if masked_mesh:
+                    vertices, faces, normals, mesh_edges, node_mask = mesh_data
                     mesh = MaskedMesh(vertices=vertices, faces=faces, normals=normals,
-                                        mesh_edges=mesh_edges, process=False)
+                                      mesh_edges=mesh_edges, node_mask=node_mask, process=False)
                 else:
+                    vertices, faces, normals, mesh_edges = mesh_data
                     mesh = Mesh(vertices=vertices, faces=faces, normals=normals,
                                 mesh_edges=mesh_edges,
                                 process=remove_duplicate_vertices)
@@ -332,8 +348,7 @@ class MeshMeta(object):
 
             if seg_id not in self._mesh_cache or force_download is True:
                 cv_mesh = self.cv.mesh.get(seg_id,
-                                           remove_duplicate_vertices=remove_duplicate_vertices,
-                                           mend_cross_chunk=mend_cross_chunk)
+                                           remove_duplicate_vertices=remove_duplicate_vertices)
                 faces = np.array(cv_mesh["faces"])
                 if (len(faces.shape) == 1):
                     faces = faces.reshape(-1, 3)
@@ -760,7 +775,8 @@ class Mesh(trimesh.Trimesh):
                                     directed=False)
 
 class MaskedMesh(Mesh):
-    def __init__(self, *args, node_mask=None, unmasked_size=None, mesh_edges=None, **kwargs):
+    def __init__(self, *args, node_mask=None, apply_mask=False,
+                 unmasked_size=None, mesh_edges=None, **kwargs):
         if 'vertices' in kwargs:
             vertices_all = kwargs.pop('vertices')
         else:
@@ -793,9 +809,12 @@ class MaskedMesh(Mesh):
 
         self._node_mask = node_mask
 
-        if any(self.node_mask == False):
-            nodes_f = vertices_all[self.node_mask]
-            faces_f = utils.filter_shapes(np.flatnonzero(node_mask), faces_all)[0]
+        if apply_mask:
+            if any(self.node_mask == False):
+                nodes_f = vertices_all[self.node_mask]
+                faces_f = utils.filter_shapes(np.flatnonzero(node_mask), faces_all)[0]
+            else:
+                nodes_f, faces_f = vertices_all, faces_all
         else:
             nodes_f, faces_f = vertices_all, faces_all
 
@@ -845,7 +864,7 @@ class MaskedMesh(Mesh):
                 new_mask = self.map_boolean_to_unmasked(new_mask)
             else:
                 raise ValueError('Incompatible shape. Must be either original length or current length of vertices.')
-        joint_mask = self.node_mask * np.array(new_mask, dtype=bool)
+        joint_mask = self.node_mask & np.array(new_mask, dtype=bool)
 
         # Build dummy arrays in the unmasked size out of the current mesh
         vertices_unmask = np.zeros((self.unmasked_size, 3))
