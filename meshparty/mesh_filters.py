@@ -29,11 +29,20 @@ def filter_close_to_line(mesh, line_end_pts, line_dist_th, axis=1, endcap_buffer
         is_close = is_close|end_cap
     return is_close
 
+
 def _dist_from_line(pts, line_end_pts, axis):
     ps = (pts[:, axis] - line_end_pts[0, axis]) / (line_end_pts[1, axis] - line_end_pts[0, axis])
     line_pts = np.multiply(ps[:,np.newaxis], line_end_pts[1] - line_end_pts[0]) + line_end_pts[0]
     ds = np.linalg.norm(pts - line_pts, axis=1)
     return ds
+
+
+def filter_components_by_size(mesh, min_size=0, max_size=np.inf):
+    cc, labels = sparse.csgraph.connected_components(mesh.csgraph, directed=False)
+    uids, counts = np.unique(labels, return_counts=True)
+    good_labels = uids[(counts>min_size)&(counts<=max_size)]
+    return np.in1d(labels, good_labels)
+
 
 def filter_large_component(mesh, size_thresh=1000):
     '''
@@ -48,6 +57,7 @@ def filter_large_component(mesh, size_thresh=1000):
     good_labels = uids[counts>size_thresh]
     return np.in1d(labels, good_labels)
 
+
 def filter_small_component(mesh, size_thresh=1000):
     '''
     Returns a mesh filter without any connected components less than a size threshold
@@ -61,17 +71,14 @@ def filter_small_component(mesh, size_thresh=1000):
     good_labels = uids[counts<size_thresh]
     return np.in1d(labels, good_labels)
 
+
 def filter_spatial_distance_from_points(mesh, pts, d_max):
-    close_enough = np.full((len(mesh.vertices), len(pts)))
+    close_enough = np.full((len(mesh.vertices), len(pts)), False)
     for ii, pt in enumerate(pts):
-        ds = linalg.norm(mesh.vertices-pt, axis=1)
+        ds = np.linalg.norm(mesh.vertices-pt, axis=1)
         close_enough[:,ii] = ds<d_max
     return np.any(close_enough, axis=1)
 
-# def filter_graph_distance_from_point(mesh, pt, d_max, index=None):
-#     '''
-#     Collection of mesh points a given distance from 
-#     '''
 
 def filter_two_point_distance(mesh, pts_foci, d_pad, indices=None, power=1):
     '''
