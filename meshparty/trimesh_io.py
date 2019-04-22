@@ -384,15 +384,15 @@ class Mesh(trimesh.Trimesh):
         return self._csgraph
 
     @property
-    def kdtree(self):
+    def pykdtree(self):
         if self._kdtree is None:
             self._kdtree = KDTree(self.vertices)
         return self._kdtree
 
     @property
-    def ckdtree(self):
+    def kdtree(self):
         if self._ckdtree is None:
-            self._ckdtree = spatial.cKDTree(self.vertices)
+            self._ckdtree = spatial.cKDTree(self.vertices, balanced_tree=False)
         return self._ckdtree
 
     @property
