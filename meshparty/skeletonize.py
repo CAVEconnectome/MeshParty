@@ -6,7 +6,7 @@ import pandas as pd
 from pykdtree.kdtree import KDTree
 import pcst_fast
 from tqdm import trange, tqdm
-
+from meshparty.trimesh_io import Mesh
 
 def recenter_verts(verts, edges, centers):
     edge_df = pd.DataFrame()
@@ -129,10 +129,11 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_thresh=7500,
     else:
         mesh_to_skeleton_map=None
 
-    if (collapse_soma) & (soma_pt is not None):
+    if collapse_soma:
+        print('collapsing')
         collapse_out = collapse_soma_skeleton(soma_pt, skel_verts, skel_edges,
-                                                       soma_d_thresh=soma_thresh,
-                                                       mesh_to_skeleton_map=mesh_to_skeleton_map)
+                                              soma_d_thresh=soma_thresh,
+                                              mesh_to_skeleton_map=mesh_to_skeleton_map)
         if mesh_to_skeleton_map is None:
             (skel_verts, skel_edges) = collapse_out
         else:
@@ -337,7 +338,6 @@ def skeletonize_components(mesh,
                                                         is_soma_pt,
                                                         soma_d,
                                                         labels == k)
-
             # run teasar on this component
             teasar_output = mesh_teasar(mesh,
                                         root=root,
@@ -370,19 +370,22 @@ def setup_root_new(mesh, is_soma_pt=None, soma_d=None, is_valid=None):
         valid = np.copy(is_valid)
     else:
         valid = np.ones(len(mesh.vertices), np.bool)
+    assert(len(valid)==mesh.vertices.shape[0])
+
     root = None
     # soma mode
     if is_soma_pt is not None:
         # pick the first soma as root
-        
+        assert(len(soma_d)==mesh.vertices.shape[0])
+        assert(len(is_soma_pt)==mesh.vertices.shape[0])
         is_valid_root = is_soma_pt & valid
         valid_root_inds = np.where(is_valid_root)[0]
         if len(valid_root_inds) > 0:
             min_valid_root = np.nanargmin(soma_d[valid_root_inds])
-            root = valid_root_inds[min_valid_root]
+            root = valid_root_inds[min_valid_root]           
             root_ds, pred = sparse.csgraph.dijkstra(mesh.csgraph,
-                                                    False,
-                                                    root,
+                                                    directed=False,
+                                                    indices=root,
                                                     return_predecessors=True)
         else:
             start_ind = np.where(valid)[0][0]
@@ -395,6 +398,8 @@ def setup_root_new(mesh, is_soma_pt=None, soma_d=None, is_valid=None):
         start_ind = np.where(valid)[0][0]
         root, target, pred, dm, root_ds = utils.find_far_points(mesh, start_ind=start_ind)
     valid[root] = False
+    print(valid.shape)
+    print(root_ds.shape)
     assert(np.all(~np.isinf(root_ds[valid])))
     return root, root_ds, pred, valid
 
@@ -434,7 +439,7 @@ def setup_root(mesh, soma_pt=None, soma_thresh=7500, valid_inds=None):
                 root, target, pred, dm, root_ds = utils.find_far_points(mesh)
     if root is None:
         # there is no soma close, so use far point heuristic
-        root, target, pred, dm, root_ds = find_far_points(mesh)
+        root, target, pred, dm, root_ds = utils.find_far_points(mesh)
     valid[root] = False
 
     return root, root_ds, pred, valid
