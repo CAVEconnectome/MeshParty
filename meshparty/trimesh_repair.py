@@ -209,7 +209,7 @@ def merge_edges_to_merge_indices(mesh, merge_edge_coords, close_map_distance = 3
     return close_inds.reshape((Nmerge,2))[is_join_merge,:]
 
 def get_link_edges(mesh, seg_id, dataset_name, close_map_distance = 300,
-                   server_address='www.dynamicannotationframework.com'):
+                   server_address='https://www.dynamicannotationframework.com'):
     # initialize a chunkedgraph client
     cg_client = chunkedgraph.ChunkedGraphClient(server_address=server_address, dataset_name=dataset_name)
     
@@ -237,7 +237,7 @@ def get_link_edges(mesh, seg_id, dataset_name, close_map_distance = 300,
     return link_edges
 
 def get_repaired_mesh(mesh, seg_id, dataset_name, close_map_distance = 300,
-                      server_address='www.dynamicannoationframework.com'):
+                      server_address='https://www.dynamicannoationframework.com'):
     link_edges = get_link_edges(mesh, seg_id, dataset_name,
                                 close_map_distance=close_map_distance,
                                 server_address=server_address)
