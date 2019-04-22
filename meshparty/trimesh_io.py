@@ -13,6 +13,7 @@ import cloudvolume
 from multiwrapper import multiprocessing_utils as mu
 
 import trimesh
+from trimesh import caching
 try:
     from trimesh import exchange
 except ImportError:
@@ -21,7 +22,7 @@ except ImportError:
 from pymeshfix import _meshfix
 from tqdm import trange
 
-from meshparty import utils
+from meshparty import utils, trimesh_repair
 
 def read_mesh_h5(filename):
     """Reads a mesh's vertices, faces and normals from an hdf5 file"""
@@ -362,10 +363,11 @@ class MeshMeta(object):
         return mesh
 
 class Mesh(trimesh.Trimesh):
-    def __init__(self, *args, mesh_edges=None, **kwargs):
+    def __init__(self, *args, non_face_edges=None, **kwargs):
         super(Mesh, self).__init__(*args, **kwargs)
 
-        self._mesh_edges = mesh_edges
+        self._non_face_edges = non_face_edges
+        #self._mesh_edges = mesh_edges
         self._csgraph = None
         self._nxgraph = None
         self._kdtree = None
@@ -405,7 +407,10 @@ class Mesh(trimesh.Trimesh):
 
     @property
     def mesh_edges(self):
-        return self._mesh_edges
+        if self._non_face_edges is None:
+            return self.edges
+        else:
+            return np.vstack([self.edges, self._non_face_edges])
 
     def fix_mesh(self, wiggle_vertices=False, verbose=False):
         """ Executes rudimentary fixing function from pymeshfix
@@ -619,6 +624,31 @@ class Mesh(trimesh.Trimesh):
         """ node_ids has to be sorted! """
         return utils.filter_shapes(node_ids, self.mesh_edges)
 
+
+    def add_link_edges(self, seg_id, dataset_name, close_map_distance=300,
+                        server_address="https://www.dynamicannotationframework.com"):
+        """ add a set of link edges to this mesh from a pcg endpoint
+
+        :param seg_id: int 
+            the seg_id of this mesh
+        :param dataset_name: str
+            the dataset name this mesh can be found in
+        :param close_map_distance: float
+            the distance in mesh vertex coordinates to consider a mapping to be 'close'
+        :server_address: str
+            the server address to find the pcg endpoint (default https://www.dynamicannotationframework.com)
+        """
+        link_edges = trimesh_repair.get_link_edges(self, seg_id, dataset_name,
+                                                   close_map_distance = close_map_distance,
+                                                   server_address=server_address)
+        if self._non_face_edges is None:
+            self._non_face_edges = link_edges
+        else:
+            self._non_face_edges = np.vstack([self._non_face_edges, link_edges])
+        self._csgraph = None
+        self._nxgraph = None
+
+                        
     def get_local_meshes(self, n_points, max_dist=np.inf, center_node_ids=None,
                          center_coords=None, pc_align=False, pc_norm=False,
                          fix_meshes=False):
@@ -749,8 +779,8 @@ class Mesh(trimesh.Trimesh):
 
     def _create_csgraph(self):
         """ Computes csgraph """
-        if self.mesh_edges is not None:
-            edges = np.vstack((self.edges, self.mesh_edges))
+        if self._non_face_edges is not None:
+            edges = np.vstack((self.edges, self._non_face_edges))
         else:
             edges = self.edges
 
@@ -758,7 +788,7 @@ class Mesh(trimesh.Trimesh):
                                     directed=False)
 
 class MaskedMesh(Mesh):
-    def __init__(self, *args, node_mask=None, unmasked_size=None, mesh_edges=None, **kwargs):
+    def __init__(self, *args, node_mask=None, unmasked_size=None, non_face_edges=None, **kwargs):
         if 'vertices' in kwargs:
             vertices_all = kwargs.pop('vertices')
         else:
@@ -797,8 +827,8 @@ class MaskedMesh(Mesh):
         else:
             nodes_f, faces_f = vertices_all, faces_all
 
-        if mesh_edges is not None:
-            kwargs['mesh_edges'] = utils.filter_shapes(np.flatnonzero(self.node_mask), mesh_edges)[0]
+        if non_face_edges is not None:
+            kwargs['non_face_edges'] = utils.filter_shapes(np.flatnonzero(self.node_mask), non_face_edges)[0]
 
         new_args = (nodes_f, faces_f)
         if len(args) > 2:
@@ -853,10 +883,10 @@ class MaskedMesh(Mesh):
         for i in range(3):
             faces_unmask[:, i] = self.indices_unmasked[self.faces[:, i]]
 
-        if self.mesh_edges is not None:
-            mesh_edges_unmask = np.empty(self.mesh_edges.shape)
-            for i in range(self.mesh_edges.shape[1]):
-                mesh_edges_unmask[:, i] = self.indices_unmasked[self.mesh_edges[:, i]]
+        if self._non_face_edges is not None:
+            mesh_edges_unmask = np.empty(self._non_face_edges.shape)
+            for i in range(self._non_face_edges.shape[1]):
+                mesh_edges_unmask[:, i] = self.indices_unmasked[self._non_face_edges[:, i]]
         else:
             mesh_edges_unmask = None
 
@@ -864,7 +894,7 @@ class MaskedMesh(Mesh):
                           faces_unmask,
                           node_mask=joint_mask,
                           unmasked_size=self.unmasked_size,
-                          mesh_edges=mesh_edges_unmask,
+                          non_face_edges=mesh_edges_unmask,
                           **kwargs)
 
     def map_indices_to_unmasked(self, unmapped_indices):

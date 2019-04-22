@@ -1,15 +1,10 @@
 from annotationframeworkclient import chunkedgraph
 from scipy import spatial, sparse
-from meshparty import trimesh_io, utils
+from meshparty import utils
 import pykdtree
 import time
 import numpy as np
 
-
-def make_new_mesh_with_added_edges(mesh, new_edges):
-    new_mesh = trimesh_io.MaskedMesh(mesh.vertices, mesh.faces, process=False)
-    new_mesh._mesh_edges = np.concatenate([mesh.edges, new_edges])
-    return new_mesh
 
 def np_shared_rows(A,B):
     A_flat = np.ascontiguousarray(np.sort(A, axis=1)).view(dtype=('i8,i8'))
@@ -98,12 +93,14 @@ def find_edges_to_link(mesh, vert_ind_a, vert_ind_b, distance_upper_bound=2500):
         raise Exception('no close edges found')
     
     # create a new mesh that has these added edges
-    new_mesh = make_new_mesh_with_added_edges(mask_mesh, new_edges)
+    #new_mesh = make_new_mesh_with_added_edges(mask_mesh, new_edges)
+    total_edges = np.vstack([mask_mesh.mesh_edges, new_edges])
+    graph = utils.create_csgraph(mask_mesh.vertices, total_edges)
     timings['make_new_mesh']=time.time()-start_time
     start_time = time.time()
     
     # find the shortest path to one of the linking spots in this new mesh
-    d_ais_to_all, pred = sparse.csgraph.dijkstra(new_mesh.csgraph,
+    d_ais_to_all, pred = sparse.csgraph.dijkstra(graph,
                                                  indices=mask_inds[0],
                                                  unweighted=False,
                                                  directed=False,
@@ -124,17 +121,17 @@ def find_edges_to_link(mesh, vert_ind_a, vert_ind_b, distance_upper_bound=2500):
     return mask_mesh.map_indices_to_unmasked(good_edges)
     
 
-def merge_edges_to_merge_indices(mesh, merge_edge_coords, close_map_distance = 300):
+def merge_points_to_merge_indices(mesh, merge_event_points, close_map_distance = 300):
 
-    Nmerge = merge_edge_coords.shape[0]
+    Nmerge = merge_event_points.shape[0]
     # find the connected components of the mesh
     ccs, labels = sparse.csgraph.connected_components(mesh.csgraph, return_labels=True)
     uniq_labels, label_counts = np.unique(labels, return_counts=True)
     large_cc_mask = np.isin(labels, uniq_labels[label_counts>100])
     
     # convert the edge list to a Nmergex3 list of vertex positions
-    merge_edge_verts = merge_edge_coords.reshape((merge_edge_coords.shape[0]*merge_edge_coords.shape[1],
-                                              merge_edge_coords.shape[2]))
+    merge_edge_verts = merge_event_points.reshape((merge_event_points.shape[0]*merge_event_points.shape[1],
+                                                   merge_event_points.shape[2]))
     # create a fake list of indices for a skeleton
     # merge_edge_inds = np.arange(0, len(merge_edge_verts)).reshape(Nmerge, 2)
 
@@ -169,12 +166,12 @@ def merge_edges_to_merge_indices(mesh, merge_edge_coords, close_map_distance = 3
     remap_merges = np.where(close_mapped & ~is_join_merge)[0]
 
     # pick out the coordinates of our candidates
-    merge_coords = merge_edge_coords[close_mapped,:,:]
+    merge_coords = merge_event_points[close_mapped,:,:]
     # figure out which of the endpoint of the merge edge was the closest one
     close_merge = np.argmin(ds2.reshape((Nmerge,2)), axis=1)
 
     # we want to reconsider the other end of the merge edge and get their xyz coords
-    far_points = merge_edge_coords[remap_merges,(1-close_merge)[remap_merges],:]
+    far_points = merge_event_points[remap_merges,(1-close_merge)[remap_merges],:]
     # this is the connected component label for the close_merge end of the merge point
     closest_label = cc_labels[np.arange(0,len(cc_labels)), close_merge]
     # use a query_ball_point to find all the potential 'close' partners to the 
@@ -211,17 +208,18 @@ def merge_edges_to_merge_indices(mesh, merge_edge_coords, close_map_distance = 3
 def get_link_edges(mesh, seg_id, dataset_name, close_map_distance = 300,
                    server_address="https://www.dynamicannotationframework.com"):
     # initialize a chunkedgraph client
-    cg_client = chunkedgraph.ChunkedGraphClient(server_address=server_address, dataset_name=dataset_name)
+    cg_client = chunkedgraph.ChunkedGraphClient(server_address=server_address,
+                                                dataset_name=dataset_name)
     
     # get the merge log 
     merge_log = cg_client.get_merge_log(seg_id)
     # convert the coordinates to numpy array and count them
-    merge_edge_coords = np.array(merge_log['merge_edge_coords'])
+    merge_event_points = np.array(merge_log['merge_edge_coords'])
     
     # map these merge edge coordinates to indices on the mesh
-    merge_edge_inds = merge_edges_to_merge_indices(mesh,
-                                                   merge_edge_coords,
-                                                   close_map_distance = close_map_distance)
+    merge_edge_inds = merge_points_to_merge_indices(mesh,
+                                                    merge_event_points,
+                                                    close_map_distance = close_map_distance)
 
     # iterate over these merge indices and find the minimal edge
     # that links these two connected componets
