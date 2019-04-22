@@ -258,8 +258,8 @@ def make_vtk_skeleton_from_paths(verts, paths):
     return mesh
 
 
-def vtk_super_basic(actors, camera=None, do_save=False, folder=".", back_color=(.1, .1, .1),
-                    VIDEO_WIDTH=1080, VIDEO_HEIGHT=720):
+def vtk_super_basic(actors, camera=None, do_save=False, filepath=None, back_color=(.1, .1, .1),
+                    VIDEO_WIDTH=1080, VIDEO_HEIGHT=720, save_scale=5):
     """
     Create a window, renderer, interactor, add the actors and start the thing
 
@@ -271,13 +271,14 @@ def vtk_super_basic(actors, camera=None, do_save=False, folder=".", back_color=(
     -------
     nothing
     """
-
+    if do_save:
+        assert(filepath is not None)
     # create a rendering window and renderer
     ren = vtk.vtkRenderer()
     renWin = vtk.vtkRenderWindow()
     renWin.AddRenderer(ren)
     renWin.SetSize(VIDEO_WIDTH, VIDEO_HEIGHT)
-
+    # renderWindow.SetAlphaBitPlanes(1)
 
     ren.SetBackground(*back_color)
     # create a renderwindowinteractor
@@ -296,12 +297,29 @@ def vtk_super_basic(actors, camera=None, do_save=False, folder=".", back_color=(
         ren.ResetCameraClippingRange()
         camera.ViewingRaysModified()
     renWin.Render()
+    if do_save:
+         # render
+        imageFilter = vtk.vtkWindowToImageFilter()
+        imageFilter.SetInput(renWin)
+        imageFilter.SetInputBufferTypeToRGBA()
+        imageFilter.SetScale(save_scale)
+        imageFilter.ReadFrontBufferOff()
+        imageFilter.Update()
 
-    trackCamera = vtk.vtkInteractorStyleTrackballCamera()
-    iren.SetInteractorStyle(trackCamera)
-    # enable user interface interactor
-    iren.Initialize()
-    iren.Start()
+        #Setup movie writer
+        moviewriter = vtk.vtkPNGWriter()
+        moviewriter.SetInputConnection(imageFilter.GetOutputPort())
+        
+        moviewriter.SetFileName(filepath)
+        #Export a single frame
+        imageFilter.Modified()
+        moviewriter.Write()
+    else:     
+        trackCamera = vtk.vtkInteractorStyleTrackballCamera()
+        iren.SetInteractorStyle(trackCamera)
+        # enable user interface interactor
+        iren.Initialize()
+        iren.Start()
     renWin.Finalize()
 
     return ren
@@ -472,7 +490,7 @@ def make_point_cloud_actor(xyz,
     mapper.SetInputConnection(glyph.GetOutputPort())
 
     actor = vtk.vtkActor()
-    mapper.ScalarVisibilityOn()
+    mapper.ScalarVisibilityOff()
     actor.SetMapper(mapper)
     actor.GetProperty().SetColor(*color)
     actor.GetProperty().SetOpacity(opacity)
@@ -488,7 +506,7 @@ def vtk_linked_point_actor(vertices_a, inds_a,
     link_verts = np.vstack((vertices_a[inds_a], vertices_b[inds_b]))
     link_edges = np.vstack((np.arange(len(inds_a)),
                             len(inds_a)+np.arange(len(inds_b))))
-    link_poly = trimesh_vtk.graph_to_vtk(link_verts, link_edges.T)
+    link_poly = graph_to_vtk(link_verts, link_edges.T)
 
     mapper = vtk.vtkPolyDataMapper()
     mapper.SetInputData(link_poly)
