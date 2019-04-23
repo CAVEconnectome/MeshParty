@@ -735,9 +735,6 @@ class Mesh(trimesh.Trimesh):
         """
         time_start = time.time()
 
-        self._mesh_edges = None
-        self._csgraph = None
-
         ccs = sparse.csgraph.connected_components(self.csgraph)
         ccs_u, cc_sizes = np.unique(ccs[1], return_counts=True)
         large_cc_ids = ccs_u[cc_sizes > size_threshold]
