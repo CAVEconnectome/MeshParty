@@ -130,7 +130,6 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_thresh=7500,
         mesh_to_skeleton_map=None
 
     if collapse_soma:
-        print('collapsing')
         collapse_out = collapse_soma_skeleton(soma_pt, skel_verts, skel_edges,
                                               soma_d_thresh=soma_thresh,
                                               mesh_to_skeleton_map=mesh_to_skeleton_map)
@@ -398,8 +397,6 @@ def setup_root_new(mesh, is_soma_pt=None, soma_d=None, is_valid=None):
         start_ind = np.where(valid)[0][0]
         root, target, pred, dm, root_ds = utils.find_far_points(mesh, start_ind=start_ind)
     valid[root] = False
-    print(valid.shape)
-    print(root_ds.shape)
     assert(np.all(~np.isinf(root_ds[valid])))
     return root, root_ds, pred, valid
 
