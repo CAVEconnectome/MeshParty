@@ -6,7 +6,7 @@ import pandas as pd
 from pykdtree.kdtree import KDTree
 import pcst_fast
 from tqdm import trange, tqdm
-
+from meshparty.trimesh_io import Mesh
 
 def recenter_verts(verts, edges, centers):
     edge_df = pd.DataFrame()
@@ -21,16 +21,91 @@ def recenter_verts(verts, edges, centers):
     return new_verts
 
 
-def skeletonize(mesh_meta, seg_id, soma_pt=None, soma_thresh=7500,
+def reduce_verts(verts, faces):
+    """removes unused vertices from a graph or mesh
+
+    verts = NxD numpy array of vertex locations
+    faces = MxK numpy array of connected shapes (i.e. edges or tris)
+    (entries are indices into verts)
+
+    returns: 
+    new_verts, new_face, used_verts
+    a filtered set of vertices and reindexed set of faces
+    along with the index of the new_verts in the old verst
+    """
+    used_verts = np.unique(faces.ravel())
+    new_verts = verts[used_verts, :]
+    new_face = np.zeros(faces.shape, dtype=faces.dtype)
+    for i in range(faces.shape[1]):
+        new_face[:, i] = np.searchsorted(used_verts, faces[:, i])
+    return new_verts, new_face, used_verts
+
+def skeletonize_mesh(mesh, soma_pt=None, soma_thresh=7500,
                 invalidation_d=10000, smooth_neighborhood=5,
                 max_tip_d=2000, large_skel_path_threshold=5000,
-                cc_vertex_thresh=100, do_cross_section=False,
+                cc_vertex_thresh=100, 
+                collapse_soma=True,
                 merge_components_at_tips=True, return_map=False):
-    
+    """ function to turn a trimesh object of a neuron into a skeleton
+    Parameters
+    ----------
+    mesh: meshparty.trimesh_io.Mesh
+        the mesh to skeletonize, defaults assume vertices in nm
+    soma_pt: np.array
+        a length 3 array specifying to soma location to make the root
+        default=None, in which case a heuristic root will be chosen
+        in units of mesh vertices
+    soma_thresh: float
+        distance in mesh vertex units over which to consider mesh 
+        vertices close to soma_pt to belong to soma
+        these vertices will automatically be invalidated and no
+        skeleton branches will attempt to reach them.
+        This distance will also be used to collapse all skeleton
+        points within this distance to the soma_pt root if collpase_soma
+        is true. (default=7500 (nm))
+    invalidation_d: float
+        the distance along the mesh to invalidate when applying TEASAR
+        like algorithm.  Controls how detailed a structure the skeleton
+        algorithm reaches. default (10000 (nm))
+    smooth_neighborhood: int
+        the neighborhood in edge hopes over which to smooth skeleton locations.
+        This controls the smoothing of the skeleton
+        (default 5)
+    max_tip_d: float
+        the maximum distance to consider merging tips over.
+        This controls the MST based tip merging algorithm presently implemented
+        (default 100 (nm))
+    large_skel_path_threshold: int
+        the threshold in terms of skeleton vertices that skeletons will be
+        nominated for tip merging.  Smaller skeleton fragments 
+        will not be merged at their tips (default 5000)
+    cc_vertex_thresh: int
+        the threshold in terms of vertex numbers that connected components
+        of the mesh will be considered for skeletonization. mesh connected
+        components with fewer than these number of vertices will be ignored
+        by skeletonization algorithm. (default 100)
+    collapse_soma: bool
+        whether to collapse all skeleton vertices within soma_d of soma_pt
+        to soma_pt. Only applies if soma_pt passed. (default True)
+    merge_components_at_tips: bool
+        whether to perform tip merging as a post processing step
+        (default True)
+    return_map: bool
+        whether to return a map of how each mesh vertex maps onto each skeleton vertex
+        based upon how it was invalidated.
 
-    mesh = mesh_meta.mesh(seg_id=seg_id,
-                          merge_large_components=False,
-                          remove_duplicate_vertices=False)
+    Returns
+        skel_verts: np.array
+            a Nx3 matrix of skeleton vertex positions
+        skel_edges: np.array
+            a Kx2 matrix of skeleton edge indices into skel_verts
+        smooth_verts: np.array
+            a Nx3 matrix of vertex positions after smoothing
+        skel_verts_orig: np.array
+            a N long index of skeleton vertices in the original mesh vertex index
+        (mesh_to_skeleton_map): np.array
+            a Mx2 map of mesh vertex indices to skeleton vertex indices
+    """
 
     skeletonize_output = skeletonize_components(mesh,
                                                 soma_pt=soma_pt,
@@ -52,24 +127,48 @@ def skeletonize(mesh_meta, seg_id, soma_pt=None, soma_thresh=7500,
             all_edges.append(utils.paths_to_edges(comp_paths))
         tot_edges = np.vstack(all_edges)
 
-    skel_verts, skel_edges = trimesh_vtk.remove_unused_verts(mesh.vertices, tot_edges)
+    skel_verts, skel_edges, skel_verts_orig = reduce_verts(mesh.vertices, tot_edges)
     smooth_verts = smooth_graph(skel_verts, skel_edges, neighborhood=smooth_neighborhood)
 
-    output_tuple = skel_verts, skel_edges
-
-    if do_cross_section:
-        cross_sections, centers = trimesh_vtk.calculate_cross_sections(mesh, smooth_verts, skel_edges)
-        center_verts = recenter_verts(smooth_verts, skel_edges, centers)
-        smooth_center_verts = smooth_graph(center_verts, skel_edges, neighborhood=smooth_neighborhood)
-        output_tuple = output_tuple + (cross_sections,)
-    
-    output_tuple = output_tuple + (smooth_verts,)
-    
     if return_map:
         mesh_to_skeleton_map = utils.nanfilter_shapes(np.unique(tot_edges.ravel()), mesh_to_skeleton_map)
+        
+    else:
+        mesh_to_skeleton_map=None
+
+    if collapse_soma:
+        collapse_out = collapse_soma_skeleton(soma_pt, skel_verts, skel_edges,
+                                              soma_d_thresh=soma_thresh,
+                                              mesh_to_skeleton_map=mesh_to_skeleton_map)
+        if mesh_to_skeleton_map is None:
+            (skel_verts, skel_edges) = collapse_out
+        else:
+            (skel_verts, skel_edges, mesh_to_skeleton_map) = collapse_out
+    
+    output_tuple = (skel_verts, skel_edges, smooth_verts, skel_verts_orig)
+
+    if return_map:
         output_tuple = output_tuple + (mesh_to_skeleton_map,)
 
     return output_tuple
+
+
+def skeletonize(mesh_meta, seg_id, soma_pt=None, soma_thresh=7500,
+                invalidation_d=10000, smooth_neighborhood=5,
+                max_tip_d=2000, large_skel_path_threshold=5000,
+                cc_vertex_thresh=100, do_cross_section=False,
+                merge_components_at_tips=True, return_map=False):
+    
+
+    mesh = mesh_meta.mesh(seg_id=seg_id,
+                          merge_large_components=False,
+                          remove_duplicate_vertices=False)
+
+    return skeletonize_mesh(mesh, soma_pt=soma_pt, soma_thresh=soma_thresh,
+                invalidation_d=invalidation_d, smooth_neighborhood=smooth_neighborhood,
+                max_tip_d=max_tip_d, large_skel_path_threshold=large_skel_path_threshold,
+                cc_vertex_thresh=cc_vertex_thresh, do_cross_section=do_cross_section,
+                merge_components_at_tips=merge_components_at_tips, return_map=return_map)
 
 
 def skeletonize_axon(mesh_meta, axon_id, invalidation_d=5000, smooth_neighborhood=5,
@@ -244,7 +343,6 @@ def skeletonize_components(mesh,
                                                         is_soma_pt,
                                                         soma_d,
                                                         labels == k)
-
             # run teasar on this component
             teasar_output = mesh_teasar(mesh,
                                         root=root,
@@ -277,19 +375,22 @@ def setup_root_new(mesh, is_soma_pt=None, soma_d=None, is_valid=None):
         valid = np.copy(is_valid)
     else:
         valid = np.ones(len(mesh.vertices), np.bool)
+    assert(len(valid)==mesh.vertices.shape[0])
+
     root = None
     # soma mode
     if is_soma_pt is not None:
         # pick the first soma as root
-        
+        assert(len(soma_d)==mesh.vertices.shape[0])
+        assert(len(is_soma_pt)==mesh.vertices.shape[0])
         is_valid_root = is_soma_pt & valid
         valid_root_inds = np.where(is_valid_root)[0]
         if len(valid_root_inds) > 0:
             min_valid_root = np.nanargmin(soma_d[valid_root_inds])
-            root = valid_root_inds[min_valid_root]
+            root = valid_root_inds[min_valid_root]           
             root_ds, pred = sparse.csgraph.dijkstra(mesh.csgraph,
-                                                    False,
-                                                    root,
+                                                    directed=False,
+                                                    indices=root,
                                                     return_predecessors=True)
         else:
             start_ind = np.where(valid)[0][0]
@@ -341,7 +442,7 @@ def setup_root(mesh, soma_pt=None, soma_thresh=7500, valid_inds=None):
                 root, target, pred, dm, root_ds = utils.find_far_points(mesh)
     if root is None:
         # there is no soma close, so use far point heuristic
-        root, target, pred, dm, root_ds = find_far_points(mesh)
+        root, target, pred, dm, root_ds = utils.find_far_points(mesh)
     valid[root] = False
 
     return root, root_ds, pred, valid
@@ -489,18 +590,22 @@ def mesh_teasar(mesh, root=None, valid=None, root_ds=None, root_pred=None, soma_
     return out_tuple
 
 
-def smooth_graph(verts, edges, neighborhood=2, iterations=100, r=.1):
+def smooth_graph(verts, edges, mask=None, neighborhood=2, iterations=100, r=.1):
     """ smooths a spatial graph via iterative local averaging
         calculates the average position of neighboring vertices
         and relaxes the vertices toward that average
 
         :param verts: a NxK numpy array of vertex positions
         :param edges: a Mx2 numpy array of vertex indices that are edges
+        :param mask: optional N boolean vector of values to mask
+        the vert locations.  the result will return a result at every vert
+        but the values that are false in this mask will be ignored and not
+        factored into the smoothing.
         :param neighborhood: an integer of how far in the graph to relax over
         as being local to any vertex (default = 2)
         :param iterations: number of relaxation iterations (default = 100)
         :param r: relaxation factor at each iteration
-        new_vertex = (1-r)*old_vertex + r*(local_avg)
+        new_vertex = (1-r)*old_vertex*mask + (r+(1-r)*(1-mask))*(local_avg)
 
         :return: new_verts
         verts is a Nx3 list of new smoothed vertex positions
@@ -508,6 +613,7 @@ def smooth_graph(verts, edges, neighborhood=2, iterations=100, r=.1):
     """
     N = len(verts)
     E = len(edges)
+
     # setup a sparse matrix with the edges
     sm = sparse.csc_matrix(
         (np.ones(E), (edges[:, 0], edges[:, 1])), shape=(N, N))

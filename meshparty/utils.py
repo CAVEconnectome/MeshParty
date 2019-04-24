@@ -45,7 +45,7 @@ def filter_close_to_line(mesh, line_bound_pts, line_dist_th, axis=1):
     line_pt_ord = np.argsort(line_bound_pts[:,axis])
     below_top = mesh.vertices[:,axis] > line_bound_pts[line_pt_ord[0], axis] 
     above_bot = mesh.vertices[:,axis] < line_bound_pts[line_pt_ord[1], axis] 
-    ds = dist_from_ais_line( mesh.vertices, line_bound_pts, axis)
+    ds = dist_from_line( mesh.vertices, line_bound_pts, axis)
     is_close = (ds < line_dist_th) & below_top & above_bot
     return is_close
 
@@ -64,7 +64,7 @@ def mutual_closest_edges(mesh_a, mesh_b, distance_upper_bound=250):
 
 
 def indices_to_slice(inds, total_length):
-    v = np.full(total_lenth, False)
+    v = np.full(total_length, False)
     v[inds] = True
     return v
 

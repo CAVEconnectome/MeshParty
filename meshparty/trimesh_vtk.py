@@ -71,7 +71,7 @@ def graph_to_vtk(vertices, edges):
     return mesh
 
 
-def trimesh_to_vtk(vertices, tris, mesh_edges=None):
+def trimesh_to_vtk(vertices, tris, graph_edges=None):
     """Return a `vtkPolyData` representation of a :map:`TriMesh` instance
     Parameters
     ----------
@@ -93,7 +93,7 @@ def trimesh_to_vtk(vertices, tris, mesh_edges=None):
     if np.max(tris) >= len(vertices):
         msg = 'edges refer to non existent vertices {}.'
         raise ValueError(msg.format(np.max(tris)))
-    mesh, cells, edges = numpy_rep_to_vtk(vertices, tris, mesh_edges)
+    mesh, cells, edges = numpy_rep_to_vtk(vertices, tris, graph_edges)
     mesh.SetPolys(cells)
     if edges is not None:
         mesh.SetLines(edges)
@@ -154,7 +154,7 @@ def vtk_poly_to_mesh_components(poly):
 
 
 def filter_largest_cc(trimesh):
-    poly = trimesh_to_vtk(trimesh.vertices, trimesh.faces, trimesh.mesh_edges)
+    poly = trimesh_to_vtk(trimesh.vertices, trimesh.faces, trimesh.graph_edges)
     connf = vtk.vtkConnectivityFilter()
     connf.SetInputData(poly)
     connf.SetExtractionModeToLargestRegion()
@@ -258,8 +258,8 @@ def make_vtk_skeleton_from_paths(verts, paths):
     return mesh
 
 
-def vtk_super_basic(actors, camera=None, do_save=False, folder=".", back_color=(.1, .1, .1),
-                    VIDEO_WIDTH=1080, VIDEO_HEIGHT=720):
+def vtk_super_basic(actors, camera=None, do_save=False, filepath=None, back_color=(.1, .1, .1),
+                    VIDEO_WIDTH=1080, VIDEO_HEIGHT=720, save_scale=5):
     """
     Create a window, renderer, interactor, add the actors and start the thing
 
@@ -271,14 +271,14 @@ def vtk_super_basic(actors, camera=None, do_save=False, folder=".", back_color=(
     -------
     nothing
     """
-
+    if do_save:
+        assert(filepath is not None)
     # create a rendering window and renderer
     ren = vtk.vtkRenderer()
     renWin = vtk.vtkRenderWindow()
     renWin.AddRenderer(ren)
     renWin.SetSize(VIDEO_WIDTH, VIDEO_HEIGHT)
-    if camera is not None:
-        ren.SetActiveCamera(camera)
+    # renderWindow.SetAlphaBitPlanes(1)
 
     ren.SetBackground(*back_color)
     # create a renderwindowinteractor
@@ -292,16 +292,114 @@ def vtk_super_basic(actors, camera=None, do_save=False, folder=".", back_color=(
     # render
     if camera is None:
         ren.ResetCamera()
+    else:
+        ren.SetActiveCamera(camera)
+        ren.ResetCameraClippingRange()
+        camera.ViewingRaysModified()
     renWin.Render()
+    if do_save:
+         # render
+        imageFilter = vtk.vtkWindowToImageFilter()
+        imageFilter.SetInput(renWin)
+        imageFilter.SetInputBufferTypeToRGBA()
+        imageFilter.SetScale(save_scale)
+        imageFilter.ReadFrontBufferOff()
+        imageFilter.Update()
 
-    trackCamera = vtk.vtkInteractorStyleTrackballCamera()
-    iren.SetInteractorStyle(trackCamera)
-    # enable user interface interactor
-    iren.Initialize()
-    iren.Start()
+        #Setup movie writer
+        moviewriter = vtk.vtkPNGWriter()
+        moviewriter.SetInputConnection(imageFilter.GetOutputPort())
+        
+        moviewriter.SetFileName(filepath)
+        #Export a single frame
+        imageFilter.Modified()
+        moviewriter.Write()
+    else:     
+        trackCamera = vtk.vtkInteractorStyleTrackballCamera()
+        iren.SetInteractorStyle(trackCamera)
+        # enable user interface interactor
+        iren.Initialize()
+        iren.Start()
     renWin.Finalize()
 
     return ren
+
+
+def vtk_camera_from_quat(pos_nm, orient_quat, camera_distance=10000, ngl_correct=True):
+    """define a vtk camera with a particular orientation
+        Parameters
+        ----------
+        pos_nm: np.array, list, tuple
+            an iterator of length 3 containing the focus point of the camera
+        orient_quat: np.array, list, tuple
+            a len(4) quatenerion (x,y,z,w) describing the rotation of the camera
+            such as returned by neuroglancer x,y,z,w all in [0,1] range
+        camera_distance: float
+            the desired distance from pos_nm to the camera (default = 10000 nm)
+
+        Returns
+        -------
+        vtk.vtkCamera
+            a vtk camera setup according to these rules
+    """
+    camera = vtk.vtkCamera()
+    # define the quaternion in vtk, note the swapped order
+    # w,x,y,z instead of x,y,z,w
+    quat_vtk=vtk.vtkQuaterniond(orient_quat[3],
+                                orient_quat[0],
+                                orient_quat[1],
+                                orient_quat[2])
+    # use this to define a rotation matrix in x,y,z
+    # right handed units
+    M = np.zeros((3, 3), dtype=np.float32)
+    quat_vtk.ToMatrix3x3(M)
+    # the default camera orientation is y up
+    up = [0, 1, 0]
+    # calculate default camera position is backed off in positive z 
+    pos = [0, 0, camera_distance]
+    
+    # set the camera rototation by applying the rotation matrix
+    camera.SetViewUp(*np.dot(M,up))
+    # set the camera position by applying the rotation matrix
+    camera.SetPosition(*np.dot(M,pos))
+    if ngl_correct:
+        # neuroglancer has positive y going down
+        # so apply these azimuth and roll corrections
+        # to fix orientatins
+        camera.Azimuth(-180)
+        camera.Roll(180)
+
+    # shift the camera posiiton and focal position
+    # to be centered on the desired location
+    p=camera.GetPosition()
+    p_new = np.array(p)+pos_nm
+    camera.SetPosition(*p_new)
+    camera.SetFocalPoint(*pos_nm)
+    return camera
+
+def vtk_camera_from_ngl_state(state_d, zoom_factor=300.0):
+    """define a vtk camera from a neuroglancer state dictionary
+        Parameters
+        ----------
+        state_d: dict
+            an neuroglancer state dictionary
+        zoom_factor: float
+            how much to multiply zoom by to get camera backoff distance
+            default = 300 > ngl_zoom = 1 > 300 nm backoff distance
+
+        Returns
+        -------
+        vtk.vtkCamera
+            a vtk camera setup that mathces this state
+    """
+
+    orient = state_d.get('perspectiveOrientation', [0.0,0.0,0.0,1.0])
+    zoom = state_d.get('perspectiveZoom', 10.0)
+    position = state_d['navigation']['pose']['position']
+    pos_nm = np.array(position['voxelCoordinates'])*position['voxelSize']
+    camera = vtk_camera_from_quat(pos_nm, orient, zoom*zoom_factor, ngl_correct=True)
+    
+    return camera
 
 
 def make_mesh_actor(mesh, color=(0, 1, 0),
@@ -310,11 +408,11 @@ def make_mesh_actor(mesh, color=(0, 1, 0),
                     lut=None,
                     calc_normals=True):
 
-    mesh_poly = trimesh_to_vtk(mesh.vertices, mesh.faces, mesh.mesh_edges)
+    mesh_poly = trimesh_to_vtk(mesh.vertices, mesh.faces, mesh.graph_edges)
     if vertex_scalars is not None:
         mesh_poly.GetPointData().SetScalars(numpy_to_vtk(vertex_scalars))
     mesh_mapper = vtk.vtkPolyDataMapper()
-    if calc_normals and mesh.mesh_edges is None:
+    if calc_normals and mesh.graph_edges is None:
         norms = vtk.vtkTriangleMeshPointNormals()
         norms.SetInputData(mesh_poly)
         mesh_mapper.SetInputConnection(norms.GetOutputPort())
@@ -333,6 +431,7 @@ def make_mesh_actor(mesh, color=(0, 1, 0),
 
 def vtk_skeleton_actor(sk,
                        edge_property=None,
+                       vertex_property=None,
                        normalize_property=True,
                        color=(0, 0, 0),
                        line_width=3,
@@ -350,6 +449,17 @@ def vtk_skeleton_actor(sk,
         if lut_map is not None:
             lut_map(lut)
         lut.Build()
+        mapper.SetLookupTable(lut)
+    if vertex_property is not None:
+        data = sk.vertex_properties[vertex_property]
+        if normalize_property:
+            data = data / np.nanmax(data)
+        sk_mesh.GetPointData().SetScalars(numpy_to_vtk(data))
+        lut = vtk.vtkLookupTable()
+        if lut_map is not None:
+            lut_map(lut)
+        lut.Build()
+        mapper.ScalarVisibilityOn()
         mapper.SetLookupTable(lut)
 
     actor = vtk.vtkActor()
@@ -392,7 +502,7 @@ def make_point_cloud_actor(xyz,
     mapper.SetInputConnection(glyph.GetOutputPort())
 
     actor = vtk.vtkActor()
-    mapper.ScalarVisibilityOn()
+    mapper.ScalarVisibilityOff()
     actor.SetMapper(mapper)
     actor.GetProperty().SetColor(*color)
     actor.GetProperty().SetOpacity(opacity)
@@ -408,7 +518,7 @@ def vtk_linked_point_actor(vertices_a, inds_a,
     link_verts = np.vstack((vertices_a[inds_a], vertices_b[inds_b]))
     link_edges = np.vstack((np.arange(len(inds_a)),
                             len(inds_a)+np.arange(len(inds_b))))
-    link_poly = trimesh_vtk.graph_to_vtk(link_verts, link_edges.T)
+    link_poly = graph_to_vtk(link_verts, link_edges.T)
 
     mapper = vtk.vtkPolyDataMapper()
     mapper.SetInputData(link_poly)
