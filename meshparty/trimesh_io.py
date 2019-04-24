@@ -272,7 +272,7 @@ class MeshMeta(object):
         return "%s/%d.h5" % (self.disk_cache_path, seg_id)
 
     def mesh(self, filename=None, seg_id=None, cache_mesh=True,
-             merge_large_components=True, remove_duplicate_vertices=True,
+             merge_large_components=False, remove_duplicate_vertices=False,
              overwrite_merge_large_components=False, masked_mesh=False):
         """ Loads mesh either from cache, disk or google storage
 
