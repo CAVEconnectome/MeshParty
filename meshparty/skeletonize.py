@@ -21,10 +21,29 @@ def recenter_verts(verts, edges, centers):
     return new_verts
 
 
+def reduce_verts(verts, faces):
+    """removes unused vertices from a graph or mesh
+
+    verts = NxD numpy array of vertex locations
+    faces = MxK numpy array of connected shapes (i.e. edges or tris)
+    (entries are indices into verts)
+
+    returns: 
+    new_verts, new_face, used_verts
+    a filtered set of vertices and reindexed set of faces
+    along with the index of the new_verts in the old verst
+    """
+    used_verts = np.unique(faces.ravel())
+    new_verts = verts[used_verts, :]
+    new_face = np.zeros(faces.shape, dtype=faces.dtype)
+    for i in range(faces.shape[1]):
+        new_face[:, i] = np.searchsorted(used_verts, faces[:, i])
+    return new_verts, new_face, used_verts
+
 def skeletonize_mesh(mesh, soma_pt=None, soma_thresh=7500,
                 invalidation_d=10000, smooth_neighborhood=5,
                 max_tip_d=2000, large_skel_path_threshold=5000,
-                cc_vertex_thresh=100, do_cross_section=False,
+                cc_vertex_thresh=100, 
                 collapse_soma=True,
                 merge_components_at_tips=True, return_map=False):
     """ function to turn a trimesh object of a neuron into a skeleton
@@ -65,13 +84,6 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_thresh=7500,
         of the mesh will be considered for skeletonization. mesh connected
         components with fewer than these number of vertices will be ignored
         by skeletonization algorithm. (default 100)
-    do_cross_section: bool
-        whether to perform a post-processing step that uses vtk to calculate
-        a cross section of the mesh at each skeleton vertex.  This is then
-        used to move the skeleton vertex to the center of this cross section.
-        The resulting skeleton is then smoothed and the cross sections returned.
-        This works well for unbranched structures but fails generally at branch points
-        (default False)
     collapse_soma: bool
         whether to collapse all skeleton vertices within soma_d of soma_pt
         to soma_pt. Only applies if soma_pt passed. (default True)
@@ -89,8 +101,8 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_thresh=7500,
             a Kx2 matrix of skeleton edge indices into skel_verts
         smooth_verts: np.array
             a Nx3 matrix of vertex positions after smoothing
-        (cross_sections): np.array
-            a N long verctor of cross sectional areas (only if do_cross_sections=True)
+        skel_verts_orig: np.array
+            a N long index of skeleton vertices in the original mesh vertex index
         (mesh_to_skeleton_map): np.array
             a Mx2 map of mesh vertex indices to skeleton vertex indices
     """
@@ -115,14 +127,9 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_thresh=7500,
             all_edges.append(utils.paths_to_edges(comp_paths))
         tot_edges = np.vstack(all_edges)
 
-    skel_verts, skel_edges = trimesh_vtk.remove_unused_verts(mesh.vertices, tot_edges)
+    skel_verts, skel_edges, skel_verts_orig = reduce_verts(mesh.vertices, tot_edges)
     smooth_verts = smooth_graph(skel_verts, skel_edges, neighborhood=smooth_neighborhood)
 
-    if do_cross_section:
-        cross_sections, centers = trimesh_vtk.calculate_cross_sections(mesh, smooth_verts, skel_edges)
-        center_verts = recenter_verts(smooth_verts, skel_edges, centers)
-        smooth_center_verts = smooth_graph(center_verts, skel_edges, neighborhood=smooth_neighborhood)   
-      
     if return_map:
         mesh_to_skeleton_map = utils.nanfilter_shapes(np.unique(tot_edges.ravel()), mesh_to_skeleton_map)
         
@@ -138,9 +145,8 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_thresh=7500,
         else:
             (skel_verts, skel_edges, mesh_to_skeleton_map) = collapse_out
     
-    output_tuple = (skel_verts, skel_edges, smooth_verts)
-    if do_cross_section:
-        output_tuple = output_tuple + (cross_sections,)
+    output_tuple = (skel_verts, skel_edges, smooth_verts, skel_verts_orig)
+
     if return_map:
         output_tuple = output_tuple + (mesh_to_skeleton_map,)
 
@@ -584,18 +590,22 @@ def mesh_teasar(mesh, root=None, valid=None, root_ds=None, root_pred=None, soma_
     return out_tuple
 
 
-def smooth_graph(verts, edges, neighborhood=2, iterations=100, r=.1):
+def smooth_graph(verts, edges, mask=None, neighborhood=2, iterations=100, r=.1):
     """ smooths a spatial graph via iterative local averaging
         calculates the average position of neighboring vertices
         and relaxes the vertices toward that average
 
         :param verts: a NxK numpy array of vertex positions
         :param edges: a Mx2 numpy array of vertex indices that are edges
+        :param mask: optional N boolean vector of values to mask
+        the vert locations.  the result will return a result at every vert
+        but the values that are false in this mask will be ignored and not
+        factored into the smoothing.
         :param neighborhood: an integer of how far in the graph to relax over
         as being local to any vertex (default = 2)
         :param iterations: number of relaxation iterations (default = 100)
         :param r: relaxation factor at each iteration
-        new_vertex = (1-r)*old_vertex + r*(local_avg)
+        new_vertex = (1-r)*old_vertex*mask + (r+(1-r)*(1-mask))*(local_avg)
 
         :return: new_verts
         verts is a Nx3 list of new smoothed vertex positions
@@ -603,6 +613,7 @@ def smooth_graph(verts, edges, neighborhood=2, iterations=100, r=.1):
     """
     N = len(verts)
     E = len(edges)
+
     # setup a sparse matrix with the edges
     sm = sparse.csc_matrix(
         (np.ones(E), (edges[:, 0], edges[:, 1])), shape=(N, N))
