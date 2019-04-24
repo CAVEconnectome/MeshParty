@@ -40,16 +40,16 @@ def read_mesh_h5(filename):
         else:
             normals = []
 
-        if "non_face_edges" in f.keys():
-            non_face_edges = f["non_face_edges"].value
+        if "link_edges" in f.keys():
+            link_edges = f["link_edges"].value
         else:
-            non_face_edges = None
+            link_edges = None
 
-    return vertices, faces, normals, non_face_edges
+    return vertices, faces, normals, link_edges
 
 
 def write_mesh_h5(filename, vertices, faces,
-                  normals=None, non_face_edges=None, overwrite=False):
+                  normals=None, link_edges=None, overwrite=False):
     """Writes a mesh's vertices, faces (and normals) to an hdf5 file"""
 
     if os.path.isfile(filename):
@@ -65,8 +65,8 @@ def write_mesh_h5(filename, vertices, faces,
         if normals is not None:
             f.create_dataset("normals", data=normals, compression="gzip")
 
-        if non_face_edges is not None:
-            f.create_dataset("non_face_edges", data=non_face_edges, compression="gzip")
+        if link_edges is not None:
+            f.create_dataset("link_edges", data=link_edges, compression="gzip")
 
 
 def read_mesh(filename):
@@ -74,13 +74,13 @@ def read_mesh(filename):
 
     if filename.endswith(".obj"):
         vertices, faces, normals = read_mesh_obj(filename)
-        non_face_edges = None
+        link_edges = None
     elif filename.endswith(".h5"):
-        vertices, faces, normals, non_face_edges = read_mesh_h5(filename)
+        vertices, faces, normals, link_edges = read_mesh_h5(filename)
     else:
         raise Exception("Unknown filetype")
 
-    return vertices, faces, normals, non_face_edges
+    return vertices, faces, normals, link_edges
 
 
 def read_mesh_obj(filename):
@@ -171,7 +171,7 @@ def _download_meshes_thread(args):
                 write_mesh_h5(f"{target_dir}/{seg_id}.h5",
                               mesh.vertices,
                               mesh.faces.flatten(),
-                              non_face_edges=mesh.non_face_edges,
+                              link_edges=mesh.link_edges,
                               overwrite=overwrite)
             else:
                 mesh.write_to_file(f"{target_dir}/{seg_id}.{fmt}")
@@ -283,7 +283,7 @@ class MeshMeta(object):
             for avoiding a memory overflow
         :param merge_large_components: bool
             if True: large (>100 vx) mesh connected components are linked
-            and the additional edges strored in .non_face_edges
+            and the additional edges strored in .link_edges
             this information is cached as well
         :param remove_duplicate_vertices: bool
             if True will merge vertices with the same coordinates and also
@@ -297,16 +297,16 @@ class MeshMeta(object):
 
         if filename is not None:
             if filename not in self._mesh_cache:
-                vertices, faces, normals, non_face_edges = read_mesh(filename)
+                vertices, faces, normals, link_edges = read_mesh(filename)
                 if masked_mesh:
                     mesh = MaskedMesh(vertices=vertices, faces=faces, normals=normals,
-                                        non_face_edges=non_face_edges, process=False)
+                                        link_edges=link_edges, process=False)
                 else:
                     mesh = Mesh(vertices=vertices, faces=faces, normals=normals,
-                                non_face_edges=non_face_edges,
+                                link_edges=link_edges,
                                 process=remove_duplicate_vertices)
 
-                if (merge_large_components and (len(mesh.non_face_edges)==0)) or \
+                if (merge_large_components and (len(mesh.link_edges)==0)) or \
                         overwrite_merge_large_components:
                     mesh.merge_large_components()
 
@@ -319,7 +319,7 @@ class MeshMeta(object):
                     overwrite_merge_large_components:
                 write_mesh_h5(filename, mesh.vertices,
                               mesh.faces.flatten(),
-                              non_face_edges=mesh.non_face_edges)
+                              link_edges=mesh.link_edges)
         else:
             if self.disk_cache_path is not None:
                 if os.path.exists(self._filename(seg_id)):
@@ -347,7 +347,7 @@ class MeshMeta(object):
                                 faces=faces,
                                 process=remove_duplicate_vertices)
 
-                    if (merge_large_components and (len(mesh.non_face_edges)==0)) or \
+                    if (merge_large_components and (len(mesh.link_edges)==0)) or \
                             overwrite_merge_large_components:
                         mesh.merge_large_components()
 
@@ -357,32 +357,32 @@ class MeshMeta(object):
                 if self.disk_cache_path is not None:
                     write_mesh_h5(self._filename(seg_id), mesh.vertices,
                                   mesh.faces,
-                                  non_face_edges=mesh.non_face_edges)
+                                  link_edges=mesh.link_edges)
             else:
                 mesh = self._mesh_cache[seg_id]
 
         return mesh
 
 class Mesh(trimesh.Trimesh):
-    def __init__(self, *args, non_face_edges=None, **kwargs):
+    def __init__(self, *args, link_edges=None, **kwargs):
         super(Mesh, self).__init__(*args, **kwargs)
-        self.non_face_edges = non_face_edges
+        self.link_edges = link_edges
 
     @property
-    def non_face_edges(self):
-        return self._data['non_face_edges']
+    def link_edges(self):
+        return self._data['link_edges']
 
-    @non_face_edges.setter
-    def non_face_edges(self, values):
+    @link_edges.setter
+    def link_edges(self, values):
         if values is None:
             values = np.array([[],[]]).T
         values = np.asanyarray(values, dtype=np.int64)
         # prevents cache from being invalidated
         with self._cache:
-            self._data['non_face_edges']=values
+            self._data['link_edges']=values
         # now invalidate all items affected
         # not sure this is all of them that are not affected
-        # by adding non_face_edges
+        # by adding link_edges
         self._cache.clear(exclude=['face_normals',
                                    'vertex_normals',
                                    'faces_sparse',
@@ -428,8 +428,8 @@ class Mesh(trimesh.Trimesh):
         return len(self.faces)
 
     @caching.cache_decorator
-    def mesh_edges(self):
-        return np.vstack([self.edges, self.non_face_edges])
+    def graph_edges(self):
+        return np.vstack([self.edges, self.link_edges])
 
     def fix_mesh(self, wiggle_vertices=False, verbose=False):
         """ Executes rudimentary fixing function from pymeshfix
@@ -639,9 +639,9 @@ class Mesh(trimesh.Trimesh):
         """ node_ids has to be sorted! """
         return utils.filter_shapes(node_ids, self.faces)
 
-    def _filter_mesh_edges(self, node_ids):
+    def _filter_graph_edges(self, node_ids):
         """ node_ids has to be sorted! """
-        return utils.filter_shapes(node_ids, self.mesh_edges)
+        return utils.filter_shapes(node_ids, self.graph_edges)
 
 
     def add_link_edges(self, seg_id, dataset_name, close_map_distance=300,
@@ -660,7 +660,7 @@ class Mesh(trimesh.Trimesh):
         link_edges = trimesh_repair.get_link_edges(self, seg_id, dataset_name,
                                                    close_map_distance = close_map_distance,
                                                    server_address=server_address)
-        self.non_face_edges = np.vstack([self.non_face_edges, link_edges])
+        self.link_edges = np.vstack([self.link_edges, link_edges])
 
 
                         
@@ -770,22 +770,22 @@ class Mesh(trimesh.Trimesh):
 
         print(f"Adding {len(add_edges)} new edges.")
 
-        self.non_face_edges = np.vstack([self.non_face_edges, add_edges])
+        self.link_edges = np.vstack([self.link_edges, add_edges])
 
         print("TIME MERGING: %.3fs" % (time.time() - time_start))
 
     def _create_nxgraph(self):
         """ Computes networkx graph """
-        return utils.create_nxgraph(self.vertices, self.mesh_edges, euclidean_weight=True,
+        return utils.create_nxgraph(self.vertices, self.graph_edges, euclidean_weight=True,
                                     directed=False)
 
     def _create_csgraph(self):
         """ Computes csgraph """
-        return utils.create_csgraph(self.vertices, self.mesh_edges, euclidean_weight=True,
+        return utils.create_csgraph(self.vertices, self.graph_edges, euclidean_weight=True,
                                     directed=False)
 
 class MaskedMesh(Mesh):
-    def __init__(self, *args, node_mask=None, unmasked_size=None, non_face_edges=None, **kwargs):
+    def __init__(self, *args, node_mask=None, unmasked_size=None, link_edges=None, **kwargs):
         if 'vertices' in kwargs:
             vertices_all = kwargs.pop('vertices')
         else:
@@ -824,8 +824,8 @@ class MaskedMesh(Mesh):
         else:
             nodes_f, faces_f = vertices_all, faces_all
 
-        if non_face_edges is not None:
-            kwargs['non_face_edges'] = utils.filter_shapes(np.flatnonzero(self.node_mask), non_face_edges)[0]
+        if link_edges is not None:
+            kwargs['link_edges'] = utils.filter_shapes(np.flatnonzero(self.node_mask), link_edges)[0]
 
         new_args = (nodes_f, faces_f)
         if len(args) > 2:
@@ -880,18 +880,18 @@ class MaskedMesh(Mesh):
         for i in range(3):
             faces_unmask[:, i] = self.indices_unmasked[self.faces[:, i]]
 
-        if self.non_face_edges.shape[0]>0:
-            non_face_edges_unmask = np.empty(self.non_face_edges.shape)
-            for i in range(self.non_face_edges.shape[1]):
-                non_face_edges_unmask[:, i] = self.indices_unmasked[self.non_face_edges[:, i]]
+        if self.link_edges.shape[0]>0:
+            link_edges_unmask = np.empty(self.link_edges.shape)
+            for i in range(self.link_edges.shape[1]):
+                link_edges_unmask[:, i] = self.indices_unmasked[self.link_edges[:, i]]
         else:
-            non_face_edges_unmask = None
+            link_edges_unmask = None
 
         return MaskedMesh(vertices_unmask,
                           faces_unmask,
                           node_mask=joint_mask,
                           unmasked_size=self.unmasked_size,
-                          non_face_edges=non_face_edges_unmask,
+                          link_edges=link_edges_unmask,
                           **kwargs)
 
     def map_indices_to_unmasked(self, unmapped_indices):

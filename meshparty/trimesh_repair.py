@@ -94,7 +94,7 @@ def find_edges_to_link(mesh, vert_ind_a, vert_ind_b, distance_upper_bound=2500):
     
     # create a new mesh that has these added edges
     #new_mesh = make_new_mesh_with_added_edges(mask_mesh, new_edges)
-    total_edges = np.vstack([mask_mesh.mesh_edges, new_edges])
+    total_edges = np.vstack([mask_mesh.graph_edges, new_edges])
     graph = utils.create_csgraph(mask_mesh.vertices, total_edges)
     timings['make_new_mesh']=time.time()-start_time
     start_time = time.time()

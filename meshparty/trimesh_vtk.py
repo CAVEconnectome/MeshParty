@@ -71,7 +71,7 @@ def graph_to_vtk(vertices, edges):
     return mesh
 
 
-def trimesh_to_vtk(vertices, tris, mesh_edges=None):
+def trimesh_to_vtk(vertices, tris, graph_edges=None):
     """Return a `vtkPolyData` representation of a :map:`TriMesh` instance
     Parameters
     ----------
@@ -93,7 +93,7 @@ def trimesh_to_vtk(vertices, tris, mesh_edges=None):
     if np.max(tris) >= len(vertices):
         msg = 'edges refer to non existent vertices {}.'
         raise ValueError(msg.format(np.max(tris)))
-    mesh, cells, edges = numpy_rep_to_vtk(vertices, tris, mesh_edges)
+    mesh, cells, edges = numpy_rep_to_vtk(vertices, tris, graph_edges)
     mesh.SetPolys(cells)
     if edges is not None:
         mesh.SetLines(edges)
@@ -154,7 +154,7 @@ def vtk_poly_to_mesh_components(poly):
 
 
 def filter_largest_cc(trimesh):
-    poly = trimesh_to_vtk(trimesh.vertices, trimesh.faces, trimesh.mesh_edges)
+    poly = trimesh_to_vtk(trimesh.vertices, trimesh.faces, trimesh.graph_edges)
     connf = vtk.vtkConnectivityFilter()
     connf.SetInputData(poly)
     connf.SetExtractionModeToLargestRegion()
@@ -408,11 +408,11 @@ def make_mesh_actor(mesh, color=(0, 1, 0),
                     lut=None,
                     calc_normals=True):
 
-    mesh_poly = trimesh_to_vtk(mesh.vertices, mesh.faces, mesh.mesh_edges)
+    mesh_poly = trimesh_to_vtk(mesh.vertices, mesh.faces, mesh.graph_edges)
     if vertex_scalars is not None:
         mesh_poly.GetPointData().SetScalars(numpy_to_vtk(vertex_scalars))
     mesh_mapper = vtk.vtkPolyDataMapper()
-    if calc_normals and mesh.mesh_edges is None:
+    if calc_normals and mesh.graph_edges is None:
         norms = vtk.vtkTriangleMeshPointNormals()
         norms.SetInputData(mesh_poly)
         mesh_mapper.SetInputConnection(norms.GetOutputPort())
