@@ -431,6 +431,7 @@ def make_mesh_actor(mesh, color=(0, 1, 0),
 
 def vtk_skeleton_actor(sk,
                        edge_property=None,
+                       vertex_property=None,
                        normalize_property=True,
                        color=(0, 0, 0),
                        line_width=3,
@@ -448,6 +449,17 @@ def vtk_skeleton_actor(sk,
         if lut_map is not None:
             lut_map(lut)
         lut.Build()
+        mapper.SetLookupTable(lut)
+    if vertex_property is not None:
+        data = sk.vertex_properties[vertex_property]
+        if normalize_property:
+            data = data / np.nanmax(data)
+        sk_mesh.GetPointData().SetScalars(numpy_to_vtk(data))
+        lut = vtk.vtkLookupTable()
+        if lut_map is not None:
+            lut_map(lut)
+        lut.Build()
+        mapper.ScalarVisibilityOn()
         mapper.SetLookupTable(lut)
 
     actor = vtk.vtkActor()
