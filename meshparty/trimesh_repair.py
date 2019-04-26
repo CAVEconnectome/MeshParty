@@ -199,7 +199,7 @@ def merge_points_to_merge_indices(mesh, merge_event_points, close_map_distance =
             # into the mesh vertex index.
             close_inds[ind] = mesh.faces[arr[np.where(other_comp_points)[0][np.argmin(d)]],0]
             # reset the is_join_merge index to True for this case
-            is_join_merge[ind] = True
+            is_join_merge[remap_merges[k]] = True
 
     # return the close_inds reshaped into Nmerge x 2, and filtered to only be those
     # that are connected differente connected components    
@@ -215,12 +215,14 @@ def get_link_edges(mesh, seg_id, dataset_name, close_map_distance = 300,
     merge_log = cg_client.get_merge_log(seg_id)
     # convert the coordinates to numpy array and count them
     merge_event_points = np.array(merge_log['merge_edge_coords'])
-    
     # map these merge edge coordinates to indices on the mesh
-    merge_edge_inds = merge_points_to_merge_indices(mesh,
-                                                    merge_event_points,
-                                                    close_map_distance = close_map_distance)
-
+    if len(merge_event_points)>0:
+        merge_edge_inds = merge_points_to_merge_indices(mesh,
+                                                        merge_event_points,
+                                                        close_map_distance = close_map_distance)
+    else:
+        merge_edge_inds=[]
+    print(len(merge_edge_inds), len(merge_event_points))
     # iterate over these merge indices and find the minimal edge
     # that links these two connected componets
     total_link_edges=[]
@@ -229,7 +231,10 @@ def get_link_edges(mesh, seg_id, dataset_name, close_map_distance = 300,
         total_link_edges.append(link_edges)
     
     # reshape the combined result into a M x 2 matrix
-    link_edges = np.concatenate(total_link_edges)
+    if len(total_link_edges)>0:
+        link_edges = np.concatenate(total_link_edges)
+    else:
+        link_edges = np.array([])
     link_edges = link_edges.reshape((len(link_edges), 2))
 
     return link_edges
