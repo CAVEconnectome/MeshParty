@@ -909,6 +909,7 @@ class MaskedMesh(Mesh):
 
         return MaskedMesh(vertices_unmask,
                           faces_unmask,
+                          apply_mask=True,
                           node_mask=joint_mask,
                           unmasked_size=self.unmasked_size,
                           link_edges=link_edges_unmask,

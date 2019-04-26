@@ -1,5 +1,5 @@
 import os
-import trimesh_io
+from . import trimesh_io
 import h5py
 from meshparty import skeleton
 
