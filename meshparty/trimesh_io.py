@@ -44,8 +44,15 @@ def read_mesh_h5(filename, masked_mesh=False):
             link_edges = f["link_edges"].value
         else:
             link_edges = None
-
-    return vertices, faces, normals, link_edges
+        
+        if "node_mask" in f.keys():
+            node_mask = f["node_mask"].value
+        else:
+            node_mask = None
+    if masked_mesh:
+        return vertices, faces, normals, link_edges, node_mask
+    else:
+        return vertices, faces, normals, link_edges
 
 
 def write_mesh_h5(filename, vertices, faces,
