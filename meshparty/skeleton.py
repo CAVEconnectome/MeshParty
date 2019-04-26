@@ -1,7 +1,7 @@
 import numpy as np
 from meshparty import utils
 from scipy import spatial, sparse
-from pykdtree.kdtree import KDTree
+from pykdtree.kdtree import KDTree as pyKDTree
 from copy import copy
 import json
 
@@ -202,6 +202,8 @@ class Skeleton:
         self._paths = None
         self._parent_node_array = None
         self._kdtree = None
+        self._pykdtree = None
+
         self._csgraph = None
         self._csgraph_binary = None
         self._branch_points = None
@@ -252,10 +254,17 @@ class Skeleton:
         return copy(self._root)
 
     @property
+    def pykdtree(self):
+        if self._pykdtree is None:
+            self._pykdtree = pyKDTree(self.vertices)
+        return self._pykdtree
+
+    @property
     def kdtree(self):
         if self._kdtree is None:
-            self._kdtree = KDTree(self.vertices)
+            self._kdtree = spatial.cKDTree(self.vertices)
         return self._kdtree
+    
 
     @property
     def branch_points(self):

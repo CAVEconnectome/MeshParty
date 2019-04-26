@@ -8,13 +8,17 @@ def write_skeleton_h5(sk, filename, overwrite=False):
     '''
     Write a skeleton and its properties to an hdf5 file.
 
-    :param sk: Skeleton
+    :param sk: Skeletonnew_mesh_filt
     :param filename: String. Filename of skeleton file.
     :param overwrite: Boolean, (default False). Allows overwriting.
     '''
-    write_skeleton_h5_by_part(filename, sk.vertices, sk.edges,
-                              sk.vertex_properties, sk.edge_properties,
-                              sk.root, overwrite=overwrite)
+    write_skeleton_h5_by_part(filename,
+                              vertices=sk.vertices,
+                              edges=sk.edges,
+                              vertex_properties=sk.vertex_properties,
+                              edge_properties=sk.edge_properties,
+                              root=sk.root,
+                              overwrite=overwrite)
 
 
 def write_skeleton_h5_by_part(filename, vertices, edges, vertex_properties={},
@@ -32,7 +36,7 @@ def write_skeleton_h5_by_part(filename, vertices, edges, vertex_properties={},
         if len(edge_properties) > 0:
             _write_dict_to_group(f, 'edge_properties', edge_properties)
         if root is not None:
-            f.create_dataset('root', data=root, compression='gzip')
+            f.create_dataset('root', data=root)
 
 
 def _write_dict_to_group(f, group_name, data_dict):
@@ -48,25 +52,21 @@ def read_skeleton_h5_by_part(filename):
         vertices = f['vertices'].value
         edges = f['edges'].value
 
-    vertex_properties = {}
-    if 'vertex_properties' in f.keys():
-        for vp_key in f['vertex_properties'].keys():
-            vertex_properties[vp_key] = f['vertex_properties'][vp_key].value
+        vertex_properties = {}
+        if 'vertex_properties' in f.keys():
+            for vp_key in f['vertex_properties'].keys():
+                vertex_properties[vp_key] = f['vertex_properties'][vp_key].value
 
-    edge_properties = {}
-    if 'edge_properties' in f.keys():
-        for ep_key in f['edge_properties'].keys():
-            edge_properties[ep_key] = f['edge_properties'][ep_key].value
+        edge_properties = {}
+        if 'edge_properties' in f.keys():
+            for ep_key in f['edge_properties'].keys():
+                edge_properties[ep_key] = f['edge_properties'][ep_key].value
 
-    # vertex_lists = {}
-    # if 'vertex_lists' in f.keys():
-    #     for vl_key in f['vertex_lists'].keys():
-    #         vertex_lists[vl_key] = f['vertex_lists'][vl_key].value
+        if 'root' in f.keys():
+            root = f['root'].value
+        else:
+            root = None
 
-    if 'root' in f.keys():
-        root = f['root'].value
-    else:
-        root = None
     return vertices, edges, vertex_properties, edge_properties, root
 
 
@@ -76,13 +76,12 @@ def read_skeleton_h5(filename):
 
     :param filename: String. Filename of skeleton file.
     '''
-    vertices, edges, vertex_properties, edge_properties, root = read_skeleton_h5_by_part(
-        filename)
-    return skeleton.SkeletonForest(vertices=vertices,
-                                   edges=edges,
-                                   vertex_properties=vertex_properties,
-                                   edge_properties=edge_properties,
-                                   root=root)
+    vertices, edges, vertex_properties, edge_properties, root = read_skeleton_h5_by_part(filename)
+    return skeleton.Skeleton(vertices=vertices,
+                             edges=edges,
+                             vertex_properties=vertex_properties,
+                             edge_properties=edge_properties,
+                             root=root)
 
 
 def export_to_swc(skel, filename, node_labels=None, radius=None, header=None, xyz_scaling=1000):
