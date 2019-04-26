@@ -14,11 +14,11 @@ def write_skeleton_h5(sk, filename, overwrite=False):
     '''
     write_skeleton_h5_by_part(filename, sk.vertices, sk.edges,
                               sk.vertex_properties, sk.edge_properties,
-                              sk.vertex_lists, sk.root, overwrite=overwrite)
+                              sk.root, overwrite=overwrite)
 
 
 def write_skeleton_h5_by_part(filename, vertices, edges, vertex_properties={},
-                              edge_properties={}, vertex_lists={}, root=None, overwrite=False):
+                              edge_properties={}, root=None, overwrite=False):
     if os.path.isfile(filename):
         if overwrite:
             os.remove(filename)
@@ -31,8 +31,6 @@ def write_skeleton_h5_by_part(filename, vertices, edges, vertex_properties={},
             _write_dict_to_group(f, 'vertex_properties', vertex_properties)
         if len(edge_properties) > 0:
             _write_dict_to_group(f, 'edge_properties', edge_properties)
-        if len(vertex_lists) > 0:
-            _write_dict_to_group(f, 'vertex_lists', vertex_lists)
         if root is not None:
             f.create_dataset('root', data=root, compression='gzip')
 
@@ -60,16 +58,16 @@ def read_skeleton_h5_by_part(filename):
         for ep_key in f['edge_properties'].keys():
             edge_properties[ep_key] = f['edge_properties'][ep_key].value
 
-    vertex_lists = {}
-    if 'vertex_lists' in f.keys():
-        for vl_key in f['vertex_lists'].keys():
-            vertex_lists[vl_key] = f['vertex_lists'][vl_key].value
+    # vertex_lists = {}
+    # if 'vertex_lists' in f.keys():
+    #     for vl_key in f['vertex_lists'].keys():
+    #         vertex_lists[vl_key] = f['vertex_lists'][vl_key].value
 
     if 'root' in f.keys():
         root = f['root'].value
     else:
         root = None
-    return vertices, edges, vertex_properties, edge_properties, vertex_lists, root
+    return vertices, edges, vertex_properties, edge_properties, root
 
 
 def read_skeleton_h5(filename):
@@ -78,13 +76,12 @@ def read_skeleton_h5(filename):
 
     :param filename: String. Filename of skeleton file.
     '''
-    vertices, edges, vertex_properties, edge_properties, vertex_lists, root = read_skeleton_h5_by_part(
+    vertices, edges, vertex_properties, edge_properties, root = read_skeleton_h5_by_part(
         filename)
     return skeleton.SkeletonForest(vertices=vertices,
                                    edges=edges,
                                    vertex_properties=vertex_properties,
                                    edge_properties=edge_properties,
-                                   vertex_lists=vertex_lists,
                                    root=root)
 
 
