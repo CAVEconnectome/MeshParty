@@ -129,7 +129,7 @@ def remove_unused_verts(verts, faces):
     faces = MxK numpy array of connected shapes (i.e. edges or tris)
     (entries are indices into verts)
 
-    returns: 
+    returns:
     new_verts, new_face
     a filtered set of vertices and reindexed set of faces
     """
@@ -258,8 +258,8 @@ def make_vtk_skeleton_from_paths(verts, paths):
     return mesh
 
 
-def vtk_super_basic(actors, camera=None, do_save=False, filepath=None, back_color=(.1, .1, .1),
-                    VIDEO_WIDTH=1080, VIDEO_HEIGHT=720, save_scale=5):
+def vtk_super_basic(actors, camera=None, do_save=False, filename=None, scale=4, back_color=(.1, .1, .1),
+                    VIDEO_WIDTH=1080, VIDEO_HEIGHT=720):
     """
     Create a window, renderer, interactor, add the actors and start the thing
 
@@ -275,6 +275,9 @@ def vtk_super_basic(actors, camera=None, do_save=False, filepath=None, back_colo
         assert(filepath is not None)
     # create a rendering window and renderer
     ren = vtk.vtkRenderer()
+    if camera is not None:
+        ren.SetActiveCamera(camera)
+
     renWin = vtk.vtkRenderWindow()
     renWin.AddRenderer(ren)
     renWin.SetSize(VIDEO_WIDTH, VIDEO_HEIGHT)
@@ -283,7 +286,7 @@ def vtk_super_basic(actors, camera=None, do_save=False, filepath=None, back_colo
     ren.SetBackground(*back_color)
     # create a renderwindowinteractor
     iren = vtk.vtkRenderWindowInteractor()
-    iren.SetRenderWindow(renWin)    
+    iren.SetRenderWindow(renWin)
 
     for a in actors:
         # assign actor to the renderer
@@ -297,29 +300,29 @@ def vtk_super_basic(actors, camera=None, do_save=False, filepath=None, back_colo
         ren.ResetCameraClippingRange()
         camera.ViewingRaysModified()
     renWin.Render()
-    if do_save:
-         # render
-        imageFilter = vtk.vtkWindowToImageFilter()
-        imageFilter.SetInput(renWin)
-        imageFilter.SetInputBufferTypeToRGBA()
-        imageFilter.SetScale(save_scale)
-        imageFilter.ReadFrontBufferOff()
-        imageFilter.Update()
 
-        #Setup movie writer
-        moviewriter = vtk.vtkPNGWriter()
-        moviewriter.SetInputConnection(imageFilter.GetOutputPort())
-        
-        moviewriter.SetFileName(filepath)
-        #Export a single frame
-        imageFilter.Modified()
-        moviewriter.Write()
-    else:     
+
+    if do_save is False:
         trackCamera = vtk.vtkInteractorStyleTrackballCamera()
         iren.SetInteractorStyle(trackCamera)
         # enable user interface interactor
         iren.Initialize()
+        iren.Render()
         iren.Start()
+
+
+    if do_save is True:
+        renWin.OffScreenRenderingOn()
+        w2if = vtk.vtkWindowToImageFilter()
+        w2if.SetScale(scale)
+        w2if.SetInput(renWin)
+        w2if.Update()
+
+        writer = vtk.vtkPNGWriter()
+        writer.SetFileName(filename)
+        writer.SetInputData(w2if.GetOutput())
+        writer.Write()
+
     renWin.Finalize()
 
     return ren
@@ -470,44 +473,70 @@ def vtk_skeleton_actor(sk,
     return actor
 
 
+def neuron_actors(mesh, pre_syn_positions=None, post_syn_positions=None,
+                  mesh_color=(0.459, 0.439, 0.702), pre_color=(0.994, 0.098, 0.106), post_color=(0.176, 0.996, 0.906),
+                  mesh_opacity=0.8, pre_opacity=1, post_opacity=1,
+                  pre_size=400, post_size=400):
+    mesh_actor = make_mesh_actor(mesh, color=mesh_color, opacity=mesh_opacity)
+    nrn_act = [mesh_actor]
+    if pre_syn_positions is not None:
+        pre_actor = make_point_cloud_actor(pre_syn_positions, size=pre_size, color=pre_color, opacity=pre_opacity)
+        nrn_act.append(pre_actor)
+    if post_syn_positions is not None:
+        post_actor = make_point_cloud_actor(post_syn_positions, size=post_size, color=post_color, opacity=post_opacity)
+        nrn_act.append(post_actor)
+    return nrn_act
+
+
 def make_point_cloud_actor(xyz,
                            size=100,
-                           color=(0, 0, 0),
+                           color=(0,0,0),
                            opacity=0.5):
-
     points = vtk.vtkPoints()
     points.SetData(numpy_to_vtk(xyz, deep=True))
 
-    pc = vtk.vtkPolyData()
-    pc.SetPoints(points)
+    scales = vtk.vtkFloatArray()
+    scales.SetName('scale')
+
+    clr = vtk.vtkFloatArray()
+    clr.SetName('color')
+
+    colormap = vtk.vtkLookupTable()
+    colormap.SetNumberOfTableValues(1)
+    colormap.SetTableValue(0, color[0], color[1], color[2], opacity)
 
     if np.isscalar(size):
         size = np.full(len(xyz), size)
     elif len(size) != len(xyz):
         raise ValueError('Size must be either a scalar or an len(xyz) x 1 array')
-    pc.GetPointData().SetScalars(numpy_to_vtk(size))
+    for ii in range(len(xyz)):
+        scales.InsertNextValue(size[ii])
+        clr.InsertNextValue(0)
+
+    grid = vtk.vtkUnstructuredGrid()
+    grid.SetPoints(points)
+    grid.GetPointData().AddArray(scales)
+    grid.GetPointData().SetActiveScalars('scale')
+    grid.GetPointData().AddArray(clr)
 
     ss = vtk.vtkSphereSource()
     ss.SetRadius(1)
 
     glyph = vtk.vtkGlyph3D()
-    glyph.SetInputData(pc)
-
+    glyph.SetInputData(grid)
     glyph.SetSourceConnection(ss.GetOutputPort())
-    glyph.SetScaleModeToScaleByScalar()
-    glyph.ScalingOn()
-    glyph.Update()
 
     mapper = vtk.vtkPolyDataMapper()
     mapper.SetInputConnection(glyph.GetOutputPort())
+    mapper.SetScalarRange(0,0)
+    mapper.SelectColorArray('color')
+    mapper.SetLookupTable(colormap)
 
     actor = vtk.vtkActor()
     mapper.ScalarVisibilityOff()
     actor.SetMapper(mapper)
-    actor.GetProperty().SetColor(*color)
-    actor.GetProperty().SetOpacity(opacity)
-
     return actor
+
 
 def vtk_linked_point_actor(vertices_a, inds_a,
                            vertices_b, inds_b,
@@ -529,3 +558,24 @@ def vtk_linked_point_actor(vertices_a, inds_a,
     link_actor.GetProperty().SetColor(color)
     link_actor.GetProperty().SetOpacity(opacity)
     return link_actor
+
+
+def vtk_oriented_camera(center, up_vector=(0, -1, 0), backoff=500, backoff_vector=(0,0,1)):
+    '''
+    Generate a camera pointed at a specific location, oriented with a given up
+    direction, set to a backoff.
+    '''
+    camera = vtk.vtkCamera()
+
+    pt_center = center
+
+    vup=np.array(up_vector)
+    vup=vup/np.linalg.norm(vup)
+
+    bv = np.array(backoff_vector)
+    pt_backoff = pt_center - backoff * 1000 * bv
+
+    camera.SetFocalPoint(*pt_center)
+    camera.SetViewUp(*vup)
+    camera.SetPosition(*pt_backoff)
+    return camera
