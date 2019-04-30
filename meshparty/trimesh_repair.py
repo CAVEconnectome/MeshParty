@@ -172,6 +172,10 @@ def merge_points_to_merge_indices(mesh, merge_event_points, close_map_distance =
 
     # we want to reconsider the other end of the merge edge and get their xyz coords
     far_points = merge_event_points[remap_merges,(1-close_merge)[remap_merges],:]
+    # If no candidates are available, return an empty array
+    if len(far_points)==0:
+        return np.zeros((0,2))
+
     # this is the connected component label for the close_merge end of the merge point
     closest_label = cc_labels[np.arange(0,len(cc_labels)), close_merge]
     # use a query_ball_point to find all the potential 'close' partners to the 
