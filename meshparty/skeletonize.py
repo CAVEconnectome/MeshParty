@@ -7,6 +7,9 @@ from pykdtree.kdtree import KDTree
 import pcst_fast
 from tqdm import trange, tqdm
 from meshparty.trimesh_io import Mesh
+from trimesh.ray import ray_pyembree
+from collections import defaultdict
+
 
 def recenter_verts(verts, edges, centers):
     edge_df = pd.DataFrame()
@@ -659,7 +662,7 @@ def smooth_graph(verts, edges, mask=None, neighborhood=2, iterations=100, r=.1):
     return new_verts
 
 
-def collapse_soma_skeleton(soma_pt, verts, edges, soma_d_thresh=12000, mesh_to_skeleton_map=None):
+def collapse_soma_skeleton(soma_pt, verts, edges, soma_d_thresh=12000, mesh_to_skeleton_map=None, return_filter=False, return_soma_ind=False):
     if soma_pt is not None:
         soma_pt_m = soma_pt[np.newaxis, :]
         dv = np.linalg.norm(verts - soma_pt_m, axis=1)
@@ -679,10 +682,60 @@ def collapse_soma_skeleton(soma_pt, verts, edges, soma_d_thresh=12000, mesh_to_s
             new_mesh_to_skeleton_map = utils.nanfilter_shapes(np.unique(edges_m.ravel()),
                                                                         new_mesh_to_skeleton_map)
 
-        if mesh_to_skeleton_map is None:
-            return simple_verts, simple_edges[good_edges]
-        else:
-            return simple_verts, simple_edges[good_edges], new_mesh_to_skeleton_map
+        output_tuple = (simple_verts, simple_edges[good_edges])
+        if mesh_to_skeleton_map is not None:
+            output_tuple += (new_mesh_to_skeleton_map,)
+        if return_filter:
+            used_vertices = np.unique(edges_m.ravel())[:-1]   #Remove the largest value which is soma_i
+            output_tuple += (used_vertices,)
+        if return_soma_ind:
+            output_tuple += (len(simple_verts)-1,)
+        return output_tuple
+
     else:
         simple_verts, simple_edges = trimesh_vtk.remove_unused_verts(verts, edges)
         return simple_verts, simple_edges
+
+def skeleton_index_to_mesh_index_map(skel_map):
+    '''
+    Makes a dict indexed by skeleton vertex with mesh vertex indices that map to it.
+    '''
+    skind_to_mesh_map = defaultdict(list)
+    sk_values = np.unique(skel_map[~np.isnan(skel_map)])
+    nan_map_inds = np.isnan(skel_map)
+    skel_map_nonan = skel_map[~nan_map_inds]
+    map_inds_nonan = np.arange(0,len(skel_map))[~nan_map_inds]
+    for ii, skind in zip(map_inds_nonan, skel_map_nonan):
+        skind_to_mesh_map[skind].append(ii)
+    return skind_to_mesh_map
+
+def ray_trace_distance(vertex_inds, mesh, max_iter=10, rand_jitter=0.001, verbose=False, ray_inter=None):
+    '''
+    Compute distance to opposite side of the mesh for specified vertex indices on the mesh.
+    '''
+    if ray_inter is None:
+        ray_inter = ray_pyembree.RayMeshIntersector(mesh)
+
+    rs = np.zeros(len(vertex_inds))
+    good_rs = np.full(len(rs), False)
+
+    it= 0
+    while not np.all(good_rs):
+        if verbose:
+            print(np.sum(~good_rs))
+        blank_inds = np.where(~good_rs)[0]
+        starts = (mesh.vertices-mesh.vertex_normals)[vertex_inds,:][~good_rs,:]
+        vs = -mesh.vertex_normals[vertex_inds,:] \
+              + (1.2**it)*rand_jitter*np.random.rand(*mesh.vertex_normals[vertex_inds,:].shape)                                                         
+        vs = vs[~good_rs,:]
+
+        rtrace = ray_inter.intersects_location(starts, vs, multiple_hits=False)
+        
+        if len(rtrace[0]>0):
+            # radius values
+            rs[blank_inds[rtrace[1]]] = np.linalg.norm(mesh.vertices[vertex_inds,:][rtrace[1]]-rtrace[0], axis=1)
+            good_rs[blank_inds[rtrace[1]]]=True
+        it+=1
+        if it>max_iter:
+            break
+    return rs
