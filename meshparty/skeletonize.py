@@ -137,7 +137,7 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_thresh=7500,
         mesh_to_skeleton_map = utils.nanfilter_shapes(np.unique(tot_edges.ravel()), mesh_to_skeleton_map)
         
     else:
-        mesh_to_skeleton_map=None
+        mesh_to_skeleton_map = None
 
     if collapse_soma:
         collapse_out = collapse_soma_skeleton(soma_pt, skel_verts, skel_edges,
@@ -662,7 +662,7 @@ def smooth_graph(verts, edges, mask=None, neighborhood=2, iterations=100, r=.1):
     return new_verts
 
 
-def collapse_soma_skeleton(soma_pt, verts, edges, soma_d_thresh=12000, mesh_to_skeleton_map=None, return_filter=False, return_soma_ind=False):
+def collapse_soma_skeleton(soma_pt, verts, edges, soma_d_thresh=12000, mesh_to_skeleton_map=None, soma_mesh_indices=None, return_filter=False, return_soma_ind=False):
     if soma_pt is not None:
         soma_pt_m = soma_pt[np.newaxis, :]
         dv = np.linalg.norm(verts - soma_pt_m, axis=1)
@@ -681,16 +681,18 @@ def collapse_soma_skeleton(soma_pt, verts, edges, soma_d_thresh=12000, mesh_to_s
             new_mesh_to_skeleton_map[remap_rows] = soma_i
             new_mesh_to_skeleton_map = utils.nanfilter_shapes(np.unique(edges_m.ravel()),
                                                                         new_mesh_to_skeleton_map)
+            if soma_mesh_indices is not None:
+                new_mesh_to_skeleton_map[soma_mesh_indices] = len(simple_verts)-1
 
-        output_tuple = (simple_verts, simple_edges[good_edges])
+        output = [simple_verts, simple_edges[good_edges]]
         if mesh_to_skeleton_map is not None:
-            output_tuple += (new_mesh_to_skeleton_map,)
+            output.append(new_mesh_to_skeleton_map)
         if return_filter:
             used_vertices = np.unique(edges_m.ravel())[:-1]   #Remove the largest value which is soma_i
-            output_tuple += (used_vertices,)
+            output.append(used_vertices)
         if return_soma_ind:
-            output_tuple += (len(simple_verts)-1,)
-        return output_tuple
+            output.append(len(simple_verts)-1)
+        return output
 
     else:
         simple_verts, simple_edges = trimesh_vtk.remove_unused_verts(verts, edges)
