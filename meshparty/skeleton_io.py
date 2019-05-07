@@ -49,7 +49,7 @@ def write_skeleton_h5_by_part(filename, vertices, edges, mesh_to_skel_map=None,
 def _write_dict_to_group(f, group_name, data_dict):
     d_grp = f.create_group(group_name)
     for d_name, d_data in data_dict.items():
-        d_grp.create_dataset(d_name, data=json.dumps(d_data, cls=NumpyEncoder))
+        d_grp.create_dataset(d_name, data=json.dumps(d_data, cls=_NumpyEncoder))
 
 
 def read_skeleton_h5_by_part(filename):
@@ -160,8 +160,7 @@ def _build_swc_array(skel, node_labels, radius, xyz_scaling):
     return swc_dat
 
 
-class NumpyEncoder(json.JSONEncoder):
-    """ Special json encoder for numpy types """
+class _NumpyEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, (np.int_, np.intc, np.intp, np.int8,
             np.int16, np.int32, np.int64, np.uint8,
@@ -176,6 +175,6 @@ class NumpyEncoder(json.JSONEncoder):
 
 def _convert_keys_to_int(x):
     if type(x) is dict:
-        return {int(k):v for k,v in x.items()}
+        return {int(k):np.array(v) for k,v in x.items()}
     else:
         return x

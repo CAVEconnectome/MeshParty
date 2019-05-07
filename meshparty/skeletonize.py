@@ -661,11 +661,21 @@ def smooth_graph(verts, edges, mask=None, neighborhood=2, iterations=100, r=.1):
     return new_verts
 
 
-def collapse_soma_skeleton(soma_pt, verts, edges, soma_d_thresh=12000, mesh_to_skeleton_map=None, soma_mesh_indices=None, return_filter=False, return_soma_ind=False):
+def collapse_soma_skeleton(soma_pt, verts, edges, soma_d_thresh=12000, mesh_to_skeleton_map=None,
+                           soma_mesh_indices=None, return_filter=False, only_soma_component=True, return_soma_ind=False):
     if soma_pt is not None:
+        if only_soma_component:
+            closest_soma_ind = np.argmin(np.linalg.norm(verts-soma_pt, axis=1))
+            close_inds = np.linalg.norm(verts-soma_pt, axis=1) < soma_d_thresh
+            orig_graph = utils.create_csgraph(verts, edges, euclidean_weight=False)
+            speye = sparse.diags(close_inds.astype(int))
+            _, compids = sparse.csgraph.connected_components(orig_graph * speye)
+            soma_verts = np.flatnonzero(compids[closest_soma_ind] == compids)
+        else:
+            dv = np.linalg.norm(verts - soma_pt_m, axis=1)
+            soma_verts = np.where(dv < soma_d_thresh)[0]
+
         soma_pt_m = soma_pt[np.newaxis, :]
-        dv = np.linalg.norm(verts - soma_pt_m, axis=1)
-        soma_verts = np.where(dv < soma_d_thresh)[0]
         new_verts = np.vstack((verts, soma_pt_m))
         soma_i = verts.shape[0]
         edges_m = edges.copy()
@@ -696,6 +706,7 @@ def collapse_soma_skeleton(soma_pt, verts, edges, soma_d_thresh=12000, mesh_to_s
     else:
         simple_verts, simple_edges = trimesh_vtk.remove_unused_verts(verts, edges)
         return simple_verts, simple_edges
+
 
 def skeleton_index_to_mesh_index_map(skel_map):
     '''
