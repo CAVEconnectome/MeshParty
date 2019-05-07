@@ -135,7 +135,6 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_thresh=7500,
 
     if return_map:
         mesh_to_skeleton_map = utils.nanfilter_shapes(np.unique(tot_edges.ravel()), mesh_to_skeleton_map)
-        
     else:
         mesh_to_skeleton_map = None
 

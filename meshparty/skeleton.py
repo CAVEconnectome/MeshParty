@@ -191,12 +191,13 @@ class SkeletonForest:
 
 
 class Skeleton:
-    def __init__(self, vertices, edges, vertex_properties={},
+    def __init__(self, vertices, edges, mesh_to_skel_map=None, vertex_properties={},
                  edge_properties={}, root=None):
         self._vertices = np.array(vertices)
         self._edges = np.vstack(edges).astype(int)
         self.vertex_properties = vertex_properties
         self.edge_properties = edge_properties
+        self._mesh_to_skel_map = mesh_to_skel_map
 
         self._root = None
         self._paths = None
@@ -226,6 +227,10 @@ class Skeleton:
     def edges(self):
         return self._edges.copy()
 
+    @property
+    def mesh_to_skel_map(self):
+        return self._mesh_to_skel_map
+    
     @property
     def segments(self):
         if self._segments is None:

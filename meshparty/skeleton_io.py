@@ -1,6 +1,8 @@
 import os
 from . import trimesh_io
 import h5py
+import json
+import numpy as np
 from meshparty import skeleton
 
 
@@ -15,14 +17,16 @@ def write_skeleton_h5(sk, filename, overwrite=False):
     write_skeleton_h5_by_part(filename,
                               vertices=sk.vertices,
                               edges=sk.edges,
+                              mesh_to_skel_map=sk.mesh_to_skel_map, 
                               vertex_properties=sk.vertex_properties,
                               edge_properties=sk.edge_properties,
                               root=sk.root,
                               overwrite=overwrite)
 
 
-def write_skeleton_h5_by_part(filename, vertices, edges, vertex_properties={},
-                              edge_properties={}, root=None, overwrite=False):
+def write_skeleton_h5_by_part(filename, vertices, edges, mesh_to_skel_map=None,
+                              vertex_properties={}, edge_properties={}, root=None,
+                              overwrite=False):
     if os.path.isfile(filename):
         if overwrite:
             os.remove(filename)
@@ -31,6 +35,9 @@ def write_skeleton_h5_by_part(filename, vertices, edges, vertex_properties={},
     with h5py.File(filename, 'w') as f:
         f.create_dataset('vertices', data=vertices, compression='gzip')
         f.create_dataset('edges', data=edges, compression='gzip')
+        if mesh_to_skel_map is not None:
+            f.create_dataset('mesh_to_skel_map',
+                             data=mesh_to_skel_map, compression='gzip')
         if len(vertex_properties) > 0:
             _write_dict_to_group(f, 'vertex_properties', vertex_properties)
         if len(edge_properties) > 0:
@@ -42,7 +49,7 @@ def write_skeleton_h5_by_part(filename, vertices, edges, vertex_properties={},
 def _write_dict_to_group(f, group_name, data_dict):
     d_grp = f.create_group(group_name)
     for d_name, d_data in data_dict.items():
-        d_grp.create_dataset(d_name, data=d_data)
+        d_grp.create_dataset(d_name, data=json.dumps(d_data, cls=NumpyEncoder))
 
 
 def read_skeleton_h5_by_part(filename):
@@ -52,22 +59,29 @@ def read_skeleton_h5_by_part(filename):
         vertices = f['vertices'].value
         edges = f['edges'].value
 
+        if 'mesh_to_skel_map' in f.keys():
+            mesh_to_skel_map = f['mesh_to_skel_map'].value
+        else:
+            mesh_to_skel_map = None
+
         vertex_properties = {}
         if 'vertex_properties' in f.keys():
             for vp_key in f['vertex_properties'].keys():
-                vertex_properties[vp_key] = f['vertex_properties'][vp_key].value
+                vertex_properties[vp_key] = json.loads(f['vertex_properties'][vp_key].value,
+                                                       object_hook=_convert_keys_to_int)
 
         edge_properties = {}
         if 'edge_properties' in f.keys():
             for ep_key in f['edge_properties'].keys():
-                edge_properties[ep_key] = f['edge_properties'][ep_key].value
+                edge_properties[ep_key] = json.loads(f['edge_properties'][ep_key].value,
+                                                     object_hook=_convert_keys_to_int)
 
         if 'root' in f.keys():
             root = f['root'].value
         else:
             root = None
 
-    return vertices, edges, vertex_properties, edge_properties, root
+    return vertices, edges, mesh_to_skel_map, vertex_properties, edge_properties, root
 
 
 def read_skeleton_h5(filename):
@@ -76,9 +90,10 @@ def read_skeleton_h5(filename):
 
     :param filename: String. Filename of skeleton file.
     '''
-    vertices, edges, vertex_properties, edge_properties, root = read_skeleton_h5_by_part(filename)
+    vertices, edges, mesh_to_skel_map, vertex_properties, edge_properties, root = read_skeleton_h5_by_part(filename)
     return skeleton.Skeleton(vertices=vertices,
                              edges=edges,
+                             mesh_to_skel_map=mesh_to_skel_map,
                              vertex_properties=vertex_properties,
                              edge_properties=edge_properties,
                              root=root)
@@ -143,3 +158,24 @@ def _build_swc_array(skel, node_labels, radius, xyz_scaling):
                          radius[:, np.newaxis] / xyz_scaling,
                          par_ids[:, np.newaxis]))
     return swc_dat
+
+
+class NumpyEncoder(json.JSONEncoder):
+    """ Special json encoder for numpy types """
+    def default(self, obj):
+        if isinstance(obj, (np.int_, np.intc, np.intp, np.int8,
+            np.int16, np.int32, np.int64, np.uint8,
+            np.uint16, np.uint32, np.uint64)):
+            return int(obj)
+        elif isinstance(obj, (np.float_, np.float16, np.float32, 
+            np.float64)):
+            return float(obj)
+        elif isinstance(obj,(np.ndarray,)): #### This is the fix
+            return obj.tolist()
+        return json.JSONEncoder.default(self, obj)
+
+def _convert_keys_to_int(x):
+    if type(x) is dict:
+        return {int(k):v for k,v in x.items()}
+    else:
+        return x
