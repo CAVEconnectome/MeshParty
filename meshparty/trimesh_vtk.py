@@ -509,17 +509,27 @@ def make_point_cloud_actor(xyz,
     clr.SetName('color')
 
     colormap = vtk.vtkLookupTable()
-    colormap.SetNumberOfTableValues(1)
-    colormap.SetTableValue(0, color[0], color[1], color[2], opacity)
-
+    if np.array(color).shape == (3,):
+        single_color = True
+        colormap.SetNumberOfTableValues(1)
+        colormap.SetTableValue(0, color[0], color[1], color[2], opacity)
+    else:
+        single_color = False
+        colormap.SetNumberOfTableValues(len(color))
+        for ii, color_row in enumerate(color):
+            colormap.SetTableValue(ii, color_row[0], color_row[1], color_row[2], opacity)
+        
     if np.isscalar(size):
         size = np.full(len(xyz), size)
     elif len(size) != len(xyz):
         raise ValueError('Size must be either a scalar or an len(xyz) x 1 array')
     for ii in range(len(xyz)):
         scales.InsertNextValue(size[ii])
-        clr.InsertNextValue(0)
-
+        if single_color:
+            clr.InsertNextValue(0)
+        else:
+            clr.InsertNextValue(ii)
+            
     grid = vtk.vtkUnstructuredGrid()
     grid.SetPoints(points)
     grid.GetPointData().AddArray(scales)
@@ -535,12 +545,14 @@ def make_point_cloud_actor(xyz,
 
     mapper = vtk.vtkPolyDataMapper()
     mapper.SetInputConnection(glyph.GetOutputPort())
-    mapper.SetScalarRange(0,0)
+    if single_color:
+        mapper.SetScalarRange(0,0)
+    else:
+        mapper.SetScalarRange(1,len(xyz))
     mapper.SelectColorArray('color')
     mapper.SetLookupTable(colormap)
 
     actor = vtk.vtkActor()
-    mapper.ScalarVisibilityOff()
     actor.SetMapper(mapper)
     return actor
 

@@ -175,6 +175,6 @@ class _NumpyEncoder(json.JSONEncoder):
 
 def _convert_keys_to_int(x):
     if type(x) is dict:
-        return {int(k):np.array(v) for k,v in x.items()}
+        return {int(k):v for k,v in x.items()}
     else:
         return x
