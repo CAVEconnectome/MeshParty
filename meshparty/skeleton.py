@@ -328,10 +328,10 @@ class Skeleton:
         '''
         path = [v_ind]
         ind = v_ind
-        ind = self._parent_node(ind)
+        ind = self.parent_node(ind)
         while ind is not None:
             path.append(ind)
-            ind = self._parent_node(ind)
+            ind = self.parent_node(ind)
         return path
 
     def path_length(self, paths=None):
@@ -363,12 +363,55 @@ class Skeleton:
         self._parent_node_array[e1] = e2
         self._reset_derived_objects()
 
+
+    def cut_graph(self, vinds, directed=True, euclidean_weight=True):
+        '''
+        Return a csgraph for the skeleton with each ind in inds cut off from its parent.
+        '''
+        e_keep = ~np.isin(self.edges[:,0], vinds)
+        es_new = self.edges[e_keep]
+        return utils.create_csgraph(self.vertices, es_new,
+                                    euclidean_weight=euclidean_weight,
+                                    directed=directed)
+
+    def downstream_nodes(self, vinds):
+        if np.isscalar(vinds):
+            vinds = [vinds]
+            return_single = True
+        else:
+            return_single = False
+
+        dns = []
+        for vind in vinds:
+            g = self.cut_graph(vinds)
+            _, lbls = sparse.csgraph.connected_components(g)
+            dns.append(np.flatnonzero(lbls==lbls[vind]))
+
+        if return_single:
+            dns=dns[0]
+        return dns
+
+    def child_nodes(self, vinds):
+        if np.isscalar(vinds):
+            vinds = [vinds]
+            return_single = True
+        else:
+            return_single = False
+
+        cinds = []
+        for vind in vinds:
+            cinds.append(self.edges[self.edges[:,1]==vind, 0])
+        
+        if return_single:
+            cinds=cinds[0]
+        return cinds
+
     def _create_default_root(self):
         r = utils.find_far_points_graph(self._create_csgraph(directed=False))
         self.reroot(r[0])
 
-    def _parent_node(self, vind):
-        return self._parent_node_array[vind]
+    def parent_node(self, vinds):
+        return self._parent_node_array[vinds]
 
     def _reset_derived_objects(self):
         self._csgraph = None
@@ -428,7 +471,7 @@ class Skeleton:
 
         while not visited[n_ind]:
             visited[n_ind] = True
-            n_ind = self._parent_node(n_ind)
+            n_ind = self.parent_node(n_ind)
             path.append(n_ind)
         return path, visited
 
