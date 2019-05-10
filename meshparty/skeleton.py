@@ -191,15 +191,19 @@ class SkeletonForest:
 
 
 class Skeleton:
-    def __init__(self, vertices, edges, vertex_properties={},
+    def __init__(self, vertices, edges, mesh_to_skel_map=None, vertex_properties={},
                  edge_properties={}, root=None):
         self._vertices = np.array(vertices)
         self._edges = np.vstack(edges).astype(int)
         self.vertex_properties = vertex_properties
         self.edge_properties = edge_properties
+        self._mesh_to_skel_map = mesh_to_skel_map
 
         self._root = None
         self._paths = None
+        self._segments = None
+        self._segment_map = None
+
         self._parent_node_array = None
         self._kdtree = None
         self._pykdtree = None
@@ -222,6 +226,22 @@ class Skeleton:
     @property
     def edges(self):
         return self._edges.copy()
+
+    @property
+    def mesh_to_skel_map(self):
+        return self._mesh_to_skel_map
+    
+    @property
+    def segments(self):
+        if self._segments is None:
+            self._segments, self._segment_map = self._compute_segments()
+        return self._segments
+
+    @property
+    def segment_map(self):
+        if self._segment_map is None:
+            self._segments, self._segment_map = self._compute_segments()
+        return self._segment_map
 
     @property
     def csgraph(self):
@@ -308,9 +328,10 @@ class Skeleton:
         '''
         path = [v_ind]
         ind = v_ind
+        ind = self._parent_node(ind)
         while ind is not None:
-            ind = self._parent_node(ind)
             path.append(ind)
+            ind = self._parent_node(ind)
         return path
 
     def path_length(self, paths=None):
@@ -353,6 +374,8 @@ class Skeleton:
         self._csgraph = None
         self._csgraph_binary = None
         self._paths = None
+        self._segments = None
+        self._segment_map = None
 
     def _create_csgraph(self,
                         directed=True,
@@ -408,6 +431,41 @@ class Skeleton:
             n_ind = self._parent_node(n_ind)
             path.append(n_ind)
         return path, visited
+
+    def _compute_segments(self):
+        segments = []
+        segment_map = np.zeros(len(self.vertices))-1
+
+        path_queue = self.end_points.tolist()
+        bp_all = self.branch_points
+        bp_seen = []
+        seg_ind = 0
+
+        while len(path_queue)>0:
+            ind = path_queue.pop()
+            segment = [ind]
+            ptr = self.path_to_root(ind)
+            if len(ptr)>1:
+                for pind in ptr[1:]:
+                    if pind in bp_all:
+                        segments.append(np.array(segment))
+                        segment_map[segment] = seg_ind
+                        seg_ind += 1
+                        if pind not in bp_seen:
+                            path_queue.append(pind)
+                            bp_seen.append(pind)
+                        break
+                    else:
+                        segment.append(pind)
+                else:
+                    segments.append(np.array(segment))
+                    segment_map[segment] = seg_ind
+                    seg_ind += 1
+            else:
+                segments.append(np.array(segment))
+                segment_map[segment] = seg_ind
+                seg_ind += 1
+        return segments, segment_map.astype(int)
 
     def export_to_swc(self, filename, node_labels=None, radius=None, header=None, xyz_scaling=1000):
         '''

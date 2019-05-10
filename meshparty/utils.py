@@ -308,8 +308,8 @@ def nanfilter_shapes(node_ids, shapes):
     '''
     Wraps filter_shapes to handle shapes with nans.
     '''
-    if not any(np.isnan(shapes)):
-        return filter_shapes(node_ids, shapes)
+    # if not any(np.isnan(shapes)):
+    #     return filter_shapes(node_ids, shapes)[0].reshape(shapes.shape)
 
     long_shapes = shapes.ravel()
     ind_rows = ~np.isnan(long_shapes)

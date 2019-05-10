@@ -43,33 +43,38 @@ def filter_components_by_size(mesh, min_size=0, max_size=np.inf):
     good_labels = uids[(counts>min_size)&(counts<=max_size)]
     return np.in1d(labels, good_labels)
 
-
-def filter_large_component(mesh, size_thresh=1000):
-    '''
-    Returns a mesh filter without any connected components less than a size threshold
-
-    :param mesh: Trimesh-like mesh with N vertices
-    :param size_thresh: Integer, min size of a component to keep. Optional, default=1000.
-    :returns: N-length boolean array
-    '''
-    cc, labels = sparse.csgraph.connected_components(mesh.csgraph, directed=False)
+def filter_largest_component(mesh):
+    cc, labels = sparse.csgraph.connected_components(mesh.csgraph)
     uids, counts = np.unique(labels, return_counts=True)
-    good_labels = uids[counts>size_thresh]
-    return np.in1d(labels, good_labels)
+    max_label = np.argmax(counts)
+    return labels==max_label
+
+# def filter_large_component(mesh, size_thresh=1000):
+#     '''
+#     Returns a mesh filter without any connected components less than a size threshold
+
+#     :param mesh: Trimesh-like mesh with N vertices
+#     :param size_thresh: Integer, min size of a component to keep. Optional, default=1000.
+#     :returns: N-length boolean array
+#     '''
+#     cc, labels = sparse.csgraph.connected_components(mesh.csgraph, directed=False)
+#     uids, counts = np.unique(labels, return_counts=True)
+#     good_labels = uids[counts>size_thresh]
+#     return np.in1d(labels, good_labels)
 
 
-def filter_small_component(mesh, size_thresh=1000):
-    '''
-    Returns a mesh filter without any connected components less than a size threshold
+# def filter_small_component(mesh, size_thresh=1000):
+#     '''
+#     Returns a mesh filter without any connected components less than a size threshold
 
-    :param mesh: Trimesh-like mesh with N vertices
-    :param size_thresh: Integer, min size of a component to keep. Optional, default=1000.
-    :returns: N-length boolean array
-    '''
-    cc, labels = sparse.csgraph.connected_components(mesh.csgraph, directed=False)
-    uids, counts = np.unique(labels, return_counts=True)
-    good_labels = uids[counts<size_thresh]
-    return np.in1d(labels, good_labels)
+#     :param mesh: Trimesh-like mesh with N vertices
+#     :param size_thresh: Integer, min size of a component to keep. Optional, default=1000.
+#     :returns: N-length boolean array
+#     '''
+#     cc, labels = sparse.csgraph.connected_components(mesh.csgraph, directed=False)
+#     uids, counts = np.unique(labels, return_counts=True)
+#     good_labels = uids[counts<size_thresh]
+#     return np.in1d(labels, good_labels)
 
 
 def filter_spatial_distance_from_points(mesh, pts, d_max):
@@ -108,7 +113,7 @@ def filter_two_point_distance(mesh, pts_foci, d_pad, indices=None, power=1):
     dmax = d_foci_to_all[0, minds_foci[1]] + d_pad
 
     if np.isinf(dmax):
-        print('Top and bottom AIS points are not in the same mesh component')
+        print('Points are not in the same mesh component')
         return None
     
     if power != 1:

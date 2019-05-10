@@ -41,7 +41,7 @@ def find_all_close_edges(vertices, labels, ccs, distance_upper_bound=2500):
             all_edges.append(find_close_edges_sym(vertices, labels, i, j, distance_upper_bound))
     return np.vstack(all_edges)
 
-def find_edges_to_link(mesh, vert_ind_a, vert_ind_b, distance_upper_bound=2500):
+def find_edges_to_link(mesh, vert_ind_a, vert_ind_b, distance_upper_bound=2500, verbose=False):
     '''Given a mesh and two points on that mesh
     find a way to add edges to the  mesh graph so that those indices
     are on the same connected component '''
@@ -84,10 +84,12 @@ def find_edges_to_link(mesh, vert_ind_a, vert_ind_b, distance_upper_bound=2500):
     # if there is now way to do this, fall back to adding all 
     # edges that are close
     if len(new_edges)==0:
-        print('finding all close edges')
-        new_edges =find_all_close_edges(mask_mesh.vertices, labels, ccs,
+        if verbose:
+            print('finding all close edges')
+        new_edges = find_all_close_edges(mask_mesh.vertices, labels, ccs,
                                         distance_upper_bound=distance_upper_bound)
-        print(f'new_edges shape {new_edges.shape}')
+        if verbose:
+            print(f'new_edges shape {new_edges.shape}')
     # if there are still not edges we have a problem
     if len(new_edges)==0:
         raise Exception('no close edges found')
@@ -117,7 +119,8 @@ def find_edges_to_link(mesh, vert_ind_a, vert_ind_b, distance_upper_bound=2500):
     good_edges = np_shared_rows(path_as_edges, new_edges)
     good_edges = np.sort(path_as_edges[good_edges], axis=1)
     timings['remap answers']=time.time()-start_time
-    print(timings)
+    if verbose:
+        print(timings)
     return mask_mesh.map_indices_to_unmasked(good_edges)
     
 
@@ -210,12 +213,14 @@ def merge_points_to_merge_indices(mesh, merge_event_points, close_map_distance =
     return close_inds.reshape((Nmerge,2))[is_join_merge,:]
 
 def get_link_edges(mesh, seg_id, dataset_name, close_map_distance = 300,
-                   server_address="https://www.dynamicannotationframework.com"):
+                   server_address="https://www.dynamicannotationframework.com", verbose=False):
     # initialize a chunkedgraph client
     cg_client = chunkedgraph.ChunkedGraphClient(server_address=server_address,
                                                 dataset_name=dataset_name)
     
-    # get the merge log 
+    # get the merge log
+    if type(seg_id) is np.int64:
+        seg_id = int(seg_id)    
     merge_log = cg_client.get_merge_log(seg_id)
     # convert the coordinates to numpy array and count them
     merge_event_points = np.array(merge_log['merge_edge_coords'])
@@ -226,7 +231,9 @@ def get_link_edges(mesh, seg_id, dataset_name, close_map_distance = 300,
                                                         close_map_distance = close_map_distance)
     else:
         merge_edge_inds=[]
-    print(len(merge_edge_inds), len(merge_event_points))
+
+    if verbose:
+        print(len(merge_edge_inds), len(merge_event_points))
     # iterate over these merge indices and find the minimal edge
     # that links these two connected componets
     total_link_edges=[]
