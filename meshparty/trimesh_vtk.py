@@ -272,7 +272,7 @@ def vtk_super_basic(actors, camera=None, do_save=False, filename=None, scale=4, 
     nothing
     """
     if do_save:
-        assert(filepath is not None)
+        assert(filename is not None)
     # create a rendering window and renderer
     ren = vtk.vtkRenderer()
     if camera is not None:
@@ -411,11 +411,11 @@ def make_mesh_actor(mesh, color=(0, 1, 0),
                     lut=None,
                     calc_normals=True):
 
-    mesh_poly = trimesh_to_vtk(mesh.vertices, mesh.faces, mesh.graph_edges)
+    mesh_poly = trimesh_to_vtk(mesh.vertices, mesh.faces, mesh.link_edges)
     if vertex_scalars is not None:
         mesh_poly.GetPointData().SetScalars(numpy_to_vtk(vertex_scalars))
     mesh_mapper = vtk.vtkPolyDataMapper()
-    if calc_normals and mesh.graph_edges is None:
+    if calc_normals and mesh.link_edges is None:
         norms = vtk.vtkTriangleMeshPointNormals()
         norms.SetInputData(mesh_poly)
         mesh_mapper.SetInputConnection(norms.GetOutputPort())
