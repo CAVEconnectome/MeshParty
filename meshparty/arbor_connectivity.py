@@ -17,8 +17,6 @@ def annotation_location_indices(mesh, anno_df, pos_column, sk_map=None, max_dist
     :param sk_map: Optional, Numpy array with skeleton vertex index for every mesh vertex index.
     :param max_dist: Optional, Maximum distance to the mesh allowed for assignment, else return -1.
     :param voxel_resolution: Optional, default is [4,4,40] nm/voxel.
-    :param mesh_index_col_name: Optional, string of new mesh index column name. Default 'mind'
-    :param skeleton_index_col_name: Optional, string of new skeleton index column name. Default 'skind'
     :returns: Mesh indices and, if desired, skeleton indices.
     '''
     anno_positions = np.vstack(anno_df[pos_column].values) * voxel_resolution
@@ -37,26 +35,27 @@ def annotation_location_indices(mesh, anno_df, pos_column, sk_map=None, max_dist
         return mesh_inds, skinds
 
 
-def annotation_skeleton_segments(sk, anno_df, pos_column, mesh=None, anno_skind_col=None, max_dist=np.inf,
-                                 voxel_resolution=np.array([4,4,40]), skeleton_index_col_name='skind'):
+def annotation_skeleton_segments(sk, anno_df, pos_column, mesh=None, max_dist=np.inf,
+                                 voxel_resolution=np.array([4,4,40]), skeleton_index_col_name=None):
     '''
     Attach skeleton segment index to an annotation dataframe
     '''
     if mesh is None and anno_skind_col is None:
         raise ValueError('Must have either a mesh or existing skeleton indices')   
-    sk_map = sk.mesh_to_skel_map[mesh.node_mask]
-    if anno_skind_col is None:
+
+    if skeleton_index_col_name is None:
+        sk_map = sk.mesh_to_skel_map
+        print(len(sk_map))
         minds, skinds = annotation_location_indices(mesh, anno_df, pos_column, sk_map=sk_map,
-                                                max_dist=max_dist, voxel_resolution=voxel_resolution,
-                                                pos_column=pos_column)
-        anno_segment = sk.segment_map[skinds]
-        return anno_segment, minds, skinds
+                                                max_dist=max_dist, voxel_resolution=voxel_resolution)
+        anno_segments = sk.segment_map[skinds]
+        return anno_segments, minds, skinds
     else:
-        anno_segment = sk.segment_map[anno_df[skeleton_index_col_name]]
-        return anno_segment
+        anno_segments = sk.segment_map[anno_df[skeleton_index_col_name]]
+        return anno_segments
 
 
-def skind_to_anno_map(sk, mesh, anno_df, pos_column, mesh=None, anno_skind_col=None, max_dist=np.inf,
+def skind_to_anno_map(sk, anno_df, pos_column=None, mesh=None, anno_skind_col=None, max_dist=np.inf,
                       voxel_resolution=np.array([4,4,40]), skeleton_index_col_name=None):
     '''
     Make a dict with key skeleton index and values a list of annotation ids at that index.
@@ -66,26 +65,17 @@ def skind_to_anno_map(sk, mesh, anno_df, pos_column, mesh=None, anno_skind_col=N
         return anno_dict
 
     if skeleton_index_col_name is None:
-        minds, skinds = annotation_location_indices(mesh, anno_df, pos_column,
+        sk_map = sk.mesh_to_skel_map
+
+        minds, skinds = annotation_location_indices(mesh, anno_df, pos_column, sk_map=sk_map,
                                                     max_dist=max_dist, voxel_resolution=voxel_resolution)
-        anno_sk_df = anno_df.copy()
+        anno_df = anno_df.copy()
         skeleton_index_col_name = 'XXX_temp_skeleton_index_internal'
-        anno_sk_df[skeleton_index_col_name] = = skinds
-    for k, v in anno_sk_df[[skeleton_index_col_name, 'id']].groupby(skeleton_index_col_name).agg(lambda x: [int(y) for y in x]).to_dict()['id'].items():
+        anno_df[skeleton_index_col_name] = skinds
+
+    for k, v in anno_df[[skeleton_index_col_name, 'id']].groupby(skeleton_index_col_name).agg(lambda x: [int(y) for y in x]).to_dict()['id'].items():
         anno_dict[k] = v
     return anno_dict
-
-
-def skeleton_segment_df(sk, anno_df, skeleton_segment_col_name='seg_ind', keep_columns=[]):
-    '''
-    Make a dataframe where every row is a segment of the skeleton.
-    '''
-    if keep_columns is None:
-        keep_columns_default = ['id', 'pt_root_id', 'pre_pt_root_id', 'post_pt_root_id', 'ctr_pt_position', 'size', 'mind', 'skind', skeleton_segment_col_name]
-        keep_columns = anno_df.columns[np.isin(anno_df.columns, keep_columns_default)]
-
-    anno_df = anno_df[keep_columns].groupby(skeleton_segment_col_name).agg(list).reset_index()
-    return seg_syn_df
 
 
 def synapse_betweenness(sk, pre_inds, post_inds):
@@ -199,7 +189,7 @@ def axon_split_quality(is_axon, pre_inds, post_inds):
     return 1-observed_ent/unsplit_ent
 
 
-def _distribution_split_entropy( counts ):
+def _distribution_split_entropy(counts):
     if np.sum(counts)==0:
         return 0
     ps = np.divide(counts, np.sum(counts, axis=1)[:,np.newaxis], where=np.sum(counts, axis=1)[:,np.newaxis]>0)
