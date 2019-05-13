@@ -88,3 +88,124 @@ def skeleton_segment_df(sk, anno_df, skeleton_segment_col_name='seg_ind', keep_c
 
     anno_df = anno_df[keep_columns].groupby(skeleton_segment_col_name).agg(list).reset_index()
     return seg_syn_df
+
+
+def synapse_betweenness(sk, pre_inds, post_inds):
+    '''
+    Compute synapse betweeness (number of paths from an input to an output) for all nodes of a skeleton.
+    :param sk: Skeleton
+    :param pre_inds: List of skeleton indices with an input synapse (Duplicate indices with more than one)
+    :param post_inds: List of skeleton indices with an output synapse (Duplicate indices with more than one)
+    '''
+    def _precompute_synapse_inds(syn_inds):
+        Nsyn = len(syn_inds)
+        n_syn = np.zeros(len(sk.vertices))
+        for ind in syn_inds:
+            n_syn[ind] += 1
+        return Nsyn, n_syn
+
+    Npre, n_pre = _precompute_synapse_inds(pre_inds)
+    Npost, n_post = _precompute_synapse_inds(post_inds)
+    
+    syn_btwn = np.zeros(len(sk.vertices))
+    cov_paths_rev = sk.covering_paths[::-1]
+    for path in cov_paths_rev:
+        downstream_pre = 0
+        downstream_post = 0
+        for ind in path:
+            downstream_pre += n_pre[ind]
+            downstream_post += n_post[ind]
+            syn_btwn[ind] = downstream_pre * (Npost - downstream_post) + \
+                               (Npre - downstream_pre) * downstream_post
+        # Deposit each branch's synapses at the branch point.
+        bp_ind = sk.parent_node(path[-1])
+        if bp_ind is not None:
+            n_pre[bp_ind]  += downstream_pre
+            n_post[bp_ind] += downstream_post
+    return syn_btwn
+
+
+def split_axon_by_synapse_betweenness(sk, pre_inds, post_inds, return_quality=True, extend_to_segment=True):
+    '''
+    Find the is_axon boolean label for all vertices in the skeleton. Assumes skeleton root is not on the axon side.
+    :param sk: Skeleton
+    :param pre_inds: List of skeleton indices with an input synapse (Duplicate indices with more than one)
+    :param post_inds: List of skeleton indices with an output synapse (Duplicate indices with more than one)
+    :param return_quality: Compute split quality at the split point. Always computer for true split point, not shifted one.
+    :param extend_to_segment: Shift split point to the closest-to-root location on the same segment as the split node.
+    :returns: boolean array, True for axon vertices.
+    :returns: float, optional split quality index.
+    '''
+
+    axon_split = find_axon_split_vertex_by_synapse_betweenness(sk, pre_inds, post_inds, return_quality=return_quality, extend_to_segment=True)
+    if return_quality:
+        axon_split_ind, split_quality = axon_split
+    else:
+        axon_split_ind = axon_split
+    is_axon = np.full(len(sk.vertices), False)
+    is_axon[ sk.downstream_nodes(axon_split_ind) ] = True
+    
+    if return_quality:
+        return is_axon, split_quality
+    else:
+        return is_axon
+
+
+def find_axon_split_vertex_by_synapse_betweenness(sk, pre_inds, post_inds, return_quality=True, extend_to_segment=True):
+    '''
+    Find the skeleton vertex at which to split the axon from the dendrite. Assumes skeleton root is on dendritic side.
+    :param sk: Skeleton
+    :param pre_inds: List of skeleton indices with an input synapse (Duplicate indices with more than one)
+    :param post_inds: List of skeleton indices with an output synapse (Duplicate indices with more than one)
+    :param return_quality: Compute split quality at the split point. Always computer for true split point, not shifted one.
+    :param extend_to_segment: Shift split point to the closest-to-root location on the same segment as the split node.
+    :returns: int, skeleton index
+    :returns: float, optional split quality index.
+    '''
+    syn_btwn = synapse_betweenness(sk, pre_inds, post_inds)
+    high_vinds = np.flatnonzero(syn_btwn==max(syn_btwn))
+    close_vind = high_vinds[np.argmin(sk.distance_to_root[high_vinds])]
+    
+    if return_quality:
+        axon_qual_label = np.full(len(sk.vertices), False)
+        axon_qual_label[ sk.downstream_nodes(close_vind) ] = True
+        split_quality = axon_split_quality(axon_qual_label, pre_inds, post_inds)
+
+    if extend_to_segment:
+        relseg = sk.segment_map[close_vind]
+        axon_split_ind = sk.segments[relseg][-1]
+    else:
+        axon_split_ind = close_vind
+    
+    if return_quality:
+        return axon_split_ind, split_quality
+    else:
+        return axon_split_ind
+
+
+def axon_split_quality(is_axon, pre_inds, post_inds):
+    '''
+    Returns a quality index (0-1, higher is a cleaner split) for split quality,
+    defined as best separating input and output sites.
+    '''
+    axon_pre = sum(is_axon[pre_inds])
+    axon_post = sum(is_axon[post_inds])
+    dend_pre = sum(~is_axon[pre_inds])
+    dend_post = sum(~is_axon[post_inds])
+
+    counts = np.array([[axon_pre, axon_post],[dend_pre, dend_post]])
+    observed_ent = _distribution_split_entropy( counts )
+    
+    unsplit_ent = _distribution_split_entropy([[len(pre_inds), len(post_inds)]] )
+
+    return 1-observed_ent/unsplit_ent
+
+
+def _distribution_split_entropy( counts ):
+    if np.sum(counts)==0:
+        return 0
+    ps = np.divide(counts, np.sum(counts, axis=1)[:,np.newaxis], where=np.sum(counts, axis=1)[:,np.newaxis]>0)
+    Hpart = np.sum(np.multiply(ps, np.log2(ps, where=ps>0)), axis=1)
+    Hws = np.sum(counts, axis=1) / np.sum(counts)
+    Htot = -np.sum(Hpart * Hws)
+    return Htot
