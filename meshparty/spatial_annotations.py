@@ -86,7 +86,7 @@ def skind_to_anno_map(sk, anno_df, pos_column=None, mesh=None, max_dist=np.inf,
         anno_df[skeleton_index_col_name] = skinds
 
     for k, v in anno_df[[skeleton_index_col_name, 'id']].groupby(skeleton_index_col_name).agg(lambda x: [int(y) for y in x]).to_dict()['id'].items():
-        anno_dict[k] = v
+        anno_dict[int(k)] = v
     return anno_dict
 
 
@@ -223,6 +223,6 @@ def _distribution_split_entropy(counts):
 
 def _check_ind_list(inds):
     if type(inds) is dict:
-        return np.concatenate([[k]*len(v) for k,v in inds.items()])
+        return np.concatenate([[k]*len(v) for k,v in inds.items() if k>=0])
     else:
         return inds
