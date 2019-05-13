@@ -3,7 +3,7 @@ import numpy as np
 import time
 from meshparty import trimesh_vtk, utils
 import pandas as pd
-from pykdtree.kdtree import KDTree
+from pykdtree.kdtree import KDTree as pyKDTree
 import pcst_fast
 from tqdm import trange, tqdm
 from meshparty.trimesh_io import Mesh, MaskedMesh
@@ -783,19 +783,21 @@ def extract_skeleton(mesh, soma_pt=None, soma_radius=None, collapse_soma=True, i
         if soma_pt is None:
             sk_graph = utils.create_csgraph(new_v, new_e)
             root_ind = utils.find_far_points_graph(sk_graph)[0]
-    
+        else:
+            _, qry_inds = pyKDTree(new_v).query(soma_pt[np.newaxis,:]). # Still try to root close to the soma
+            root_ind = qry_inds[0]
+
     if type(mesh) is MaskedMesh:
         skel_map_full_mesh = np.full(mesh.node_mask.shape, -1, dtype=int)
         skel_map_full_mesh[mesh.node_mask] = new_skel_map
     else:
         skel_map_full_mesh = new_skel_map
 
+    props = {}
     if compute_radius is True:
         rs = ray_trace_distance(orig_skel_index[vert_filter], mesh)
         rs = np.append(rs, soma_radius)
-        props = {'rs': rs}
-    else:
-        props = {}
+        props['rs'] = rs
     
     sk = Skeleton(new_v, new_e, mesh_to_skel_map=skel_map_full_mesh, vertex_properties=props, root=root_ind)
     return sk
