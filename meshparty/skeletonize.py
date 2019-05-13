@@ -784,15 +784,19 @@ def extract_skeleton(mesh, soma_pt=None, soma_radius=None, collapse_soma=True, i
             sk_graph = utils.create_csgraph(new_v, new_e)
             root_ind = utils.find_far_points_graph(sk_graph)[0]
         else:
-            _, qry_inds = pyKDTree(new_v).query(soma_pt[np.newaxis,:]). # Still try to root close to the soma
+            _, qry_inds = pyKDTree(new_v).query(soma_pt[np.newaxis,:]) # Still try to root close to the soma
             root_ind = qry_inds[0]
 
     if type(mesh) is MaskedMesh:
-        skel_map_full_mesh = np.full(mesh.node_mask.shape, -1, dtype=int)
+        skel_map_full_mesh = np.full(mesh.node_mask.shape, -1, dtype=np.int64)
         skel_map_full_mesh[mesh.node_mask] = new_skel_map
+        ind_to_fix = mesh.map_boolean_to_unmasked(np.isnan(new_skel_map))
+        skel_map_full_mesh[ind_to_fix] = -1
+
     else:
         skel_map_full_mesh = new_skel_map
-
+        skel_map_full_mesh[np.isnan(new_skel_map)] = -1
+        
     props = {}
     if compute_radius is True:
         rs = ray_trace_distance(orig_skel_index[vert_filter], mesh)
@@ -800,4 +804,4 @@ def extract_skeleton(mesh, soma_pt=None, soma_radius=None, collapse_soma=True, i
         props['rs'] = rs
     
     sk = Skeleton(new_v, new_e, mesh_to_skel_map=skel_map_full_mesh, vertex_properties=props, root=root_ind)
-    return sk
+    return sk, new_skel_map

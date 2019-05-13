@@ -36,8 +36,10 @@ def annotation_location_indices(mesh, anno_df, pos_column, sk_map=None, max_dist
         return mesh_inds
     else:
         sk_map=sk_map.astype(int)
-        skinds = sk_map[mesh_inds]
-        skinds[ds>max_dist] = -1
+        found_inds = mesh_inds>=0
+        skinds = np.zeros(mesh_inds.shape)
+        skinds[found_inds] = sk_map[mesh_inds[found_inds]]
+        skinds[~found_inds] = -1
         return mesh_inds, skinds
 
 
