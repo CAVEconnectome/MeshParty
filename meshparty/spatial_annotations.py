@@ -221,5 +221,6 @@ def _distribution_split_entropy(counts):
 
 def _check_ind_list(inds):
     if type(inds) is dict:
-        inds = np.concatenate([[k]*len(v) for k,v in inds.items()])
-    return inds
+        return np.concatenate([[k]*len(v) for k,v in inds.items()])
+    else:
+        return inds

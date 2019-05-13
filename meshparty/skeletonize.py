@@ -6,7 +6,9 @@ import pandas as pd
 from pykdtree.kdtree import KDTree
 import pcst_fast
 from tqdm import trange, tqdm
-from meshparty.trimesh_io import Mesh
+from meshparty.trimesh_io import Mesh, MaskedMesh
+from meshparty import mesh_filters
+from meshparty.skeleton import Skeleton
 from trimesh.ray import ray_pyembree
 from collections import defaultdict
 
@@ -751,3 +753,49 @@ def ray_trace_distance(vertex_inds, mesh, max_iter=10, rand_jitter=0.001, verbos
         if it>max_iter:
             break
     return rs
+
+
+def extract_skeleton(mesh, soma_pt=None, soma_radius=None, collapse_soma=True, invalidation_d=12000, smooth_vertices=False, compute_radius=True):
+    '''
+    Build skeleton object from mesh skeletonization
+    '''
+    skel_verts, skel_edges, smooth_verts, orig_skel_index, skel_map = skeletonize_mesh(mesh,
+                                                                                       soma_pt=soma_pt,
+                                                                                       soma_thresh=soma_radius,
+                                                                                       invalidation_d=invalidation_d,
+                                                                                       merge_components_at_tips=False, 
+                                                                                       collapse_soma=False,
+                                                                                       return_map=True)
+    
+    if smooth_vertices is True:
+        skel_verts = smooth_verts
+
+    if collapse_soma is True and soma_pt is not None:
+        soma_verts = mesh_filters.filter_spatial_distance_from_points(mesh, [soma_pt], soma_radius)
+        new_v, new_e, new_skel_map, vert_filter, root_ind = collapse_soma_skeleton(soma_pt, skel_verts, skel_edges,
+                                                                                   soma_d_thresh=soma_radius, mesh_to_skeleton_map=skel_map,
+                                                                                   soma_mesh_indices=soma_verts, return_filter=True,
+                                                                                   return_soma_ind=True)
+    else:
+        new_v, new_e, new_skel_map = skel_verts, skel_edges, skel_map
+        vert_filter = np.arange(len(orig_skel_index))
+
+        if soma_pt is None:
+            sk_graph = utils.create_csgraph(new_v, new_e)
+            root_ind = utils.find_far_points_graph(sk_graph)[0]
+    
+    if type(mesh) is MaskedMesh:
+        skel_map_full_mesh = np.full(mesh.node_mask.shape, -1, dtype=int)
+        skel_map_full_mesh[mesh.node_mask] = new_skel_map
+    else:
+        skel_map_full_mesh = new_skel_map
+
+    if compute_radius is True:
+        rs = ray_trace_distance(orig_skel_index[vert_filter], mesh)
+        rs = np.append(rs, soma_radius)
+        props = {'rs': rs}
+    else:
+        props = {}
+    
+    sk = Skeleton(new_v, new_e, mesh_to_skel_map=skel_map_full_mesh, vertex_properties=props, root=root_ind)
+    return sk
