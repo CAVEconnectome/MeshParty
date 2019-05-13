@@ -200,7 +200,7 @@ class Skeleton:
         self._mesh_to_skel_map = mesh_to_skel_map
 
         self._root = None
-        self._covering_paths = None
+        self._cover_paths = None
         self._segments = None
         self._segment_map = None
 
@@ -311,10 +311,15 @@ class Skeleton:
         return len(self._end_points)
 
     @property
-    def covering_paths(self):
-        if self._covering_paths is None:
-            self._covering_paths = self._compute_covering_paths()
-        return self._covering_paths
+    def cover_paths(self):
+        '''
+        A list of paths from end nodes toward root that together fully cover the skeleton
+        with no overlaps. Paths are ordered by end point distance from root, starting with
+        the most distal ones.
+        '''
+        if self._cover_paths is None:
+            self._cover_paths = self._compute_cover_paths()
+        return self._cover_paths
 
     @property
     def distance_to_root(self):
@@ -416,7 +421,7 @@ class Skeleton:
     def _reset_derived_objects(self):
         self._csgraph = None
         self._csgraph_binary = None
-        self._covering_paths = None
+        self._cover_paths = None
         self._segments = None
         self._segment_map = None
 
@@ -438,18 +443,18 @@ class Skeleton:
         ys = self.vertices[path[1:]]
         return sum(np.linalg.norm(ys-xs))
 
-    def _compute_covering_paths(self):
+    def _compute_cover_paths(self):
         '''
-        Only considers the component with root
+        Compute a list of cover paths along the skeleton
         '''
-        cov_paths = []
+        cover_paths = []
         seen = np.full(self.n_vertices, False)
         ep_order = np.argsort(self.distance_to_root[self.end_points])[::-1]
         for ep in self.end_points[ep_order]:
             ptr = np.array(self.path_to_root(ep))
-            cov_paths.append(ptr[~seen[ptr]])
+            cover_paths.append(ptr[~seen[ptr]])
             seen[ptr] = True
-        return cov_paths
+        return cover_paths
 
     def _unvisited_path_on_tree(self, ind, visited):
         '''
