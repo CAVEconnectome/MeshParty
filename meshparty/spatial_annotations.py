@@ -19,6 +19,12 @@ def annotation_location_indices(mesh, anno_df, pos_column, sk_map=None, max_dist
     :param voxel_resolution: Optional, default is [4,4,40] nm/voxel.
     :returns: Mesh indices and, if desired, skeleton indices.
     '''
+    if len(anno_df) == 0:
+        if sk_map is None:
+            return np.array([])
+        else:
+            return np.array([]), np.array([])
+
     anno_positions = np.vstack(anno_df[pos_column].values) * voxel_resolution
     ds, mesh_inds = mesh.pykdtree.query(anno_positions)
     mesh_inds[ds>max_dist] = -1
@@ -39,13 +45,19 @@ def annotation_skeleton_segments(sk, anno_df, pos_column, mesh=None, max_dist=np
                                  voxel_resolution=np.array([4,4,40]), skeleton_index_col_name=None):
     '''
     Attach skeleton segment index to an annotation dataframe
+    :param sk: Skeleton
+    :param anno_df: Annotation dataframe
+    :param pos_column: String. Column name in dataframe with position values
+    :param mesh: optional, mesh object. Needed if skeleton_index_col_name is not specified.
+    :param max_dist: optional, float. Max distance to mesh for attaching annotations. Default is inf.
+    :param voxel_resolution: optional, length 3 array. Default is [4,4,40] nm/pixel.
+    :param skeleton_index_col_name: optional, string. Column name of skeleton vertex in dataframe.
     '''
     if mesh is None and anno_skind_col is None:
         raise ValueError('Must have either a mesh or existing skeleton indices')   
 
     if skeleton_index_col_name is None:
         sk_map = sk.mesh_to_skel_map
-        print(len(sk_map))
         minds, skinds = annotation_location_indices(mesh, anno_df, pos_column, sk_map=sk_map,
                                                 max_dist=max_dist, voxel_resolution=voxel_resolution)
         anno_segments = sk.segment_map[skinds]
@@ -55,7 +67,7 @@ def annotation_skeleton_segments(sk, anno_df, pos_column, mesh=None, max_dist=np
         return anno_segments
 
 
-def skind_to_anno_map(sk, anno_df, pos_column=None, mesh=None, anno_skind_col=None, max_dist=np.inf,
+def skind_to_anno_map(sk, anno_df, pos_column=None, mesh=None, max_dist=np.inf,
                       voxel_resolution=np.array([4,4,40]), skeleton_index_col_name=None):
     '''
     Make a dict with key skeleton index and values a list of annotation ids at that index.
@@ -65,9 +77,7 @@ def skind_to_anno_map(sk, anno_df, pos_column=None, mesh=None, anno_skind_col=No
         return anno_dict
 
     if skeleton_index_col_name is None:
-        sk_map = sk.mesh_to_skel_map
-
-        minds, skinds = annotation_location_indices(mesh, anno_df, pos_column, sk_map=sk_map,
+        minds, skinds = annotation_location_indices(mesh, anno_df, pos_column, sk_map=sk.mesh_to_skel_map,
                                                     max_dist=max_dist, voxel_resolution=voxel_resolution)
         anno_df = anno_df.copy()
         skeleton_index_col_name = 'XXX_temp_skeleton_index_internal'
@@ -84,6 +94,8 @@ def synapse_betweenness(sk, pre_inds, post_inds):
     :param sk: Skeleton
     :param pre_inds: List of skeleton indices with an input synapse (Duplicate indices with more than one)
     :param post_inds: List of skeleton indices with an output synapse (Duplicate indices with more than one)
+
+    :returns: Array of synapse betweenness for every vertex in the skeleton.
     '''
     def _precompute_synapse_inds(syn_inds):
         Nsyn = len(syn_inds)
@@ -96,7 +108,7 @@ def synapse_betweenness(sk, pre_inds, post_inds):
     Npost, n_post = _precompute_synapse_inds(post_inds)
     
     syn_btwn = np.zeros(len(sk.vertices))
-    cov_paths_rev = sk.covering_paths[::-1]
+    cov_paths_rev = sk.cover_paths[::-1]
     for path in cov_paths_rev:
         downstream_pre = 0
         downstream_post = 0
@@ -124,6 +136,11 @@ def split_axon_by_synapse_betweenness(sk, pre_inds, post_inds, return_quality=Tr
     :returns: boolean array, True for axon vertices.
     :returns: float, optional split quality index.
     '''
+    if type(pre_inds) is dict:
+        pre_inds = np.concatenate([[k]*len(v) for k,v in pre_inds.items()])
+
+    if type(post_inds) is dict:
+        post_inds = np.concatenate([[k]*len(v) for k,v in post_inds.items()])
 
     axon_split = find_axon_split_vertex_by_synapse_betweenness(sk, pre_inds, post_inds, return_quality=return_quality, extend_to_segment=True)
     if return_quality:
