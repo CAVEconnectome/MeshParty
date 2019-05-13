@@ -796,7 +796,7 @@ def extract_skeleton(mesh, soma_pt=None, soma_radius=None, collapse_soma=True, i
     else:
         skel_map_full_mesh = new_skel_map
         skel_map_full_mesh[np.isnan(new_skel_map)] = -1
-        
+
     props = {}
     if compute_radius is True:
         rs = ray_trace_distance(orig_skel_index[vert_filter], mesh)
@@ -804,4 +804,4 @@ def extract_skeleton(mesh, soma_pt=None, soma_radius=None, collapse_soma=True, i
         props['rs'] = rs
     
     sk = Skeleton(new_v, new_e, mesh_to_skel_map=skel_map_full_mesh, vertex_properties=props, root=root_ind)
-    return sk, new_skel_map
+    return sk
