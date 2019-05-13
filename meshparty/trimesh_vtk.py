@@ -272,7 +272,7 @@ def vtk_super_basic(actors, camera=None, do_save=False, filename=None, scale=4, 
     nothing
     """
     if do_save:
-        assert(filepath is not None)
+        assert(filename is not None)
     # create a rendering window and renderer
     ren = vtk.vtkRenderer()
     if camera is not None:
