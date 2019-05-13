@@ -27,6 +27,10 @@ def write_skeleton_h5(sk, filename, overwrite=False):
 def write_skeleton_h5_by_part(filename, vertices, edges, mesh_to_skel_map=None,
                               vertex_properties={}, edge_properties={}, root=None,
                               overwrite=False):
+    '''
+    Helper function for writing all parts of a skeleton file to an h5.
+    '''
+
     if os.path.isfile(filename):
         if overwrite:
             os.remove(filename)
@@ -53,6 +57,9 @@ def _write_dict_to_group(f, group_name, data_dict):
 
 
 def read_skeleton_h5_by_part(filename):
+    '''
+    Helper function for extracting all parts of a skeleton file from an h5.
+    '''
     assert os.path.isfile(filename)
 
     with h5py.File(filename, 'r') as f:
@@ -169,7 +176,7 @@ class _NumpyEncoder(json.JSONEncoder):
         elif isinstance(obj, (np.float_, np.float16, np.float32, 
             np.float64)):
             return float(obj)
-        elif isinstance(obj,(np.ndarray,)): #### This is the fix
+        elif isinstance(obj,(np.ndarray,)):
             return obj.tolist()
         return json.JSONEncoder.default(self, obj)
 

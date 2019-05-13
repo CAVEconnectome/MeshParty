@@ -136,11 +136,8 @@ def split_axon_by_synapse_betweenness(sk, pre_inds, post_inds, return_quality=Tr
     :returns: boolean array, True for axon vertices.
     :returns: float, optional split quality index.
     '''
-    if type(pre_inds) is dict:
-        pre_inds = np.concatenate([[k]*len(v) for k,v in pre_inds.items()])
-
-    if type(post_inds) is dict:
-        post_inds = np.concatenate([[k]*len(v) for k,v in post_inds.items()])
+    pre_inds = _check_ind_list(pre_inds)
+    post_inds = _check_ind_list(post_inds)
 
     axon_split = find_axon_split_vertex_by_synapse_betweenness(sk, pre_inds, post_inds, return_quality=return_quality, extend_to_segment=True)
     if return_quality:
@@ -167,6 +164,9 @@ def find_axon_split_vertex_by_synapse_betweenness(sk, pre_inds, post_inds, retur
     :returns: int, skeleton index
     :returns: float, optional split quality index.
     '''
+    pre_inds = _check_ind_list(pre_inds)
+    post_inds = _check_ind_list(post_inds)
+
     syn_btwn = synapse_betweenness(sk, pre_inds, post_inds)
     high_vinds = np.flatnonzero(syn_btwn==max(syn_btwn))
     close_vind = high_vinds[np.argmin(sk.distance_to_root[high_vinds])]
@@ -193,6 +193,9 @@ def axon_split_quality(is_axon, pre_inds, post_inds):
     Returns a quality index (0-1, higher is a cleaner split) for split quality,
     defined as best separating input and output sites.
     '''
+    pre_inds = _check_ind_list(pre_inds)
+    post_inds = _check_ind_list(post_inds)
+
     axon_pre = sum(is_axon[pre_inds])
     axon_post = sum(is_axon[post_inds])
     dend_pre = sum(~is_axon[pre_inds])
@@ -214,3 +217,9 @@ def _distribution_split_entropy(counts):
     Hws = np.sum(counts, axis=1) / np.sum(counts)
     Htot = -np.sum(Hpart * Hws)
     return Htot
+
+
+def _check_ind_list(inds):
+    if type(inds) is dict:
+        inds = np.concatenate([[k]*len(v) for k,v in inds.items()])
+    return inds
