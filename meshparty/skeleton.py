@@ -200,7 +200,7 @@ class Skeleton:
         self._mesh_to_skel_map = mesh_to_skel_map
 
         self._root = None
-        self._paths = None
+        self._covering_paths = None
         self._segments = None
         self._segment_map = None
 
@@ -311,10 +311,10 @@ class Skeleton:
         return len(self._end_points)
 
     @property
-    def paths(self):
-        if self._paths is None:
-            self._paths = self._compute_paths()
-        return self._paths
+    def covering_paths(self):
+        if self._covering_paths is None:
+            self._covering_paths = self._compute_covering_paths()
+        return self._covering_paths
 
     @property
     def distance_to_root(self):
@@ -416,7 +416,7 @@ class Skeleton:
     def _reset_derived_objects(self):
         self._csgraph = None
         self._csgraph_binary = None
-        self._paths = None
+        self._covering_paths = None
         self._segments = None
         self._segment_map = None
 
@@ -438,28 +438,18 @@ class Skeleton:
         ys = self.vertices[path[1:]]
         return sum(np.linalg.norm(ys-xs))
 
-    def _compute_paths(self):
+    def _compute_covering_paths(self):
         '''
         Only considers the component with root
         '''
-        ds, P = sparse.csgraph.dijkstra(self.csgraph,
-                                        directed=True,
-                                        indices=self.end_points,
-                                        return_predecessors=True)
-        d_to_root = ds[:, self.root]
-        end_point_order = np.argsort(d_to_root)[::-1]
-        paths = []
-
-        visited = np.full(shape=(len(self.vertices),), fill_value=False)
-        visited[self.root] = True
-        for ep_ind in end_point_order:
-            if np.isinf(d_to_root[ep_ind]):
-                continue
-            path, visited = self._unvisited_path_on_tree(self.end_points[ep_ind],
-                                                         visited)
-            paths.append(path)
-
-        return paths
+        cov_paths = []
+        seen = np.full(self.n_vertices, False)
+        ep_order = np.argsort(self.distance_to_root[self.end_points])[::-1]
+        for ep in self.end_points[ep_order]:
+            ptr = np.array(self.path_to_root(ep))
+            cov_paths.append(ptr[~seen[ptr]])
+            seen[ptr] = True
+        return cov_paths
 
     def _unvisited_path_on_tree(self, ind, visited):
         '''
@@ -529,3 +519,5 @@ class Skeleton:
 
         skeleton_io.export_to_swc(self, filename, node_labels=node_labels,
                                   radius=radius, header=header, xyz_scaling=xyz_scaling)
+
+

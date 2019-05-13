@@ -5,9 +5,9 @@ from scipy import spatial, sparse
 from pykdtree.kdtree import KDTree as pyKDTree
 from copy import copy
 
+
 def annotation_location_indices(mesh, anno_df, pos_column, sk_map=None, max_dist=np.inf,
-                                voxel_resolution=np.array([4,4,40]), mesh_index_col_name='mind',
-                                skeleton_index_col_name='skind'):
+                                voxel_resolution=np.array([4,4,40])):
     '''
     For a synapse dataframe associated with a given neuron, find the mesh indices associated with each synapse.
 
@@ -19,49 +19,45 @@ def annotation_location_indices(mesh, anno_df, pos_column, sk_map=None, max_dist
     :param voxel_resolution: Optional, default is [4,4,40] nm/voxel.
     :param mesh_index_col_name: Optional, string of new mesh index column name. Default 'mind'
     :param skeleton_index_col_name: Optional, string of new skeleton index column name. Default 'skind'
-    :returns: Copy of anno_df with additional column(s) for the (unmasked) mesh index and, if created, skeleton index.
+    :returns: Mesh indices and, if desired, skeleton indices.
     '''
     anno_positions = np.vstack(anno_df[pos_column].values) * voxel_resolution
     ds, mesh_inds = mesh.pykdtree.query(anno_positions)
     mesh_inds[ds>max_dist] = -1
     
-    anno_df = anno_df.copy()
     if type(mesh) is MaskedMesh:
-        anno_df[mesh_index_col_name] = mesh.map_indices_to_unmasked(mesh_inds)
-    else:
-        anno_df[mesh_index_col_name] = mesh_inds
+        mesh_inds = mesh.map_indices_to_unmasked(mesh_inds)
 
-    if sk_map is not None:
+    if sk_map is None:
+        return mesh_inds
+    else:
         sk_map=sk_map.astype(int)
         skinds = sk_map[mesh_inds]
         skinds[ds>max_dist] = -1
-        anno_df[skeleton_index_col_name] = skinds
-    return anno_df
+        return mesh_inds, skinds
+
 
 def annotation_skeleton_segments(sk, anno_df, pos_column, mesh=None, anno_skind_col=None, max_dist=np.inf,
-                                 voxel_resolution=np.array([4,4,40]), skeleton_index_col_name='skind',
-                                 mesh_index_col_name='mind', skeleton_segment_col_name='seg_ind'):
+                                 voxel_resolution=np.array([4,4,40]), skeleton_index_col_name='skind'):
     '''
-    Attach skeleton segment index to an annotaiton dataframe
+    Attach skeleton segment index to an annotation dataframe
     '''
     if mesh is None and anno_skind_col is None:
-        raise ValueError('Must have either a mesh or existing skeleton indices')        
+        raise ValueError('Must have either a mesh or existing skeleton indices')   
     sk_map = sk.mesh_to_skel_map[mesh.node_mask]
     if anno_skind_col is None:
-        anno_result_df = annotation_location_indices(sk_map, mesh, anno_df,
-                                                     max_dist=max_dist, voxel_resolution=voxel_resolution,
-                                                     pos_column=pos_column, mesh_index_col_name=mesh_index_col_name,
-                                                     skeleton_index_col_name=skeleton_index_col_name)
-        anno_result_df[skeleton_segment_col_name] = sk.segment_map[anno_result_df[skeleton_index_col_name]]
+        minds, skinds = annotation_location_indices(mesh, anno_df, pos_column, sk_map=sk_map,
+                                                max_dist=max_dist, voxel_resolution=voxel_resolution,
+                                                pos_column=pos_column)
+        anno_segment = sk.segment_map[skinds]
+        return anno_segment, minds, skinds
     else:
-        anno_result_df = anno_df.copy()
-        anno_result_df[skeleton_segment_col_name] = sk.segment_map[anno_result_df[skeleton_index_col_name]]
-    return syn_result_df
+        anno_segment = sk.segment_map[anno_df[skeleton_index_col_name]]
+        return anno_segment
 
 
 def skind_to_anno_map(sk, mesh, anno_df, pos_column, mesh=None, anno_skind_col=None, max_dist=np.inf,
-                      voxel_resolution=np.array([4,4,40]), skeleton_index_col_name='skind',
-                      mesh_index_col_name='mind', skeleton_segment_col_name='seg_ind'):
+                      voxel_resolution=np.array([4,4,40]), skeleton_index_col_name=None):
     '''
     Make a dict with key skeleton index and values a list of annotation ids at that index.
     '''
@@ -69,10 +65,12 @@ def skind_to_anno_map(sk, mesh, anno_df, pos_column, mesh=None, anno_skind_col=N
     if len(anno_df) == 0:
         return anno_dict
 
-    anno_sk_df = annotation_skeleton_segments(sk, mesh, anno_df,
-                                              max_dist=max_dist, voxel_resolution=voxel_resolution,
-                                              pos_column=pos_column, mesh_index_col_name=mesh_index_col_name,
-                                              skeleton_index_col_name=skeleton_index_col_name)
+    if skeleton_index_col_name is None:
+        minds, skinds = annotation_location_indices(mesh, anno_df, pos_column,
+                                                    max_dist=max_dist, voxel_resolution=voxel_resolution)
+        anno_sk_df = anno_df.copy()
+        skeleton_index_col_name = 'XXX_temp_skeleton_index_internal'
+        anno_sk_df[skeleton_index_col_name] = = skinds
     for k, v in anno_sk_df[[skeleton_index_col_name, 'id']].groupby(skeleton_index_col_name).agg(lambda x: [int(y) for y in x]).to_dict()['id'].items():
         anno_dict[k] = v
     return anno_dict
