@@ -50,7 +50,8 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_thresh=7500,
                 max_tip_d=2000, large_skel_path_threshold=5000,
                 cc_vertex_thresh=100, 
                 collapse_soma=True,
-                merge_components_at_tips=True, return_map=False):
+                merge_components_at_tips=True, return_map=False,
+                verbose=True):
     """ function to turn a trimesh object of a neuron into a skeleton
     Parameters
     ----------
@@ -117,7 +118,8 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_thresh=7500,
                                                 soma_thresh=soma_thresh,
                                                 invalidation_d=invalidation_d,
                                                 cc_vertex_thresh=cc_vertex_thresh,
-                                                return_map=return_map)
+                                                return_map=return_map,
+                                                verbose=verbose)
     if return_map is True:
         all_paths, roots, tot_path_lengths, mesh_to_skeleton_map = skeletonize_output
     else:
@@ -314,7 +316,8 @@ def skeletonize_components(mesh,
                            soma_thresh=10000,
                            invalidation_d=10000,
                            cc_vertex_thresh=100,
-                           return_map=False):
+                           return_map=False,
+                           verbose=True):
     # find all the connected components in the mesh
     n_components, labels = sparse.csgraph.connected_components(mesh.csgraph,
                                                                directed=False,
@@ -337,7 +340,11 @@ def skeletonize_components(mesh,
         is_soma_pt = None
         soma_d = None
     # loop over the components
-    for k in trange(n_components):
+    if verbose:
+        p_components = trange(n_components)
+    else:
+        p_components = range(n_components)
+    for k in p_components:
         if comp_counts[k] > cc_vertex_thresh:
 
             # find the root using a soma position if you have it
@@ -354,7 +361,8 @@ def skeletonize_components(mesh,
                                         root_pred=pred,
                                         valid=valid,
                                         invalidation_d=invalidation_d,
-                                        return_map=return_map)
+                                        return_map=return_map,
+                                        verbose=verbose)
             if return_map is False:
                 paths, path_lengths = teasar_output
             else:
@@ -453,7 +461,7 @@ def setup_root(mesh, soma_pt=None, soma_thresh=7500, valid_inds=None):
 
 
 def mesh_teasar(mesh, root=None, valid=None, root_ds=None, root_pred=None, soma_pt=None,
-                soma_thresh=7500, invalidation_d=10000, return_timing=False, return_map=False):
+                soma_thresh=7500, invalidation_d=10000, return_timing=False, return_map=False, verbose=True):
     # if no root passed, then calculation one
     if root is None:
         root, root_ds, root_pred, valid = setup_root(mesh,
@@ -498,7 +506,6 @@ def mesh_teasar(mesh, root=None, valid=None, root_ds=None, root_pred=None, soma_
     # arrays to track timing
     start = time.time()
     time_arrays = [[], [], [], [], []]
-
     with tqdm(total=total_to_visit) as pbar:
         # keep looping till all vertices have been invalidated
         while(np.sum(valid) > 0):
@@ -580,7 +587,8 @@ def mesh_teasar(mesh, root=None, valid=None, root_ds=None, root_pred=None, soma_
 
 
             # print out how many vertices are still valid
-            pbar.update(marked)
+            if verbose:
+                pbar.update(marked)
             time_arrays[4].append(time.time()-t)
     # record the total time
     dt = time.time() - start
@@ -755,7 +763,8 @@ def ray_trace_distance(vertex_inds, mesh, max_iter=10, rand_jitter=0.001, verbos
     return rs
 
 
-def extract_skeleton(mesh, soma_pt=None, soma_radius=None, collapse_soma=True, invalidation_d=12000, smooth_vertices=False, compute_radius=True):
+def extract_skeleton(mesh, soma_pt=None, soma_radius=None, collapse_soma=True, invalidation_d=12000,
+                     smooth_vertices=False, compute_radius=True, compute_original_index=True, verbose=True):
     '''
     Build skeleton object from mesh skeletonization
     '''
@@ -765,7 +774,8 @@ def extract_skeleton(mesh, soma_pt=None, soma_radius=None, collapse_soma=True, i
                                                                                        invalidation_d=invalidation_d,
                                                                                        merge_components_at_tips=False, 
                                                                                        collapse_soma=False,
-                                                                                       return_map=True)
+                                                                                       return_map=True,
+                                                                                       verbose=verbose)
     
     if smooth_vertices is True:
         skel_verts = smooth_verts
@@ -798,6 +808,11 @@ def extract_skeleton(mesh, soma_pt=None, soma_radius=None, collapse_soma=True, i
         skel_map_full_mesh[np.isnan(new_skel_map)] = -1
 
     props = {}
+    if compute_original_index is True:
+        if type(mesh) is MaskedMesh:
+            props['mesh_index'] = np.append(mesh.map_indices_to_unmasked(orig_skel_index[vert_filter]), -1)
+        else:
+            props['mesh_index'] = np.append(orig_skel_index[vert_filter],-1)
     if compute_radius is True:
         rs = ray_trace_distance(orig_skel_index[vert_filter], mesh)
         rs = np.append(rs, soma_radius)
