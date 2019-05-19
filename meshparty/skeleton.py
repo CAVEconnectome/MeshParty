@@ -393,7 +393,7 @@ class Skeleton:
     def _single_path_length(self, path):
         xs = self.vertices[path[:-1]]
         ys = self.vertices[path[1:]]
-        return sum(np.linalg.norm(ys-xs))
+        return np.sum(np.linalg.norm(ys-xs))
 
     def _compute_paths(self):
         '''
