@@ -288,7 +288,8 @@ class MeshMeta(object):
     def mesh(self, filename=None, seg_id=None, cache_mesh=True,
              merge_large_components=False, remove_duplicate_vertices=False,
              overwrite_merge_large_components=False,
-             force_download=False, masked_mesh=False):
+             force_download=False, masked_mesh=False,
+             add_link_edges=False, dataset_name=None):
         """ Loads mesh either from cache, disk or google storage
 
         :param filename: str
@@ -346,6 +347,8 @@ class MeshMeta(object):
                                      overwrite_merge_large_components=overwrite_merge_large_components,
                                      remove_duplicate_vertices=remove_duplicate_vertices,
                                      masked_mesh=masked_mesh)
+                    if add_link_edges and (len(mesh.link_edges) == 0):
+                        mesh.add_link_edges(seg_id=seg_id, dataset_name=dataset_name)
                     return mesh
 
             if seg_id not in self._mesh_cache or force_download is True:
@@ -367,6 +370,9 @@ class MeshMeta(object):
                     if (merge_large_components and (len(mesh.link_edges)==0)) or \
                             overwrite_merge_large_components:
                         mesh.merge_large_components()
+
+                if add_link_edges and (len(mesh.link_edges) == 0):
+                    mesh.add_link_edges(seg_id=seg_id, dataset_name=dataset_name)
 
                 if cache_mesh and len(self._mesh_cache) < self.cache_size:
                     self._mesh_cache[seg_id] = mesh

@@ -441,7 +441,7 @@ class Skeleton:
     def _single_path_length(self, path):
         xs = self.vertices[path[:-1]]
         ys = self.vertices[path[1:]]
-        return sum(np.linalg.norm(ys-xs))
+        return sum(np.linalg.norm(ys-xs, axis=1))
 
     def _compute_cover_paths(self):
         '''

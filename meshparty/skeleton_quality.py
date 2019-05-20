@@ -34,11 +34,13 @@ def skeleton_path_quality(sk, mesh, skind_to_mind_map, sk_norm, max_graph_dist=1
 
 def compute_path_pairs(sk, mesh, skind_to_mind_map=None, return_indices=True):
     '''
-    For every end point on a skeleton, computes two shortest paths to root, one along the skeleton and one along the mesh.
+    For every end point on a skeleton, computes two shortest paths to root,
+    one along the skeleton and one along the mesh.
 
     :param sk: Skeleton
     :param mesh: MeshParty Mesh
-    :param skind_to_mind_map: Optional, Mapping from index in skeleton to index in the mesh. Usually 'mesh_index' in skeleton vertex properties.
+    :param skind_to_mind_map: Optional, Mapping from index in skeleton to index in the mesh.
+                              Usually 'mesh_index' in skeleton vertex properties.
     :param return_indices: Optional, boolean. If included, also return indices, not just points.
     :returns: sk_paths ms_paths, sk_path_indices, ms_path_indices
     '''
@@ -135,12 +137,34 @@ def pblast_score(data, p_ratio=DEFAULT_P_RATIO, bins=DEFAULT_BINS_GRAPH, normali
 
 def pblast_score_sliding(data, window=400, interval=50, p_ratio=DEFAULT_P_RATIO, bins=DEFAULT_BINS_GRAPH, normalize_to_self=True):
     if len(data) < window:
-        return pblast_score(data, p_ratio=DEFAULT_P_RATIO, bins=DEFAULT_BINS_GRAPH, normalize_to_self=normalize_to_self)
+        return pblast_score(data, p_ratio=p_ratio, bins=bins, normalize_to_self=normalize_to_self)
     else:
         worst_pscore = np.inf
         for ii in np.arange(0, len(data)-window+interval, interval):
-            new_pscore = pblast_score(data[ii:ii+window], p_ratio=DEFAULT_P_RATIO,
-                                      bins=DEFAULT_BINS_GRAPH, normalize_to_self=normalize_to_self)
+            new_pscore = pblast_score(data[ii:ii+window], p_ratio=p_ratio,
+                                      bins=bins, normalize_to_self=normalize_to_self)
             if new_pscore < worst_pscore:
                 worst_pscore = new_pscore
         return worst_pscore
+
+
+def find_mixed_segments(pscore, sk, pscore_fail=0):
+    is_good_score = np.zeros(len(sk.vertices))
+    is_good_pot = np.zeros(len(sk.vertices))
+
+    for ii, ep in enumerate(sk.end_points):
+        ptr = sk.path_to_root(ep)
+        is_good_pot[ptr] += 1
+        if pscore[ii] > pscore_fail:
+            is_good_score[ptr] += 1
+
+    mixed_segs = []
+    for jj, seg in enumerate(sk.segments):
+        if len(seg)>1:
+            end_bad = is_good_score[seg[0]]==0
+            start_ind = sk.parent_node(seg[-1])
+            start_mixed = is_good_score[start_ind] > 0 and is_good_score[start_ind] < is_good_pot[start_ind]
+            if end_bad and start_mixed:
+                mixed_segs.append(jj)
+
+    return mixed_segs

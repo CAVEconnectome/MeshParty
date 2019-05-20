@@ -557,9 +557,14 @@ def make_point_cloud_actor(xyz,
     return actor
 
 
-def vtk_linked_point_actor(vertices_a, inds_a,
-                           vertices_b, inds_b,
-                           line_width=1, color=(0, 0, 0), opacity=0.2):
+def vtk_linked_point_actor(vertices_a, vertices_b,
+                           inds_a=None, inds_b=None,
+                           linewidth=1, color=(0, 0, 0), opacity=0.2):
+    if inds_a is None:
+        inds_a = np.arange(len(vertices_a))
+    if inds_b is None:
+        inds_b = np.arange(len(vertices_b))
+
     if len(inds_a) != len(inds_b):
         raise ValueError('Linked points must have the same length')
 
@@ -573,7 +578,7 @@ def vtk_linked_point_actor(vertices_a, inds_a,
 
     link_actor = vtk.vtkActor()
     link_actor.SetMapper(mapper)
-    link_actor.GetProperty().SetLineWidth(line_width)
+    link_actor.GetProperty().SetLineWidth(linewidth)
     link_actor.GetProperty().SetColor(color)
     link_actor.GetProperty().SetOpacity(opacity)
     return link_actor
