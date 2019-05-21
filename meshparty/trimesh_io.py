@@ -808,7 +808,7 @@ class Mesh(trimesh.Trimesh):
                                     directed=False)
 
 class MaskedMesh(Mesh):
-    def __init__(self, *args, node_mask=None, unmasked_size=None, link_edges=None, apply_mask=False,  **kwargs):
+    def __init__(self, *args, node_mask=None, unmasked_size=None, link_edges=None,  **kwargs):
         if 'vertices' in kwargs:
             vertices_all = kwargs.pop('vertices')
         else:
@@ -841,19 +841,10 @@ class MaskedMesh(Mesh):
 
         self._node_mask = node_mask
 
-        if apply_mask:
-            if any(self.node_mask == False):
-                nodes_f = vertices_all[self.node_mask]
-                faces_f = utils.filter_shapes(np.flatnonzero(node_mask), faces_all)[0]
-            else:
-                nodes_f, faces_f = vertices_all, faces_all
-        else:
-            nodes_f, faces_f = vertices_all, faces_all
-
         if link_edges is not None:
-            kwargs['link_edges'] = utils.filter_shapes(np.flatnonzero(node_mask), link_edges)[0]
+            kwargs['link_edges'] = link_edges
 
-        new_args = (nodes_f, faces_f)
+        new_args = (vertices_all, faces_all)
         if len(args) > 2:
             new_args += args[2:]
         if kwargs.get('process', False):
@@ -861,6 +852,7 @@ class MaskedMesh(Mesh):
         kwargs['process'] = False
         super(MaskedMesh, self).__init__(*new_args, **kwargs)
         self._index_map = None
+        self.use_new = False
 
     @property
     def node_mask(self):
@@ -889,37 +881,36 @@ class MaskedMesh(Mesh):
         new_mask is a boolean array, either of the original length or the
         masked length (in which case it is padded with zeros appropriately).
         '''
-        # We need to express the mask
-        if np.size(new_mask) != np.size(self.node_mask):
-            # Assume it's in the masked frame
-            if np.size(new_mask) == self.vertices.shape[0]:
-                new_mask = self.map_boolean_to_unmasked(new_mask)
-            else:
-                raise ValueError('Incompatible shape. Must be either original length or current length of vertices.')
-        joint_mask = self.node_mask & np.array(new_mask, dtype=bool)
-
-        # Build dummy arrays in the unmasked size out of the current mesh
-        vertices_unmask = np.zeros((self.unmasked_size, 3))
-        vertices_unmask[self.node_mask] = self.vertices
-
-        faces_unmask = np.empty(self.faces.shape)
-        for i in range(3):
-            faces_unmask[:, i] = self.indices_unmasked[self.faces[:, i]]
-
-        if self.link_edges.shape[0]>0:
-            link_edges_unmask = np.empty(self.link_edges.shape)
-            for i in range(self.link_edges.shape[1]):
-                link_edges_unmask[:, i] = self.indices_unmasked[self.link_edges[:, i]]
+        # We need to express the mask in the current vertex indices
+        if np.size(new_mask) == np.size(self.node_mask):
+            joint_mask = self.node_mask & new_mask
+            new_mask = self.filter_unmasked_boolean(new_mask)
+        elif np.size(new_mask) == self.vertices.shape[0]:
+            joint_mask = self.node_mask & self.map_boolean_to_unmasked(new_mask)
         else:
-            link_edges_unmask = None
+            raise ValueError('Incompatible shape. Must be either original length or current length of vertices.')
 
-        return MaskedMesh(vertices_unmask,
-                          faces_unmask,
-                          apply_mask=True,
-                          node_mask=joint_mask,
-                          unmasked_size=self.unmasked_size,
-                          link_edges=link_edges_unmask,
-                          **kwargs)
+        new_mesh = MaskedMesh(self.vertices,
+                              self.faces,
+                              node_mask=joint_mask,
+                              unmasked_size=self.unmasked_size,
+                              **kwargs)
+        link_edge_unmask = self.map_indices_to_unmasked(self.link_edges)        
+        new_mesh._apply_new_mask_in_place(new_mask, link_edge_unmask)
+        return new_mesh
+
+    def _apply_new_mask_in_place(self, mask, link_edge_unmask):
+        # Use builtin Trimesh tools for masking
+        # The new 0 index is the first nonzero element of the mask.
+        # Unfortunately, update_vertices maps all masked face values to 0 as well.
+        num_zero_expected = np.sum(self.faces==np.flatnonzero(mask)[0], axis=1)
+        self.update_vertices(mask)
+
+        num_zero_new = np.sum(self.faces==0, axis=1)
+        faces_to_keep = num_zero_new == num_zero_expected
+        self.update_faces(faces_to_keep)
+        self.link_edges = self.filter_unmasked_indices(link_edge_unmask)
+
 
     def map_indices_to_unmasked(self, unmapped_indices):
         '''
@@ -941,25 +932,23 @@ class MaskedMesh(Mesh):
         '''
         return unmasked_boolean[self.node_mask]
 
-    def filter_unmasked_indices(self, unmasked_shape, include_outside=False):
-        '''
-        For an array of indices in the original mesh, returns the indices filtered and remapped
-        for the masked mesh. Nans out rows not in the mask. Preserves the order of unmasked_indices.
-        '''
-        filtered_shape = utils.filter_shapes(self.indices_unmasked, unmasked_shape)[0]
-        if include_outside:
-            long_shape = unmasked_shape.ravel()
-            within_mask = self.node_mask[long_shape].reshape(unmasked_shape.shape)
-            filtered_shape_all = np.full(unmasked_shape.shape, np.nan)
-            if within_mask.ndim==1:
-                filtered_shape_all[within_mask==True] = filtered_shape.squeeze()
-            else:
-                filtered_shape_all[np.all(within_mask==True, axis=1)] = filtered_shape
-            filtered_shape = filtered_shape_all.astype(int).squeeze()
+    def filter_unmasked_indices(self, unmasked_shape, mask=None, include_outside=False):
+        if mask is None:
+            mask = self.node_mask
+        new_index = np.zeros(mask.shape)-1
+        new_index[mask] = np.arange(np.sum(mask))
+        new_shape = new_index[unmasked_shape.ravel()].reshape(unmasked_shape.shape).astype(int)
+        
+        if len(new_shape.shape) > 1:
+            keep_rows = np.all(new_shape>=0, axis=1)
         else:
-            if unmasked_shape.ndim == 1:
-                filtered_shape = filtered_shape.reshape((len(filtered_shape),))
-        return filtered_shape
+            keep_rows = new_shape>=0
+
+        if include_outside:
+            new_shape[~keep_rows] = np.nan
+            return new_shape
+        else:
+            return new_shape[keep_rows]
 
     @property
     def index_map(self):
