@@ -36,6 +36,9 @@ def build_full_cell_mesh():
     mesh = trimesh_io.Mesh(vertices, faces, process=False)
     yield mesh
 
+@pytest.fixture(scope='module')
+def full_cell_soma_pt():
+    return np.array([358304, 219012,  53120])
 
 @pytest.fixture(scope='session')
 def full_cell_mesh():
@@ -161,7 +164,7 @@ def test_write_mesh(basic_mesh, tmpdir):
     assert(np.all(basic_mesh.vertices == new_mesh[0]))
 
 
-def test_meta_mesh(cv_path, basic_mesh_id, full_cell_mesh_id):
+def test_meta_mesh(cv_path, basic_mesh_id, full_cell_mesh_id, tmpdir):
     mm = trimesh_io.MeshMeta(cv_path=cv_path)
     mesh = mm.mesh(seg_id=basic_mesh_id)
     full_cell_mesh = mm.mesh(seg_id=full_cell_mesh_id,
@@ -169,3 +172,42 @@ def test_meta_mesh(cv_path, basic_mesh_id, full_cell_mesh_id):
                              remove_duplicate_vertices=False)
     assert(mesh is not None)
     assert(full_cell_mesh is not None)
+
+
+def test_masked_mesh(cv_path, full_cell_mesh_id, full_cell_soma_pt, tmpdir):
+    mm = trimesh_io.MeshMeta(cv_path=cv_path,
+                            cache_size=0,
+                            disk_cache_path=tmpdir)
+    mmesh = mm.mesh(seg_id=full_cell_mesh_id,
+                    masked_mesh=True)
+
+    assert(mmesh is not None)
+    # read again to test caching
+    mmesh_cache = mm.mesh(seg_id=full_cell_mesh_id,
+                          masked_mesh=True)
+
+    ds = np.linalg.norm(mmesh.vertices - full_cell_soma_pt, axis=1)
+    soma_mesh = mmesh.apply_mask(ds<15000)
+
+    ds = np.linalg.norm(soma_mesh.vertices - full_cell_soma_pt, axis=1)
+    double_soma_mesh = soma_mesh.apply_mask(ds<10000)
+
+    with pytest.raises(ValueError):
+        bad_mask = mmesh.apply_mask([True, True])
+
+    random_indices = np.array([0, 500, 1500])
+    orig_indices = double_soma_mesh.map_indices_to_unmasked(random_indices)
+    back_indices = double_soma_mesh.filter_unmasked_indices(orig_indices)
+
+    assert np.all(random_indices == back_indices)
+
+    fname = os.path.join(tmpdir, 'test_mask_mesh.h5')
+    trimesh_io.write_mesh_h5(fname,
+                             double_soma_mesh.vertices,
+                             double_soma_mesh.faces,
+                             double_soma_mesh.link_edges, 
+                             double_soma_mesh.node_mask,
+                             overwrite=True)
+    
+    double_soma_read = mm.mesh(filename=fname,
+                               masked_mesh=True)
