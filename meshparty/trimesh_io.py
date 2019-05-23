@@ -29,24 +29,24 @@ def read_mesh_h5(filename, masked_mesh=False):
     assert os.path.isfile(filename)
 
     with h5py.File(filename, "r") as f:
-        vertices = f["vertices"].value
-        faces = f["faces"].value
+        vertices = f["vertices"][()]
+        faces = f["faces"][()]
 
         if len(faces.shape) == 1:
             faces = faces.reshape(-1, 3)
 
         if "normals" in f.keys():
-            normals = f["normals"].value
+            normals = f["normals"][()]
         else:
             normals = []
 
         if "link_edges" in f.keys():
-            link_edges = f["link_edges"].value
+            link_edges = f["link_edges"][()]
         else:
             link_edges = None
         
         if "node_mask" in f.keys():
-            node_mask = f["node_mask"].value
+            node_mask = f["node_mask"][()]
         else:
             node_mask = None
     if masked_mesh:

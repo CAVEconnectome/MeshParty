@@ -56,28 +56,28 @@ def read_skeleton_h5_by_part(filename):
     assert os.path.isfile(filename)
 
     with h5py.File(filename, 'r') as f:
-        vertices = f['vertices'].value
-        edges = f['edges'].value
+        vertices = f['vertices'][()]
+        edges = f['edges'][()]
 
         if 'mesh_to_skel_map' in f.keys():
-            mesh_to_skel_map = f['mesh_to_skel_map'].value
+            mesh_to_skel_map = f['mesh_to_skel_map'][()]
         else:
             mesh_to_skel_map = None
 
         vertex_properties = {}
         if 'vertex_properties' in f.keys():
             for vp_key in f['vertex_properties'].keys():
-                vertex_properties[vp_key] = json.loads(f['vertex_properties'][vp_key].value,
+                vertex_properties[vp_key] = json.loads(f['vertex_properties'][vp_key][()],
                                                        object_hook=_convert_keys_to_int)
 
         edge_properties = {}
         if 'edge_properties' in f.keys():
             for ep_key in f['edge_properties'].keys():
-                edge_properties[ep_key] = json.loads(f['edge_properties'][ep_key].value,
+                edge_properties[ep_key] = json.loads(f['edge_properties'][ep_key][()],
                                                      object_hook=_convert_keys_to_int)
 
         if 'root' in f.keys():
-            root = f['root'].value
+            root = f['root'][()]
         else:
             root = None
 
