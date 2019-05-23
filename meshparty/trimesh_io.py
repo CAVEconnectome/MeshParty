@@ -85,6 +85,7 @@ def read_mesh(filename, masked_mesh=False):
     if filename.endswith(".obj"):
         vertices, faces, normals = read_mesh_obj(filename)
         link_edges = None
+        return vertices, faces, normals, link_edges
     elif filename.endswith(".h5"):
         mesh_data = read_mesh_h5(filename, masked_mesh)
         if masked_mesh:

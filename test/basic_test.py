@@ -32,7 +32,7 @@ def basic_mesh():
 @contextlib.contextmanager
 def build_full_cell_mesh():
     filepath = 'test/test_files/648518346349499581.h5'
-    vertices, faces, normals, graph_edges = trimesh_io.read_mesh_h5(filepath)
+    vertices, faces, normals, link_edges = trimesh_io.read_mesh_h5(filepath)
     mesh = trimesh_io.Mesh(vertices, faces, process=False)
     yield mesh
 
