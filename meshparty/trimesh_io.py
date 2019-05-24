@@ -140,18 +140,6 @@ def read_mesh_obj(filename):
     return vertices, faces, normals
 
 
-def get_frag_ids_from_endpoint(node_id, endpoint):
-    """ Reads the mesh fragments from the chunkedgraph endpoint """
-    url = "%s/1.0/%d/validfragments" % (endpoint, node_id)
-    r = requests.get(url)
-
-    assert r.status_code == 200
-
-    frag_ids = np.frombuffer(r.content, dtype=np.uint64)
-
-    return list(frag_ids)
-
-
 def _download_meshes_thread(args):
     """ Helper to Download meshes into target directory """
     seg_ids, cv_path, target_dir, fmt, overwrite, \
