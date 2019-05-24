@@ -437,7 +437,7 @@ class Mesh(trimesh.Trimesh):
 
         :param filename: str
         """
-        if os.path.splitext(filename)[1]=='h5':
+        if os.path.splitext(filename)[1]=='.h5':
             write_mesh_h5(filename,
                           self.vertices,
                           self.faces,
@@ -931,7 +931,7 @@ class MaskedMesh(Mesh):
 
         :param filename: str
         """
-        if os.path.splitext(filename)[1]=='h5':
+        if os.path.splitext(filename)[1]=='.h5':
             write_mesh_h5(filename,
                           self.vertices,
                           self.faces,
