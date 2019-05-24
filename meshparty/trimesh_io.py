@@ -83,9 +83,10 @@ def read_mesh(filename, masked_mesh=False):
     """Reads a mesh's vertices, faces and normals from obj or h5 file"""
 
     if filename.endswith(".obj"):
-        vertices, faces, normals = read_mesh_obj(filename)
+        with open(filename,'r') as fp:
+            mesh_d = exchange.wavefront.load_wavefront(fp)
         link_edges = None
-        return vertices, faces, normals, link_edges
+        return mesh_d[0]['vertices'], mesh_d[0]['faces'], mesh_d[0].get('normals', None), link_edges
     elif filename.endswith(".h5"):
         mesh_data = read_mesh_h5(filename, masked_mesh)
         if masked_mesh:
@@ -441,7 +442,7 @@ class Mesh(trimesh.Trimesh):
             write_mesh_h5(filename,
                           self.vertices,
                           self.faces,
-                          normals=self.normals,
+                          normals=self.face_normals,
                           link_edges=self.link_edges,
                           overwrite=True)
         else:
@@ -699,22 +700,6 @@ class Mesh(trimesh.Trimesh):
         return pca.fit_transform(vertices)
 
 
-    def write_to_file(self, filename):
-        """ Exports the mesh to any format supported by trimesh
-
-        :param filename: str
-        """
-        if os.path.splitext(filename)[1]=='h5':
-            write_mesh_h5(filename,
-                          self.vertices,
-                          self.faces,
-                          normals=self.normals,
-                          link_edges=self.link_edges,
-                          node_mask=self.node_mask,
-                          overwrite=True)
-        else:
-            exchange.export.export_mesh(self, filename)
-
     def merge_large_components(self, size_threshold=100, max_dist=1000,
                                dist_step=100):
         """ Finds edges between disconnected components
@@ -935,7 +920,7 @@ class MaskedMesh(Mesh):
             write_mesh_h5(filename,
                           self.vertices,
                           self.faces,
-                          normals=self.normals,
+                          normals=self.face_normals,
                           link_edges=self.link_edges,
                           node_mask=self.node_mask,
                           overwrite=True)

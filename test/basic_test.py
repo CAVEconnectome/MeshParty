@@ -189,14 +189,27 @@ def test_meta_mesh(cv_path, basic_mesh_id, full_cell_mesh_id, tmpdir):
 def test_masked_mesh(cv_path, full_cell_mesh_id, full_cell_soma_pt, tmpdir):
     mm = trimesh_io.MeshMeta(cv_path=cv_path,
                             cache_size=0,
-                            disk_cache_path=tmpdir)
+                            disk_cache_path=os.path.join(tmpdir,'mesh_cache'))
     mmesh = mm.mesh(seg_id=full_cell_mesh_id,
                     masked_mesh=True)
 
     assert(mmesh is not None)
-    # read again to test caching
+    # read again to test file caching with memory caching on
+
     mmesh_cache = mm.mesh(seg_id=full_cell_mesh_id,
                           masked_mesh=True)
+    
+    # now set it up with memory caching enabled
+    mm = trimesh_io.MeshMeta(cv_path=cv_path,
+                             cache_size=1)
+    # read it again with memory caching enabled
+    mmesh = mm.mesh(seg_id=full_cell_mesh_id,
+                    masked_mesh=True)
+    # read it again to use memory cache
+    mmesh_mem_cache = mm.mesh(seg_id=full_cell_mesh_id,
+                              masked_mesh=True)
+
+
 
     ds = np.linalg.norm(mmesh.vertices - full_cell_soma_pt, axis=1)
     soma_mesh = mmesh.apply_mask(ds<15000)
