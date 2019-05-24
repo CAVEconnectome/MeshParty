@@ -154,6 +154,18 @@ def full_cell_mesh_id(cv, cv_folder, full_cell_mesh):
     write_mesh_to_cv(cv, cv_folder, full_cell_mesh, mesh_id)
     yield mesh_id
 
+def test_download_meshes(cv_path, basic_mesh_id, full_cell_mesh_id, tmpdir):
+    meshes=trimesh_io.download_meshes([basic_mesh_id, full_cell_mesh_id],
+                                      tmpdir,
+                                      cv_path=cv_path,
+                                      merge_large_components=False,
+                                      remove_duplicate_vertices=False)
+    meshes=trimesh_io.download_meshes([basic_mesh_id, full_cell_mesh_id],
+                                        tmpdir,
+                                        cv_path=cv_path,
+                                        merge_large_components=False,
+                                        remove_duplicate_vertices=False,
+                                        n_threads=2)
 
 def test_write_mesh(basic_mesh, tmpdir):
 
