@@ -98,48 +98,6 @@ def read_mesh(filename, masked_mesh=False):
         raise Exception("Unknown filetype")
 
 
-def read_mesh_obj(filename):
-    """Reads a mesh's vertices, faces and normals from an obj file"""
-    vertices = []
-    faces = []
-    normals = []
-
-    for line in open(filename, "r"):
-        if line.startswith('#'):
-            continue
-        values = line.split()
-        if not values:
-            continue
-        if values[0] == 'v':
-            v = values[1:4]
-            vertices.append(v)
-        elif values[0] == 'vn':
-            v = map(float, values[1:4])
-            normals.append(v)
-        elif values[0] == 'f':
-            face = []
-            texcoords = []
-            norms = []
-            for v in values[1:]:
-                w = v.split('/')
-                face.append(int(w[0]))
-                if len(w) >= 2 and len(w[1]) > 0:
-                    texcoords.append(int(w[1]))
-                else:
-                    texcoords.append(0)
-                if len(w) >= 3 and len(w[2]) > 0:
-                    norms.append(int(w[2]))
-                else:
-                    norms.append(0)
-            faces.append(face)
-
-    vertices = np.array(vertices, dtype=np.float)
-    faces = np.array(faces, dtype=np.int) - 1
-    normals = np.array(normals, dtype=np.float)
-
-    return vertices, faces, normals
-
-
 def _download_meshes_thread(args):
     """ Helper to Download meshes into target directory """
     seg_ids, cv_path, target_dir, fmt, overwrite, \
@@ -479,7 +437,15 @@ class Mesh(trimesh.Trimesh):
 
         :param filename: str
         """
-        exchange.export.export_mesh(self, filename)
+        if os.path.splitext(filename)[1]=='h5':
+            write_mesh_h5(filename,
+                          self.vertices,
+                          self.faces,
+                          normals=self.normals,
+                          link_edges=self.link_edges,
+                          overwrite=True)
+        else:
+            exchange.export.export_mesh(self, filename)
 
     def get_local_views(self, n_points=None,
                         max_dist=np.inf,
@@ -732,6 +698,23 @@ class Mesh(trimesh.Trimesh):
 
         return pca.fit_transform(vertices)
 
+
+    def write_to_file(self, filename):
+        """ Exports the mesh to any format supported by trimesh
+
+        :param filename: str
+        """
+        if os.path.splitext(filename)[1]=='h5':
+            write_mesh_h5(filename,
+                          self.vertices,
+                          self.faces,
+                          normals=self.normals,
+                          link_edges=self.link_edges,
+                          node_mask=self.node_mask,
+                          overwrite=True)
+        else:
+            exchange.export.export_mesh(self, filename)
+
     def merge_large_components(self, size_threshold=100, max_dist=1000,
                                dist_step=100):
         """ Finds edges between disconnected components
@@ -943,7 +926,21 @@ class MaskedMesh(Mesh):
             if unmasked_shape.ndim == 1:
                 filtered_shape = filtered_shape.reshape((len(filtered_shape),))
         return filtered_shape
+    def write_to_file(self, filename):
+        """ Exports the mesh to any format supported by trimesh
 
+        :param filename: str
+        """
+        if os.path.splitext(filename)[1]=='h5':
+            write_mesh_h5(filename,
+                          self.vertices,
+                          self.faces,
+                          normals=self.normals,
+                          link_edges=self.link_edges,
+                          node_mask=self.node_mask,
+                          overwrite=True)
+        else:
+            exchange.export.export_mesh(self, filename)
     @property
     def index_map(self):
         '''

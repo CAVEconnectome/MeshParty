@@ -170,7 +170,7 @@ def test_download_meshes(cv_path, basic_mesh_id, full_cell_mesh_id, tmpdir):
 def test_write_mesh(basic_mesh, tmpdir):
 
     filepath = str(tmpdir.join('test.h5'))
-    trimesh_io.write_mesh_h5(filepath, basic_mesh.vertices, basic_mesh.faces)
+    basic_mesh.write_to_file(filepath)
 
     new_mesh = trimesh_io.read_mesh_h5(filepath)
     assert(np.all(basic_mesh.vertices == new_mesh[0]))
@@ -214,12 +214,7 @@ def test_masked_mesh(cv_path, full_cell_mesh_id, full_cell_soma_pt, tmpdir):
     assert np.all(random_indices == back_indices)
 
     fname = os.path.join(tmpdir, 'test_mask_mesh.h5')
-    trimesh_io.write_mesh_h5(fname,
-                             double_soma_mesh.vertices,
-                             double_soma_mesh.faces,
-                             double_soma_mesh.link_edges, 
-                             double_soma_mesh.node_mask,
-                             overwrite=True)
+    double_soma_mesh.write_to_file(fname)
     
     double_soma_read = mm.mesh(filename=fname,
                                masked_mesh=True)
