@@ -4,7 +4,7 @@ from meshparty import utils
 import pykdtree
 import time
 import numpy as np
-
+from meshparty import trimesh_io
 
 def np_shared_rows(A,B):
     A_flat = np.ascontiguousarray(np.sort(A, axis=1)).view(dtype=('i8,i8'))
@@ -237,6 +237,9 @@ def get_link_edges(mesh, seg_id, dataset_name, close_map_distance = 300,
     # iterate over these merge indices and find the minimal edge
     # that links these two connected componets
     total_link_edges=[]
+    if not isinstance(mesh, trimesh_io.MaskedMesh):
+        mesh = trimesh_io.MaskedMesh(mesh.vertices, mesh.faces, link_edges=mesh.link_edges)
+
     for merge_ind in merge_edge_inds:
         link_edges = find_edges_to_link(mesh, merge_ind[0], merge_ind[1])
         total_link_edges.append(link_edges)
