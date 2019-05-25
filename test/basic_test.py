@@ -1,4 +1,4 @@
-from meshparty import trimesh_io
+from meshparty import trimesh_io, skeletonize, mesh_filters, skeleton
 import numpy as np
 import pytest
 import cloudvolume
@@ -6,7 +6,7 @@ import json
 import os
 import struct
 import contextlib
-
+import json
 
 @contextlib.contextmanager
 def build_basic_mesh():
@@ -33,12 +33,24 @@ def basic_mesh():
 def build_full_cell_mesh():
     filepath = 'test/test_files/648518346349499581.h5'
     vertices, faces, normals, link_edges = trimesh_io.read_mesh_h5(filepath)
-    mesh = trimesh_io.Mesh(vertices, faces, process=False)
+    mesh = trimesh_io.MaskedMesh(vertices, faces, process=False)
     yield mesh
+
+@contextlib.contextmanager
+def build_full_cell_merge_log():
+    filepath = 'test/test_files/648518346349499581_merge_log.json'
+    with open(filepath,'r') as fp:
+        merge_log = json.load(fp)
+    yield merge_log
 
 @pytest.fixture(scope='module')
 def full_cell_soma_pt():
     return np.array([358304, 219012,  53120])
+
+@pytest.fixture(scope='session')
+def full_cell_merge_log():
+    with build_full_cell_merge_log() as ml:
+        yield ml
 
 @pytest.fixture(scope='session')
 def full_cell_mesh():
@@ -231,3 +243,32 @@ def test_masked_mesh(cv_path, full_cell_mesh_id, full_cell_soma_pt, tmpdir):
     
     double_soma_read = mm.mesh(filename=fname,
                                masked_mesh=True)
+
+
+def test_link_edges(full_cell_mesh, full_cell_merge_log, full_cell_soma_pt, monkeypatch):
+
+    class MyChunkedGraph(object):
+        def __init__(a, **kwargs):
+            pass
+
+        def get_merge_log(self, atomic_id):    
+            return full_cell_merge_log
+
+    monkeypatch.setattr(trimesh_io.trimesh_repair.chunkedgraph,
+                        'ChunkedGraphClient',
+                        MyChunkedGraph)
+
+    full_cell_mesh.add_link_edges('test', 5)
+
+    out=mesh_filters.filter_largest_component(full_cell_mesh)
+    mesh_filter = full_cell_mesh.apply_mask(out)
+    skel_out = skeletonize.skeletonize_mesh(mesh_filter,
+                                            invalidation_d=10000,
+                                            soma_pt=full_cell_soma_pt,
+                                            return_map=True)
+    skel_verts, skel_edges, smooth_verts, skel_verts_orig, skel_vert_map = skel_out
+    skel = skeleton.Skeleton(skel_verts, skel_edges, mesh_to_skel_map=skel_vert_map)
+    assert(len(skel.branch_points)==87)
+    assert(skel.n_branch_points == 87)
+
+
