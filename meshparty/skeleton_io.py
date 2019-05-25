@@ -49,8 +49,8 @@ def write_skeleton_h5_by_part(filename, vertices, edges, mesh_to_skel_map=None,
 def _write_dict_to_group(f, group_name, data_dict):
     d_grp = f.create_group(group_name)
     for d_name, d_data in data_dict.items():
+        is_np = type(d_data) is np.ndarray
         d_grp.create_dataset(d_name, data=json.dumps(d_data, cls=_NumpyEncoder))
-
 
 def read_skeleton_h5_by_part(filename):
     assert os.path.isfile(filename)
@@ -146,7 +146,7 @@ def _build_swc_array(skel, node_labels, radius, xyz_scaling):
     new_ids = np.arange(len(ds))
     order_map = dict(zip(order_old, new_ids))
 
-    node_labels = node_labels[order_old]
+    node_labels = np.array(node_labels)[order_old]
     xyz = skel.vertices[order_old]
     radius = radius[order_old]
     par_ids = np.array([order_map.get(nid, -1)
@@ -169,7 +169,7 @@ class _NumpyEncoder(json.JSONEncoder):
         elif isinstance(obj, (np.float_, np.float16, np.float32, 
             np.float64)):
             return float(obj)
-        elif isinstance(obj,(np.ndarray,)): #### This is the fix
+        elif isinstance(obj,(np.ndarray,)):
             return obj.tolist()
         return json.JSONEncoder.default(self, obj)
 
