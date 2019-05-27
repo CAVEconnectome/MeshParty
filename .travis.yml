@@ -15,11 +15,21 @@ addons:
         - gfortran
         - libassimp-dev
 install:
+  - wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh;
+  - bash miniconda.sh -b -p $HOME/miniconda
+  - export PATH="$HOME/miniconda/bin:$PATH"
+  - hash -r
+  - conda config --set always_yes yes --set changeps1 no
+  - conda update -q conda
+  - conda info -a
+  - conda create -q -n test-env python=$(echo $TRAVIS_PYTHON_VERSION|sed 's/-dev//')
+  - source activate test-env
+  - conda install -c conda-forge pyembree
   - pip install codecov numpy cython --upgrade
   - pip install -r requirements.txt
   - pip install -r test_requirements.txt
 script:
-  - python setup.py test # or py.test for Python versions 3.5 and below
+  - python setup.py test -a test # or py.test for Python versions 3.5 and below
 after_success:
   - codecov -t 72712def-b073-4211-88e4-f7b4d5b0d1ba
 cache:
