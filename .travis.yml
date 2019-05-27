@@ -22,7 +22,7 @@ install:
   - conda config --set always_yes yes --set changeps1 no
   - conda update -q conda
   - conda info -a
-  - conda create -q -n test-env python=$TRAVIS_PYTHON_VERSION
+  - conda create -q -n test-env python=$(echo $TRAVIS_PYTHON_VERSION|sed 's/-dev//')
   - source activate test-env
   - conda install -c conda-forge pyembree
   - pip install codecov numpy cython --upgrade
