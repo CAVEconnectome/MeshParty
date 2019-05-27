@@ -68,7 +68,7 @@ def simple_skeleton_with_properties():
     itertools.product(overwrite_flags, io_file_exists))
 def test_skeleton_read_write(simple_skeleton, overwrite_flag, file_exist):
     sk = simple_skeleton
-
+  
     with tempfile.NamedTemporaryFile(suffix='.h5', delete=(not file_exist)) as tf:
         fname = tf.name
 
@@ -87,7 +87,8 @@ def test_skeleton_read_write(simple_skeleton, overwrite_flag, file_exist):
 def test_skeleton_read_write_with_props(simple_skeleton_with_properties):
     sk = simple_skeleton_with_properties
 
-    fname = 'test_sk.h5'
+    with tempfile.NamedTemporaryFile(suffix='.h5', delete=(not file_exist)) as tf:
+        fname = tf.name
     skeleton_io.write_skeleton_h5(sk, fname, overwrite=True)
     skback = skeleton_io.read_skeleton_h5(fname)
     assert np.all(skback.vertex_properties['test'] == sk.vertex_properties['test'])
@@ -96,7 +97,9 @@ def test_skeleton_read_write_with_props(simple_skeleton_with_properties):
 
 def test_swc_write(simple_skeleton_with_properties):
     sk = simple_skeleton_with_properties
-    fname = 'test_sk.swc'
+    with tempfile.NamedTemporaryFile(suffix='.swc', delete=(not file_exist)) as tf:
+        fname = tf.name
+
     labels = [0, 1, 1, 1, 3, 3, 3]
     skeleton_io.export_to_swc(sk, fname, radius=sk.vertex_properties['test'], node_labels=labels, xyz_scaling=1)
     sk_pd = pd.read_csv(fname, sep=' ', header=None, names=['index', 'type', 'x', 'y', 'z', 'r', 'parent'])
