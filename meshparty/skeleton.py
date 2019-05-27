@@ -201,11 +201,11 @@ class Skeleton:
 
     @property
     def vertices(self):
-        return self._vertices.copy()
+        return self._vertices
 
     @property
     def edges(self):
-        return self._edges.copy()
+        return self._edges
 
     @property
     def mesh_to_skel_map(self):
@@ -323,6 +323,8 @@ class Skeleton:
         return L
 
     def reroot(self, new_root):
+        if new_root > self.n_vertices:
+            raise ValueError('New root must be between 0 and n_vertices-1')
         self._root = new_root
         self._parent_node_array = np.full(self.n_vertices, None)
 
