@@ -12,7 +12,7 @@ io_file_exists = [True, False]
 
 @contextlib.contextmanager
 def build_full_cell_skeleton():
-    filepath = 'test/test_files/648518346349499581_sk.h5'
+    filepath = 'test/test_files/sk_648518346349499581.h5'
     sk = skeleton_io.read_skeleton_h5(filepath)
     yield sk
 
@@ -100,4 +100,10 @@ def test_swc_write(simple_skeleton_with_properties):
     labels = [0, 1, 1, 1, 3, 3, 3]
     skeleton_io.export_to_swc(sk, fname, radius=sk.vertex_properties['test'], node_labels=labels, xyz_scaling=1)
     sk_pd = pd.read_csv(fname, sep=' ', header=None, names=['index', 'type', 'x', 'y', 'z', 'r', 'parent'])
-    assert sk_pd.loc[3].parent == 2 and sk_pd.loc[3].z == 5
+    assert sk_pd.loc[3].parent == 2 
+
+
+def test_skeleton_h5_read(full_cell_skeleton):
+    print(full_cell_skeleton.root)
+    assert type(full_cell_skeleton) is skeleton.Skeleton
+    assert full_cell_skeleton.root == 42591
