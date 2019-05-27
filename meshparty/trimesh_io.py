@@ -8,6 +8,7 @@ import networkx as nx
 import requests
 import time
 from collections import defaultdict
+import warnings
 
 import cloudvolume
 from multiwrapper import multiprocessing_utils as mu
@@ -329,10 +330,64 @@ class MeshMeta(object):
         return mesh
 
 class Mesh(trimesh.Trimesh):
-    def __init__(self, *args, link_edges=None, **kwargs):
-        super(Mesh, self).__init__(*args, **kwargs)
-        self.link_edges = link_edges
+    def __init__(self, *args, node_mask=None, unmasked_size=None, apply_mask=False, link_edges=None, **kwargs):
+        if 'vertices' in kwargs:
+            vertices_all = kwargs.pop('vertices')
+        else:
+            vertices_all = args[0]
 
+        if 'faces' in kwargs:
+            faces_all = kwargs.pop('faces')
+        else:
+            # If faces are in args, vertices must also have been in args
+            faces_all = args[1]
+
+        if unmasked_size is None:
+            if node_mask is not None:
+                unmasked_size = len(node_mask)
+            else:
+                unmasked_size = len(vertices_all)
+        if unmasked_size < len(vertices_all):
+            raise ValueError('Original size cannot be smaller than current size')
+        self._unmasked_size = unmasked_size
+
+        if node_mask is None:
+            node_mask = np.full(self.unmasked_size, True, dtype=bool)
+        elif node_mask.dtype is not np.dtype('bool'):
+            node_mask_inds = node_mask.copy()
+            node_mask = np.full(self.unmasked_size, False, dtype=bool)
+            node_mask[node_mask_inds] = True
+
+        if len(node_mask) != unmasked_size:
+            raise ValueError('The node mask must be the same length as the unmasked size')
+
+        self._node_mask = node_mask
+
+        if apply_mask:
+            if any(self.node_mask == False):
+                nodes_f = vertices_all[self.node_mask]
+                faces_f = utils.filter_shapes(np.flatnonzero(node_mask), faces_all)[0]
+            else:
+                nodes_f, faces_f = vertices_all, faces_all
+        else:
+            nodes_f, faces_f = vertices_all, faces_all
+
+
+
+        new_args = (nodes_f, faces_f)
+        if len(args) > 2:
+            new_args += args[2:]
+        if kwargs.get('process', False):
+            print('No silent changing of the mesh is allowed')
+        kwargs['process'] = False
+        
+        super(Mesh, self).__init__(*new_args, **kwargs)
+        if link_edges is not None:
+            self.link_edges = utils.filter_shapes(np.flatnonzero(node_mask), link_edges)[0]
+        else:
+            self.link_edges = None
+        self._index_map = None
+        
     @property
     def link_edges(self):
         return self._data['link_edges']
@@ -433,20 +488,6 @@ class Mesh(trimesh.Trimesh):
 
         self.fix_normals()
 
-    def write_to_file(self, filename):
-        """ Exports the mesh to any format supported by trimesh
-
-        :param filename: str
-        """
-        if os.path.splitext(filename)[1]=='.h5':
-            write_mesh_h5(filename,
-                          self.vertices,
-                          self.faces,
-                          normals=self.face_normals,
-                          link_edges=self.link_edges,
-                          overwrite=True)
-        else:
-            exchange.export.export_mesh(self, filename)
 
     def get_local_views(self, n_points=None,
                         max_dist=np.inf,
@@ -757,62 +798,6 @@ class Mesh(trimesh.Trimesh):
         """ Computes csgraph """
         return utils.create_csgraph(self.vertices, self.graph_edges, euclidean_weight=True,
                                     directed=False)
-
-class MaskedMesh(Mesh):
-    def __init__(self, *args, node_mask=None, unmasked_size=None, link_edges=None, apply_mask=False,  **kwargs):
-        if 'vertices' in kwargs:
-            vertices_all = kwargs.pop('vertices')
-        else:
-            vertices_all = args[0]
-
-        if 'faces' in kwargs:
-            faces_all = kwargs.pop('faces')
-        else:
-            # If faces are in args, vertices must also have been in args
-            faces_all = args[1]
-
-        if unmasked_size is None:
-            if node_mask is not None:
-                unmasked_size = len(node_mask)
-            else:
-                unmasked_size = len(vertices_all)
-        if unmasked_size < len(vertices_all):
-            raise ValueError('Original size cannot be smaller than current size')
-        self._unmasked_size = unmasked_size
-
-        if node_mask is None:
-            node_mask = np.full(self.unmasked_size, True, dtype=bool)
-        elif node_mask.dtype is not np.dtype('bool'):
-            node_mask_inds = node_mask.copy()
-            node_mask = np.full(self.unmasked_size, False, dtype=bool)
-            node_mask[node_mask_inds] = True
-
-        if len(node_mask) != unmasked_size:
-            raise ValueError('The node mask must be the same length as the unmasked size')
-
-        self._node_mask = node_mask
-
-        if apply_mask:
-            if any(self.node_mask == False):
-                nodes_f = vertices_all[self.node_mask]
-                faces_f = utils.filter_shapes(np.flatnonzero(node_mask), faces_all)[0]
-            else:
-                nodes_f, faces_f = vertices_all, faces_all
-        else:
-            nodes_f, faces_f = vertices_all, faces_all
-
-        if link_edges is not None:
-            kwargs['link_edges'] = utils.filter_shapes(np.flatnonzero(node_mask), link_edges)[0]
-
-        new_args = (nodes_f, faces_f)
-        if len(args) > 2:
-            new_args += args[2:]
-        if kwargs.get('process', False):
-            print('No silent changing of the mesh is allowed')
-        kwargs['process'] = False
-        super(MaskedMesh, self).__init__(*new_args, **kwargs)
-        self._index_map = None
-
     @property
     def node_mask(self):
         '''
@@ -936,3 +921,10 @@ class MaskedMesh(Mesh):
             for ii, index in enumerate(self.indices_unmasked):
                 self._index_map[index] = ii
         return self._index_map
+
+class MaskedMesh(Mesh):
+    def __init__(self, *args,  **kwargs):
+        warnings.warn(
+            "use of MaskedMesh deprecated, Mesh now contains all MaskedMesh functionality",
+            DeprecationWarning)
+        super(MaskedMesh, self).__init__(*args, **kwargs)
