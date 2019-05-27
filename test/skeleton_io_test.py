@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 import itertools
 import contextlib
-
+import os
 from meshparty import skeleton_io, skeleton
 
 overwrite_flags = [True, False]
@@ -84,21 +84,19 @@ def test_skeleton_read_write(simple_skeleton, overwrite_flag, file_exist):
         assert skback.root == sk.root
 
 
-def test_skeleton_read_write_with_props(simple_skeleton_with_properties):
+def test_skeleton_read_write_with_props(simple_skeleton_with_properties, tmp_path):
     sk = simple_skeleton_with_properties
 
-    with tempfile.NamedTemporaryFile(suffix='.h5', delete=(not file_exist)) as tf:
-        fname = tf.name
+    fname = os.path.join(tmp_path, 'test.swc')
     skeleton_io.write_skeleton_h5(sk, fname, overwrite=True)
     skback = skeleton_io.read_skeleton_h5(fname)
     assert np.all(skback.vertex_properties['test'] == sk.vertex_properties['test'])
     assert np.all(skback.mesh_to_skel_map == sk.mesh_to_skel_map)
 
 
-def test_swc_write(simple_skeleton_with_properties):
+def test_swc_write(simple_skeleton_with_properties, tmp_path):
     sk = simple_skeleton_with_properties
-    with tempfile.NamedTemporaryFile(suffix='.swc', delete=(not file_exist)) as tf:
-        fname = tf.name
+    fname = os.path.join(tmp_path, 'test.swc')
 
     labels = [0, 1, 1, 1, 3, 3, 3]
     skeleton_io.export_to_swc(sk, fname, radius=sk.vertex_properties['test'], node_labels=labels, xyz_scaling=1)
