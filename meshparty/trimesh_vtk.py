@@ -144,7 +144,10 @@ def remove_unused_verts(verts, faces):
 def vtk_poly_to_mesh_components(poly):
     points = vtk_to_numpy(poly.GetPoints().GetData())
     ntris = poly.GetNumberOfPolys()
-    tris = vtk_cellarray_to_shape(poly.GetPolys().GetData(), ntris)
+    if ntris > 0:
+       tris = vtk_cellarray_to_shape(poly.GetPolys().GetData(), ntris)
+    else:
+        tris = None     
     nedges = poly.GetNumberOfLines()
     if nedges > 0:
         edges = vtk_cellarray_to_shape(poly.GetLines().GetData(), nedges)
