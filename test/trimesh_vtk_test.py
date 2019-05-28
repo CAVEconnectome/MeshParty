@@ -74,11 +74,6 @@ def cell_skel():
     with build_full_cell_skeleton() as sk:
         yield sk
 
-def compare_img_to_test_file(fname):
-    img_test = imageio.imread(fname)
-    tmpl_path = os.path.join('test/test_files/', os.path.split(fname)[1])
-    img_tmpl = imageio.imread(tmpl_path)
-    assert(np.allclose(img_test, img_tmpl))
 
 def test_basic_mesh_actor(cube_verts_faces):
     verts, faces = cube_verts_faces
