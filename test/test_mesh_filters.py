@@ -21,6 +21,7 @@ def test_filter_components_by_size(full_cell_mesh):
     assert(np.sum(only_big)==2260414)
     assert(np.sum(only_small)==67154)
 
+
 def test_filter_two_points(full_cell_mesh, full_cell_soma_pt, tmp_path):
 
     pt_down = full_cell_soma_pt + np.array([0,50000,0])
