@@ -44,7 +44,7 @@ def simple_skeleton():
 
 @pytest.fixture(scope='session')
 def simple_skeleton_with_properties():
-    verts = simple_vert
+    verts = simple_verts
     edges = simple_edges
     test_prop = np.arange(len(verts))
     mesh_to_skel_map = np.arange(0, 10*len(verts), 10)
