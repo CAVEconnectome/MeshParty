@@ -1,4 +1,7 @@
 language: python
+dist: xenial
+services:
+  - xvfb
 python:
   - "3.6"
   - "3.6-dev" # 3.6 development branch
@@ -29,9 +32,6 @@ install:
   - pip install codecov numpy cython --upgrade
   - pip install -r requirements.txt
   - pip install -r test_requirements.txt
-before_script:
-  - export DISPLAY=:99.0; sh -e /etc/init.d/xvfb start
-  - sleep 3
 script:
   - python setup.py test -a test # or py.test for Python versions 3.5 and below
 after_success:
