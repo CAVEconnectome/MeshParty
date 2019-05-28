@@ -41,7 +41,10 @@ def numpy_rep_to_vtk(vertices, shapes, edges=None):
 
     cells = numpy_to_vtk_cells(shapes)
     if edges is not None:
-        edges = numpy_to_vtk_cells(edges)
+        if len(edges)>0:
+            edges = numpy_to_vtk_cells(edges)
+        else:
+            edges = None
 
     return mesh, cells, edges
 
@@ -156,109 +159,96 @@ def vtk_poly_to_mesh_components(poly):
     return points, tris, edges
 
 
-def filter_largest_cc(trimesh):
-    poly = trimesh_to_vtk(trimesh.vertices, trimesh.faces, trimesh.graph_edges)
-    connf = vtk.vtkConnectivityFilter()
-    connf.SetInputData(poly)
-    connf.SetExtractionModeToLargestRegion()
-    connf.Update()
-    clean = vtk.vtkCleanPolyData()
-    clean.SetInputConnection(connf.GetOutputPort())
-    clean.PointMergingOff()
-    clean.Update()
-    return vtk_poly_to_mesh_components(clean.GetOutput())
+# def calculate_cross_sections(mesh, graph_verts, graph_edges, calc_centers=True):
+
+#     mesh_polydata = trimesh_to_vtk(mesh.vertices, mesh.faces)
+
+#     cutter = vtk.vtkPlaneCutter()
+#     cutter.SetInputData(mesh_polydata)
+#     plane = vtk.vtkPlane()
+#     cd = vtk.vtkCleanPolyData()
+#     cf = vtk.vtkPolyDataConnectivityFilter()
+#     cf.SetInputConnection(cd.GetOutputPort())
+#     cf.SetExtractionModeToClosestPointRegion()
+#     cutter.SetPlane(plane)
+#     cutStrips = vtk.vtkStripper()
+#     cutStrips.JoinContiguousSegmentsOn()
+#     cutStrips.SetInputConnection(cf.GetOutputPort())
+
+#     cross_sections = np.zeros(len(graph_edges), dtype=np.float)
+
+#     if calc_centers:
+#         centers = np.zeros((len(graph_edges), 3))
+
+#     massfilter = vtk.vtkMassProperties()
+#     massfilter.SetInputConnection(cutter.GetOutputPort())
+#     t = vtk.vtkTriangleFilter()
+#     dvs = graph_verts[graph_edges[:, 0], :]-graph_verts[graph_edges[:, 1], :]
+#     dvs = (dvs / np.linalg.norm(dvs, axis=1)[:, np.newaxis])
+#     for k, edge in enumerate(graph_edges):
+#         dv = dvs[k, :]
+
+#         dv = dv.tolist()
+
+#         v = graph_verts[graph_edges[k, 0], :]
+#         v = v.tolist()
+#         plane.SetNormal(*dv)
+#         plane.SetOrigin(*v)
+
+#         cutter.Update()
+#         pd = cutter.GetOutputDataObject(0).GetBlock(0).GetPiece(0)
+
+#         cd.SetInputData(pd)
+#         cf.SetClosestPoint(*v)
+#         cutStrips.Update()
+
+#         cutPoly = vtk.vtkPolyData()
+#         cutPoly.SetPoints(cutStrips.GetOutput().GetPoints())
+#         cutPoly.SetPolys(cutStrips.GetOutput().GetLines())
+
+#         t.SetInputData(cutPoly)
+#         if calc_centers:
+#             pts = vtk_to_numpy(cf.GetOutput().GetPoints().GetData())
+#             # centerOfMassFilter = vtk.vtkCenterOfMass()
+#             # centerOfMassFilter.SetInputConnection(t.GetOutputPort())
+#             # centerOfMassFilter.Update()
+#             centers[k, :] = np.mean(pts, axis=0)
+
+#         massfilter = vtk.vtkMassProperties()
+#         massfilter.SetInputConnection(t.GetOutputPort())
+#         massfilter.Update()
+
+#         cross_sections[k] = massfilter.GetSurfaceArea()
+
+#     return cross_sections, centers
 
 
-def calculate_cross_sections(mesh, graph_verts, graph_edges, calc_centers=True):
+# def make_vtk_skeleton_from_paths(verts, paths):
+#     cell_list = []
+#     num_cells = 0
+#     for p in paths:
+#         cell_list.append(len(p))
+#         cell_list += p
+#         num_cells += 1
+#     cell_array = np.array(cell_list)
 
-    mesh_polydata = trimesh_to_vtk(mesh.vertices, mesh.faces)
+#     mesh = vtk.vtkPolyData()
+#     points = vtk.vtkPoints()
+#     points.SetData(numpy_to_vtk(verts, deep=1))
+#     mesh.SetPoints(points)
 
-    cutter = vtk.vtkPlaneCutter()
-    cutter.SetInputData(mesh_polydata)
-    plane = vtk.vtkPlane()
-    cd = vtk.vtkCleanPolyData()
-    cf = vtk.vtkPolyDataConnectivityFilter()
-    cf.SetInputConnection(cd.GetOutputPort())
-    cf.SetExtractionModeToClosestPointRegion()
-    cutter.SetPlane(plane)
-    cutStrips = vtk.vtkStripper()
-    cutStrips.JoinContiguousSegmentsOn()
-    cutStrips.SetInputConnection(cf.GetOutputPort())
+#     cells = vtk.vtkCellArray()
 
-    cross_sections = np.zeros(len(graph_edges), dtype=np.float)
+#     # Seemingly, VTK may be compiled as 32 bit or 64 bit.
+#     # We need to make sure that we convert the trilist to the correct dtype
+#     # based on this. See numpy_to_vtkIdTypeArray() for details.
+#     isize = vtk.vtkIdTypeArray().GetDataTypeSize()
+#     req_dtype = np.int32 if isize == 4 else np.int64
 
-    if calc_centers:
-        centers = np.zeros((len(graph_edges), 3))
-
-    massfilter = vtk.vtkMassProperties()
-    massfilter.SetInputConnection(cutter.GetOutputPort())
-    t = vtk.vtkTriangleFilter()
-    dvs = graph_verts[graph_edges[:, 0], :]-graph_verts[graph_edges[:, 1], :]
-    dvs = (dvs / np.linalg.norm(dvs, axis=1)[:, np.newaxis])
-    for k, edge in enumerate(graph_edges):
-        dv = dvs[k, :]
-
-        dv = dv.tolist()
-
-        v = graph_verts[graph_edges[k, 0], :]
-        v = v.tolist()
-        plane.SetNormal(*dv)
-        plane.SetOrigin(*v)
-
-        cutter.Update()
-        pd = cutter.GetOutputDataObject(0).GetBlock(0).GetPiece(0)
-
-        cd.SetInputData(pd)
-        cf.SetClosestPoint(*v)
-        cutStrips.Update()
-
-        cutPoly = vtk.vtkPolyData()
-        cutPoly.SetPoints(cutStrips.GetOutput().GetPoints())
-        cutPoly.SetPolys(cutStrips.GetOutput().GetLines())
-
-        t.SetInputData(cutPoly)
-        if calc_centers:
-            pts = vtk_to_numpy(cf.GetOutput().GetPoints().GetData())
-            # centerOfMassFilter = vtk.vtkCenterOfMass()
-            # centerOfMassFilter.SetInputConnection(t.GetOutputPort())
-            # centerOfMassFilter.Update()
-            centers[k, :] = np.mean(pts, axis=0)
-
-        massfilter = vtk.vtkMassProperties()
-        massfilter.SetInputConnection(t.GetOutputPort())
-        massfilter.Update()
-
-        cross_sections[k] = massfilter.GetSurfaceArea()
-
-    return cross_sections, centers
-
-
-def make_vtk_skeleton_from_paths(verts, paths):
-    cell_list = []
-    num_cells = 0
-    for p in paths:
-        cell_list.append(len(p))
-        cell_list += p
-        num_cells += 1
-    cell_array = np.array(cell_list)
-
-    mesh = vtk.vtkPolyData()
-    points = vtk.vtkPoints()
-    points.SetData(numpy_to_vtk(verts, deep=1))
-    mesh.SetPoints(points)
-
-    cells = vtk.vtkCellArray()
-
-    # Seemingly, VTK may be compiled as 32 bit or 64 bit.
-    # We need to make sure that we convert the trilist to the correct dtype
-    # based on this. See numpy_to_vtkIdTypeArray() for details.
-    isize = vtk.vtkIdTypeArray().GetDataTypeSize()
-    req_dtype = np.int32 if isize == 4 else np.int64
-
-    cells.SetCells(num_cells,
-                   numpy_to_vtkIdTypeArray(cell_array, deep=1))
-    mesh.SetLines(cells)
-    return mesh
+#     cells.SetCells(num_cells,
+#                    numpy_to_vtkIdTypeArray(cell_array, deep=1))
+#     mesh.SetLines(cells)
+#     return mesh
 
 
 def vtk_super_basic(actors, camera=None, do_save=False, filename=None, scale=4, back_color=(.1, .1, .1),
@@ -412,13 +402,18 @@ def make_mesh_actor(mesh, color=(0, 1, 0),
                     opacity=0.1,
                     vertex_scalars=None,
                     lut=None,
-                    calc_normals=True):
+                    calc_normals=True,
+                    show_link_edges=False,
+                    line_width=3):
 
-    mesh_poly = trimesh_to_vtk(mesh.vertices, mesh.faces, mesh.link_edges)
+    if show_link_edges:
+        mesh_poly = trimesh_to_vtk(mesh.vertices, mesh.faces, mesh.link_edges)
+    else:
+        mesh_poly = trimesh_to_vtk(mesh.vertices, mesh.faces, None)
     if vertex_scalars is not None:
         mesh_poly.GetPointData().SetScalars(numpy_to_vtk(vertex_scalars))
     mesh_mapper = vtk.vtkPolyDataMapper()
-    if calc_normals and mesh.link_edges is None:
+    if calc_normals and (not show_link_edges):
         norms = vtk.vtkTriangleMeshPointNormals()
         norms.SetInputData(mesh_poly)
         mesh_mapper.SetInputConnection(norms.GetOutputPort())
@@ -430,6 +425,7 @@ def make_mesh_actor(mesh, color=(0, 1, 0),
         mesh_mapper.SetLookupTable(lut)
     mesh_mapper.ScalarVisibilityOn()
     mesh_actor.SetMapper(mesh_mapper)
+    mesh_actor.GetProperty().SetLineWidth(line_width)
     mesh_actor.GetProperty().SetColor(*color)
     mesh_actor.GetProperty().SetOpacity(opacity)
     return mesh_actor
