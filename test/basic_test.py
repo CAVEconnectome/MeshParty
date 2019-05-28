@@ -170,13 +170,11 @@ def test_download_meshes(cv_path, basic_mesh_id, full_cell_mesh_id, tmpdir):
     meshes=trimesh_io.download_meshes([basic_mesh_id, full_cell_mesh_id],
                                       tmpdir,
                                       cv_path=cv_path,
-                                      merge_large_components=False,
-                                      remove_duplicate_vertices=False)
+                                      merge_large_components=False)
     meshes=trimesh_io.download_meshes([basic_mesh_id, full_cell_mesh_id],
                                         tmpdir,
                                         cv_path=cv_path,
                                         merge_large_components=False,
-                                        remove_duplicate_vertices=False,
                                         n_threads=2)
 
 def test_write_mesh(basic_mesh, tmpdir):
@@ -192,8 +190,7 @@ def test_meta_mesh(cv_path, basic_mesh_id, full_cell_mesh_id, tmpdir):
     mm = trimesh_io.MeshMeta(cv_path=cv_path)
     mesh = mm.mesh(seg_id=basic_mesh_id)
     full_cell_mesh = mm.mesh(seg_id=full_cell_mesh_id,
-                             merge_large_components=False,
-                             remove_duplicate_vertices=False)
+                             merge_large_components=False)
     assert(mesh is not None)
     assert(full_cell_mesh is not None)
 

@@ -237,8 +237,6 @@ def get_link_edges(mesh, seg_id, dataset_name, close_map_distance = 300,
     # iterate over these merge indices and find the minimal edge
     # that links these two connected componets
     total_link_edges=[]
-    if not isinstance(mesh, trimesh_io.MaskedMesh):
-        mesh = trimesh_io.MaskedMesh(mesh.vertices, mesh.faces, link_edges=mesh.link_edges)
 
     for merge_ind in merge_edge_inds:
         link_edges = find_edges_to_link(mesh, merge_ind[0], merge_ind[1])

@@ -103,7 +103,7 @@ def read_mesh(filename, masked_mesh=False):
 def _download_meshes_thread(args):
     """ Helper to Download meshes into target directory """
     seg_ids, cv_path, target_dir, fmt, overwrite, \
-        merge_large_components, remove_duplicate_vertices, map_gs_to_https = args
+        merge_large_components, map_gs_to_https = args
 
     cv = cloudvolume.CloudVolumeFactory(cv_path, map_gs_to_https=map_gs_to_https)
 
@@ -116,8 +116,7 @@ def _download_meshes_thread(args):
         print('file does not exist {}'.format(target_file))
 
         try:
-            cv_mesh = cv.mesh.get(seg_id,
-                                  remove_duplicate_vertices=remove_duplicate_vertices)
+            cv_mesh = cv.mesh.get(seg_id, remove_duplicate_vertices=False)
 
             faces = np.array(cv_mesh["faces"])
             if len(faces.shape) == 1:
@@ -125,7 +124,7 @@ def _download_meshes_thread(args):
 
             mesh = Mesh(vertices=cv_mesh["vertices"],
                         faces=faces,
-                        process=remove_duplicate_vertices)
+                        process=False)
 
             if merge_large_components:
                 mesh.merge_large_components()
@@ -144,7 +143,7 @@ def _download_meshes_thread(args):
 
 def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
                     n_threads=1, verbose=False,
-                    merge_large_components=True, remove_duplicate_vertices=True,
+                    merge_large_components=True, 
                     map_gs_to_https=True, fmt="hdf5"):
     """ Downloads meshes in target directory (in parallel)
 
@@ -155,7 +154,6 @@ def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
     :param n_threads: int
     :param verbose: bool
     :param merge_large_components: bool
-    :param remove_duplicate_vertices: bool
     :param fmt: str
         "h5" is highly recommended
     """
@@ -174,7 +172,7 @@ def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
     for seg_id_block in seg_id_blocks:
         multi_args.append([seg_id_block, cv_path, target_dir, fmt,
                            overwrite, merge_large_components,
-                           remove_duplicate_vertices, map_gs_to_https])
+                            map_gs_to_https])
 
     if n_jobs == 1:
         mu.multiprocess_func(_download_meshes_thread,
@@ -235,7 +233,7 @@ class MeshMeta(object):
         return "%s/%d.h5" % (self.disk_cache_path, seg_id)
 
     def mesh(self, filename=None, seg_id=None, cache_mesh=True,
-             merge_large_components=False, remove_duplicate_vertices=False,
+             merge_large_components=False,
              overwrite_merge_large_components=False,
              force_download=False, masked_mesh=False):
         """ Loads mesh either from cache, disk or google storage
@@ -249,9 +247,6 @@ class MeshMeta(object):
             if True: large (>100 vx) mesh connected components are linked
             and the additional edges strored in .link_edges
             this information is cached as well
-        :param remove_duplicate_vertices: bool
-            if True will merge vertices with the same coordinates and also
-            remove Nan and Inf values through trimesh process=True functionality
         :param overwrite_merge_large_components: bool
             if True: recalculate large components
         :return: Mesh
@@ -264,13 +259,12 @@ class MeshMeta(object):
                 mesh_data = read_mesh(filename, masked_mesh=masked_mesh)
                 if masked_mesh:
                     vertices, faces, normals, link_edges, node_mask = mesh_data
-                    mesh = MaskedMesh(vertices=vertices, faces=faces, normals=normals,
+                    mesh = Mesh(vertices=vertices, faces=faces, normals=normals,
                                         link_edges=link_edges, node_mask=node_mask, process=False)
                 else:
                     vertices, faces, normals, link_edges = mesh_data
                     mesh = Mesh(vertices=vertices, faces=faces, normals=normals,
-                                link_edges=link_edges,
-                                process=remove_duplicate_vertices)
+                                link_edges=link_edges)
 
                 if (merge_large_components and (len(mesh.link_edges)==0)) or \
                         overwrite_merge_large_components:
@@ -293,25 +287,17 @@ class MeshMeta(object):
                                      cache_mesh=cache_mesh,
                                      merge_large_components=merge_large_components,
                                      overwrite_merge_large_components=overwrite_merge_large_components,
-                                     remove_duplicate_vertices=remove_duplicate_vertices,
                                      masked_mesh=masked_mesh)
                     return mesh
 
             if seg_id not in self._mesh_cache or force_download is True:
-                cv_mesh = self.cv.mesh.get(seg_id,
-                                           remove_duplicate_vertices=remove_duplicate_vertices)
+                cv_mesh = self.cv.mesh.get(seg_id, remove_duplicate_vertices=False)
                 faces = np.array(cv_mesh["faces"])
                 if (len(faces.shape) == 1):
                     faces = faces.reshape(-1, 3)
 
-                if masked_mesh:
-                    mesh = MaskedMesh(vertices=cv_mesh["vertices"],
-                                      faces=faces,
-                                       process=False)
-                else:
                     mesh = Mesh(vertices=cv_mesh["vertices"],
-                                faces=faces,
-                                process=remove_duplicate_vertices)
+                                faces=faces)
 
                     if (merge_large_components and (len(mesh.link_edges)==0)) or \
                             overwrite_merge_large_components:
@@ -849,13 +835,13 @@ class Mesh(trimesh.Trimesh):
         else:
             link_edges_unmask = None
 
-        return MaskedMesh(vertices_unmask,
-                          faces_unmask,
-                          apply_mask=True,
-                          node_mask=joint_mask,
-                          unmasked_size=self.unmasked_size,
-                          link_edges=link_edges_unmask,
-                          **kwargs)
+        return Mesh(vertices_unmask,
+                    faces_unmask,
+                    apply_mask=True,
+                    node_mask=joint_mask,
+                    unmasked_size=self.unmasked_size,
+                    link_edges=link_edges_unmask,
+                    **kwargs)
 
     def map_indices_to_unmasked(self, unmapped_indices):
         '''

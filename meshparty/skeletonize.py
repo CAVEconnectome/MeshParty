@@ -141,8 +141,7 @@ def skeletonize(mesh_meta, seg_id, soma_pt=None, soma_thresh=7500,
     
 
     mesh = mesh_meta.mesh(seg_id=seg_id,
-                          merge_large_components=False,
-                          remove_duplicate_vertices=False)
+                          merge_large_components=False)
 
     return skeletonize_mesh(mesh, soma_pt=soma_pt, soma_thresh=soma_thresh,
                 invalidation_d=invalidation_d, smooth_neighborhood=smooth_neighborhood,
