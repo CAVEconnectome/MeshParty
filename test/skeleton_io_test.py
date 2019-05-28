@@ -10,6 +10,21 @@ from meshparty import skeleton_io, skeleton
 overwrite_flags = [True, False]
 io_file_exists = [True, False]
 
+simple_verts = np.array([[1, 0, 5],
+                         [1, 1, 5],
+                         [1, 2, 5],
+                         [0, 2, 5],
+                         [0, 2, 4],
+                         [2, 2, 5],
+                         [2, 2, 6]], dtype=np.int32)
+
+simple_edges = np.array([[0,1],
+                         [1,2],
+                         [2,3],
+                         [3,4],
+                         [2,5],
+                         [5,6]], dtype=np.int32)
+
 @contextlib.contextmanager
 def build_full_cell_skeleton():
     filepath = 'test/test_files/sk_648518346349499581.h5'
@@ -23,40 +38,14 @@ def full_cell_skeleton():
 
 @pytest.fixture(scope='session')
 def simple_skeleton():
-    verts = np.array([[1, 0, 5],
-                      [1, 1, 5],
-                      [1, 2, 5],
-                      [0, 2, 5],
-                      [0, 2, 4],
-                      [2, 2, 5],
-                      [2, 2, 6]])
-
-    edges = np.array([[0,1],
-                      [1,2],
-                      [2,3],
-                      [3,4],
-                      [2,5],
-                      [5,6]])
-
+    verts = simple_verts
+    edges = simple_edges
     yield skeleton.Skeleton(verts, edges, root=0)
 
 @pytest.fixture(scope='session')
 def simple_skeleton_with_properties():
-    verts = np.array([[1, 0, 5],
-                      [1, 1, 5],
-                      [1, 2, 5],
-                      [0, 2, 5],
-                      [0, 2, 4],
-                      [2, 2, 5],
-                      [2, 2, 6]])
-
-    edges = np.array([[0,1],
-                      [1,2],
-                      [2,3],
-                      [3,4],
-                      [2,5],
-                      [5,6]])
-
+    verts = simple_vert
+    edges = simple_edges
     test_prop = np.arange(len(verts))
     mesh_to_skel_map = np.arange(0, 10*len(verts), 10)
     yield skeleton.Skeleton(verts, edges, mesh_to_skel_map=mesh_to_skel_map,

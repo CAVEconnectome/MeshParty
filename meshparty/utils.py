@@ -163,8 +163,8 @@ def create_csgraph(vertices, edges, euclidean_weight=True, directed=False):
         weights = np.linalg.norm(xs-ys, axis=1)
         use_dtype = np.float32
     else:   
-        weights = np.ones((len(edges),)).astype(bool)
-        use_dtype = bool 
+        weights = np.ones((len(edges),)).astype(np.int8)
+        use_dtype = np.int8 
 
     if directed:
         edges = edges.T

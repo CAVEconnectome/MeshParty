@@ -6,26 +6,6 @@ from copy import copy
 import json
 
 
-def load_from_json(path, use_smooth_vertices=False):
-    with open(path, 'r') as fp:
-        d = json.load(fp)
-
-    if use_smooth_vertices:
-        assert 'smooth_vertices' in d
-        skel_vertices = np.array(d['smooth_vertices'], dtype=np.float)
-    else:
-        skel_vertices = np.array(d['vertices'], dtype=np.float)
-
-    if "root" in d:
-        root = np.array(d['root'], dtype=np.float)
-    else:
-        root = None
-
-    skel_edges = np.array(d['edges'], dtype=np.int64)
-
-    return SkeletonForest(skel_vertices, skel_edges, root=root)
-
-
 class SkeletonForest:
     def __init__(self, vertices, edges, vertex_properties={},
                  edge_properties={}, vertex_lists={}, root=None):
@@ -221,11 +201,11 @@ class Skeleton:
 
     @property
     def vertices(self):
-        return self._vertices.copy()
+        return self._vertices
 
     @property
     def edges(self):
-        return self._edges.copy()
+        return self._edges
 
     @property
     def mesh_to_skel_map(self):
@@ -343,6 +323,8 @@ class Skeleton:
         return L
 
     def reroot(self, new_root):
+        if new_root > self.n_vertices:
+            raise ValueError('New root must be between 0 and n_vertices-1')
         self._root = new_root
         self._parent_node_array = np.full(self.n_vertices, None)
 
