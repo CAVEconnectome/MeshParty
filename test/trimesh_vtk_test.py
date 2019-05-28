@@ -12,7 +12,7 @@ def compare_img_to_test_file(fname, back_val = 255, close=15):
 
     non_background = np.any((img_test != back_val) | (img_tmpl != back_val), axis=2)
     diff = np.linalg.norm(img_test-img_tmpl, axis=2)
-    perc_close = np.sum((diff > close) & (non_background))/np.sum(non_background)
+    perc_close = np.sum((diff < close) & (non_background))/np.sum(non_background)
     assert(perc_close>.9)
 
 @contextlib.contextmanager
