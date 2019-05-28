@@ -16,14 +16,14 @@ simple_verts = np.array([[1, 0, 5],
                          [0, 2, 5],
                          [0, 2, 4],
                          [2, 2, 5],
-                         [2, 2, 6]], dtype=np.uint32)
+                         [2, 2, 6]], dtype=np.int32)
 
 simple_edges = np.array([[0,1],
                          [1,2],
                          [2,3],
                          [3,4],
                          [2,5],
-                         [5,6]], dtype=np.uint32)
+                         [5,6]], dtype=np.int32)
 
 @contextlib.contextmanager
 def build_full_cell_skeleton():
@@ -44,7 +44,7 @@ def simple_skeleton():
 
 @pytest.fixture(scope='session')
 def simple_skeleton_with_properties():
-    verts = simple_verts
+    verts = simple_vert
     edges = simple_edges
     test_prop = np.arange(len(verts))
     mesh_to_skel_map = np.arange(0, 10*len(verts), 10)
