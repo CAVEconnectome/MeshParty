@@ -33,10 +33,10 @@ def test_filter_two_points(full_cell_mesh, full_cell_soma_pt, tmp_path):
                                                      2000)
     
     ais_mesh = full_cell_mesh.apply_mask(on_ais)
-    ais_actor = trimesh_vtk.make_mesh_actor(ais_mesh)
+    ais_actor = trimesh_vtk.mesh_actor(ais_mesh)
 
     fname = os.path.join(tmp_path, 'full_cell_ais.png')
-    trimesh_vtk.vtk_super_basic([ais_actor],
+    trimesh_vtk.render_actors([ais_actor],
                                 back_color=(1,1,1),
                                 do_save=True,
                                 filename=fname,

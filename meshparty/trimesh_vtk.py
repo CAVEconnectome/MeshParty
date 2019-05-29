@@ -144,7 +144,7 @@ def remove_unused_verts(verts, faces):
     return new_verts, new_face
 
 
-def vtk_poly_to_mesh_components(poly):
+def poly_to_mesh_components(poly):
     points = vtk_to_numpy(poly.GetPoints().GetData())
     ntris = poly.GetNumberOfPolys()
     if ntris > 0:
@@ -159,110 +159,31 @@ def vtk_poly_to_mesh_components(poly):
     return points, tris, edges
 
 
-# def calculate_cross_sections(mesh, graph_verts, graph_edges, calc_centers=True):
-
-#     mesh_polydata = trimesh_to_vtk(mesh.vertices, mesh.faces)
-
-#     cutter = vtk.vtkPlaneCutter()
-#     cutter.SetInputData(mesh_polydata)
-#     plane = vtk.vtkPlane()
-#     cd = vtk.vtkCleanPolyData()
-#     cf = vtk.vtkPolyDataConnectivityFilter()
-#     cf.SetInputConnection(cd.GetOutputPort())
-#     cf.SetExtractionModeToClosestPointRegion()
-#     cutter.SetPlane(plane)
-#     cutStrips = vtk.vtkStripper()
-#     cutStrips.JoinContiguousSegmentsOn()
-#     cutStrips.SetInputConnection(cf.GetOutputPort())
-
-#     cross_sections = np.zeros(len(graph_edges), dtype=np.float)
-
-#     if calc_centers:
-#         centers = np.zeros((len(graph_edges), 3))
-
-#     massfilter = vtk.vtkMassProperties()
-#     massfilter.SetInputConnection(cutter.GetOutputPort())
-#     t = vtk.vtkTriangleFilter()
-#     dvs = graph_verts[graph_edges[:, 0], :]-graph_verts[graph_edges[:, 1], :]
-#     dvs = (dvs / np.linalg.norm(dvs, axis=1)[:, np.newaxis])
-#     for k, edge in enumerate(graph_edges):
-#         dv = dvs[k, :]
-
-#         dv = dv.tolist()
-
-#         v = graph_verts[graph_edges[k, 0], :]
-#         v = v.tolist()
-#         plane.SetNormal(*dv)
-#         plane.SetOrigin(*v)
-
-#         cutter.Update()
-#         pd = cutter.GetOutputDataObject(0).GetBlock(0).GetPiece(0)
-
-#         cd.SetInputData(pd)
-#         cf.SetClosestPoint(*v)
-#         cutStrips.Update()
-
-#         cutPoly = vtk.vtkPolyData()
-#         cutPoly.SetPoints(cutStrips.GetOutput().GetPoints())
-#         cutPoly.SetPolys(cutStrips.GetOutput().GetLines())
-
-#         t.SetInputData(cutPoly)
-#         if calc_centers:
-#             pts = vtk_to_numpy(cf.GetOutput().GetPoints().GetData())
-#             # centerOfMassFilter = vtk.vtkCenterOfMass()
-#             # centerOfMassFilter.SetInputConnection(t.GetOutputPort())
-#             # centerOfMassFilter.Update()
-#             centers[k, :] = np.mean(pts, axis=0)
-
-#         massfilter = vtk.vtkMassProperties()
-#         massfilter.SetInputConnection(t.GetOutputPort())
-#         massfilter.Update()
-
-#         cross_sections[k] = massfilter.GetSurfaceArea()
-
-#     return cross_sections, centers
-
-
-# def make_vtk_skeleton_from_paths(verts, paths):
-#     cell_list = []
-#     num_cells = 0
-#     for p in paths:
-#         cell_list.append(len(p))
-#         cell_list += p
-#         num_cells += 1
-#     cell_array = np.array(cell_list)
-
-#     mesh = vtk.vtkPolyData()
-#     points = vtk.vtkPoints()
-#     points.SetData(numpy_to_vtk(verts, deep=1))
-#     mesh.SetPoints(points)
-
-#     cells = vtk.vtkCellArray()
-
-#     # Seemingly, VTK may be compiled as 32 bit or 64 bit.
-#     # We need to make sure that we convert the trilist to the correct dtype
-#     # based on this. See numpy_to_vtkIdTypeArray() for details.
-#     isize = vtk.vtkIdTypeArray().GetDataTypeSize()
-#     req_dtype = np.int32 if isize == 4 else np.int64
-
-#     cells.SetCells(num_cells,
-#                    numpy_to_vtkIdTypeArray(cell_array, deep=1))
-#     mesh.SetLines(cells)
-#     return mesh
-
-
-def vtk_super_basic(actors, camera=None, do_save=False, filename=None, scale=4, back_color=(.1, .1, .1),
-                    VIDEO_WIDTH=1080, VIDEO_HEIGHT=720):
+def render_actors(actors, camera=None, do_save=False, filename=None,
+                  scale=4, back_color=(1, 1, 1),
+                  VIDEO_WIDTH=1080, VIDEO_HEIGHT=720):
     """
     Create a window, renderer, interactor, add the actors and start the thing
 
     Parameters
     ----------
-    actors :  list of vtkActors
+    actors :  list[vtkActor]
+        list of actors to render
+    camera : vtkCamera
+        camera to use for scence (optional..default to fit scene)
+    do_save: bool
+        write png image to disk, if false will open interactive window
+    filename: str
+        filepath to save png image to
+    scale: 
+        scale factor to use when saving images to disk (default 4) for higher res images
+    back_color: Iterable
+        rgb values (0,1) to determine for background color
 
     Returns
     -------
-    nothing
+    vtk.vtkRenderer
+        renderer when code was finished (useful for retrieving user input camera position ren.GetActiveCamera())
     """
     if do_save:
         assert(filename is not None)
@@ -321,7 +242,7 @@ def vtk_super_basic(actors, camera=None, do_save=False, filename=None, scale=4, 
     return ren
 
 
-def vtk_camera_from_quat(pos_nm, orient_quat, camera_distance=10000, ngl_correct=True):
+def camera_from_quat(pos_nm, orient_quat, camera_distance=10000, ngl_correct=True):
     """define a vtk camera with a particular orientation
         Parameters
         ----------
@@ -373,7 +294,7 @@ def vtk_camera_from_quat(pos_nm, orient_quat, camera_distance=10000, ngl_correct
     camera.SetFocalPoint(*pos_nm)
     return camera
 
-def vtk_camera_from_ngl_state(state_d, zoom_factor=300.0):
+def camera_from_ngl_state(state_d, zoom_factor=300.0):
     """define a vtk camera from a neuroglancer state dictionary
         Parameters
         ----------
@@ -393,18 +314,19 @@ def vtk_camera_from_ngl_state(state_d, zoom_factor=300.0):
     zoom = state_d.get('perspectiveZoom', 10.0)
     position = state_d['navigation']['pose']['position']
     pos_nm = np.array(position['voxelCoordinates'])*position['voxelSize']
-    camera = vtk_camera_from_quat(pos_nm, orient, zoom*zoom_factor, ngl_correct=True)
+    camera = camera_from_quat(pos_nm, orient, zoom*zoom_factor, ngl_correct=True)
     
     return camera
 
 
-def make_mesh_actor(mesh, color=(0, 1, 0),
-                    opacity=0.1,
-                    vertex_scalars=None,
-                    lut=None,
-                    calc_normals=True,
-                    show_link_edges=False,
-                    line_width=3):
+def mesh_actor(mesh,
+               color=(0, 1, 0),
+               opacity=0.1,
+               vertex_scalars=None,
+               lut=None,
+               calc_normals=True,
+               show_link_edges=False,
+               line_width=3):
 
     if show_link_edges:
         mesh_poly = trimesh_to_vtk(mesh.vertices, mesh.faces, mesh.link_edges)
@@ -431,15 +353,15 @@ def make_mesh_actor(mesh, color=(0, 1, 0),
     return mesh_actor
 
 
-def vtk_skeleton_actor(sk,
-                       edge_property=None,
-                       vertex_property=None,
-                       vertex_data=None,
-                       normalize_property=True,
-                       color=(0, 0, 0),
-                       line_width=3,
-                       opacity=0.7,
-                       lut_map=None):
+def skeleton_actor(sk,
+                   edge_property=None,
+                   vertex_property=None,
+                   vertex_data=None,
+                   normalize_property=True,
+                   color=(0, 0, 0),
+                   line_width=3,
+                   opacity=0.7,
+                   lut_map=None):
     sk_mesh = graph_to_vtk(sk.vertices, sk.edges)
     mapper = vtk.vtkPolyDataMapper()
     mapper.SetInputData(sk_mesh)
@@ -478,23 +400,7 @@ def vtk_skeleton_actor(sk,
     actor.GetProperty().SetColor(color)
     return actor
 
-
-def neuron_actors(mesh, pre_syn_positions=None, post_syn_positions=None,
-                  mesh_color=(0.459, 0.439, 0.702), pre_color=(0.994, 0.098, 0.106), post_color=(0.176, 0.996, 0.906),
-                  mesh_opacity=0.8, pre_opacity=1, post_opacity=1,
-                  pre_size=400, post_size=400):
-    mesh_actor = make_mesh_actor(mesh, color=mesh_color, opacity=mesh_opacity)
-    nrn_act = [mesh_actor]
-    if pre_syn_positions is not None:
-        pre_actor = make_point_cloud_actor(pre_syn_positions, size=pre_size, color=pre_color, opacity=pre_opacity)
-        nrn_act.append(pre_actor)
-    if post_syn_positions is not None:
-        post_actor = make_point_cloud_actor(post_syn_positions, size=post_size, color=post_color, opacity=post_opacity)
-        nrn_act.append(post_actor)
-    return nrn_act
-
-
-def make_point_cloud_actor(xyz,
+def point_cloud_actor(xyz,
                            size=100,
                            color=(0,0,0),
                            opacity=0.5):
@@ -544,9 +450,9 @@ def make_point_cloud_actor(xyz,
     return actor
 
 
-def vtk_linked_point_actor(vertices_a, inds_a,
-                           vertices_b, inds_b,
-                           line_width=1, color=(0, 0, 0), opacity=0.2):
+def linked_point_actor(vertices_a, inds_a,
+                       vertices_b, inds_b,
+                       line_width=1, color=(0, 0, 0), opacity=0.2):
     if len(inds_a) != len(inds_b):
         raise ValueError('Linked points must have the same length')
 
@@ -566,7 +472,7 @@ def vtk_linked_point_actor(vertices_a, inds_a,
     return link_actor
 
 
-def vtk_oriented_camera(center, up_vector=(0, -1, 0), backoff=500, backoff_vector=(0,0,1)):
+def oriented_camera(center, up_vector=(0, -1, 0), backoff=500, backoff_vector=(0,0,1)):
     '''
     Generate a camera pointed at a specific location, oriented with a given up
     direction, set to a backoff.
