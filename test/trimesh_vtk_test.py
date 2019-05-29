@@ -151,7 +151,7 @@ def test_full_cell_with_links(full_cell_mesh, full_cell_merge_log, tmp_path, mon
 
     mesh_actor = trimesh_vtk.mesh_actor(full_cell_mesh)
 
-    fname = 'full_cell_orient_camera.png'
+    fname = 'full_cell_with_links.png'
     filepath = os.path.join(tmp_path, fname)
     trimesh_vtk.render_actors([mesh_actor], do_save =True,
                                 scale=1,
