@@ -189,6 +189,7 @@ def render_actors(actors, camera=None, do_save=False, filename=None,
         assert(filename is not None)
     # create a rendering window and renderer
     ren = vtk.vtkRenderer()
+    ren.UseFXAAOn()
     if camera is not None:
         ren.SetActiveCamera(camera)
 

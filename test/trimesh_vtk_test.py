@@ -94,32 +94,22 @@ def test_skeleton_viz(cell_skel, tmp_path):
     assert(np.all(cell_skel.vertices == verts_out))
     assert(np.all(cell_skel.edges == edges_out))
 
-    fname = os.path.join(tmp_path, 'test_sk_render.png')
-    trimesh_vtk.render_actors([skel_actor], do_save =True, filename= fname, scale=1, back_color=(1,1,1))
-    compare_img_to_test_file(fname)
-    
+    fname = 'test_sk_render.png'
+    filepath = os.path.join(tmp_path, fname)
+    trimesh_vtk.render_actors([skel_actor], do_save =True, filename= filepath, scale=1, back_color=(1,1,1))
+    compare_img_to_test_file(filepath)
 
-def test_neuron_actors(full_cell_mesh):
-    n = 100
-    in_syn_ind = np.random.randint(0, full_cell_mesh.vertices.shape[0], n)
-    out_syn_ind = np.random.randint(0, full_cell_mesh.vertices.shape[0], n)
-    in_syn_coords = full_cell_mesh.vertices[in_syn_ind, :]
-    out_syn_coords = full_cell_mesh.vertices[out_syn_ind, :]
-
-    actrs = trimesh_vtk.neuron_actors(full_cell_mesh,
-                                      pre_syn_positions=in_syn_coords,
-                                      post_syn_positions=out_syn_coords)
 
 def test_full_cell_camera(full_cell_mesh, full_cell_soma_pt, tmp_path):
     mesh_actor = trimesh_vtk.mesh_actor(full_cell_mesh)
     camera = trimesh_vtk.oriented_camera(full_cell_soma_pt, backoff=100)
- 
-    fname = os.path.join(tmp_path, 'full_cell_orient_camera.png')
+    fname = 'full_cell_orient_camera.png'
+    filepath = os.path.join(tmp_path, fname)
     trimesh_vtk.render_actors([mesh_actor], do_save =True,
                                 scale=1,
-                                filename= fname,
+                                filename=filepath,
                                 camera=camera, back_color=(1,1,1))
-    compare_img_to_test_file(fname)
+    compare_img_to_test_file(filepath)
 
 def test_vtk_errors():
     verts = np.random.rand(10,3)
@@ -156,25 +146,28 @@ def test_full_cell_with_links(full_cell_mesh, full_cell_merge_log, tmp_path, mon
 
     mesh_actor = trimesh_vtk.mesh_actor(full_cell_mesh)
 
-    fname = os.path.join(tmp_path, 'full_cell_with_links.png')
+    fname = 'full_cell_orient_camera.png'
+    filepath = os.path.join(tmp_path, fname)
     trimesh_vtk.render_actors([mesh_actor], do_save =True,
                                 scale=1,
-                                filename= fname,
+                                filename=filepath,
                                 back_color=(1,1,1))
-    compare_img_to_test_file(fname)
+    compare_img_to_test_file(filepath)
 
     mesh_actor = trimesh_vtk.mesh_actor(full_cell_mesh,
-                                             opacity=1.0,
-                                             show_link_edges = True)
+                                        opacity=1.0,
+                                        show_link_edges = True)
 
     m1  =np.array(full_cell_merge_log['merge_edge_coords'][0]) 
     ctr = np.mean(m1, axis=0)
     camera = trimesh_vtk.oriented_camera(ctr, backoff=5, up_vector = (0,0,1), backoff_vector=(0,1,0))
 
-    fname = os.path.join(tmp_path, 'full_cell_show_links.png')
+  
+    fname = 'full_cell_show_links.png'
+    filepath = os.path.join(tmp_path, fname)
     trimesh_vtk.render_actors([mesh_actor], do_save =True,
                                 scale=2,
                                 camera=camera,
-                                filename= fname,
+                                filename=filepath,
                                 back_color=(1,1,1))
-    compare_img_to_test_file(fname)                  
+    compare_img_to_test_file(filepath)                  
