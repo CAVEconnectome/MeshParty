@@ -7,11 +7,10 @@ import json
 
 class Skeleton:
     def __init__(self, vertices, edges, mesh_to_skel_map=None, vertex_properties={},
-                 edge_properties={}, root=None):
+                 root=None):
         self._vertices = np.array(vertices)
         self._edges = np.vstack(edges).astype(int)
         self.vertex_properties = vertex_properties
-        self.edge_properties = edge_properties
         self._mesh_to_skel_map = mesh_to_skel_map
 
         self._root = None
