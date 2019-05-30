@@ -19,13 +19,13 @@ def write_skeleton_h5(sk, filename, overwrite=False):
                               edges=sk.edges,
                               mesh_to_skel_map=sk.mesh_to_skel_map, 
                               vertex_properties=sk.vertex_properties,
-                              edge_properties=sk.edge_properties,
                               root=sk.root,
                               overwrite=overwrite)
 
 
+
 def write_skeleton_h5_by_part(filename, vertices, edges, mesh_to_skel_map=None,
-                              vertex_properties={}, edge_properties={}, root=None,
+                              vertex_properties={}, root=None,
                               overwrite=False):
     '''
     Helper function for writing all parts of a skeleton file to an h5.
@@ -44,8 +44,6 @@ def write_skeleton_h5_by_part(filename, vertices, edges, mesh_to_skel_map=None,
                              data=mesh_to_skel_map, compression='gzip')
         if len(vertex_properties) > 0:
             _write_dict_to_group(f, 'vertex_properties', vertex_properties)
-        if len(edge_properties) > 0:
-            _write_dict_to_group(f, 'edge_properties', edge_properties)
         if root is not None:
             f.create_dataset('root', data=root)
 
@@ -53,8 +51,8 @@ def write_skeleton_h5_by_part(filename, vertices, edges, mesh_to_skel_map=None,
 def _write_dict_to_group(f, group_name, data_dict):
     d_grp = f.create_group(group_name)
     for d_name, d_data in data_dict.items():
+        is_np = type(d_data) is np.ndarray
         d_grp.create_dataset(d_name, data=json.dumps(d_data, cls=_NumpyEncoder))
-
 
 def read_skeleton_h5_by_part(filename):
     '''
@@ -63,32 +61,26 @@ def read_skeleton_h5_by_part(filename):
     assert os.path.isfile(filename)
 
     with h5py.File(filename, 'r') as f:
-        vertices = f['vertices'].value
-        edges = f['edges'].value
+        vertices = f['vertices'][()]
+        edges = f['edges'][()]
 
         if 'mesh_to_skel_map' in f.keys():
-            mesh_to_skel_map = f['mesh_to_skel_map'].value
+            mesh_to_skel_map = f['mesh_to_skel_map'][()]
         else:
             mesh_to_skel_map = None
 
         vertex_properties = {}
         if 'vertex_properties' in f.keys():
             for vp_key in f['vertex_properties'].keys():
-                vertex_properties[vp_key] = json.loads(f['vertex_properties'][vp_key].value,
+                vertex_properties[vp_key] = json.loads(f['vertex_properties'][vp_key][()],
                                                        object_hook=_convert_keys_to_int)
 
-        edge_properties = {}
-        if 'edge_properties' in f.keys():
-            for ep_key in f['edge_properties'].keys():
-                edge_properties[ep_key] = json.loads(f['edge_properties'][ep_key].value,
-                                                     object_hook=_convert_keys_to_int)
-
         if 'root' in f.keys():
-            root = f['root'].value
+            root = f['root'][()]
         else:
             root = None
 
-    return vertices, edges, mesh_to_skel_map, vertex_properties, edge_properties, root
+    return vertices, edges, mesh_to_skel_map, vertex_properties, root
 
 
 def read_skeleton_h5(filename):
@@ -97,12 +89,11 @@ def read_skeleton_h5(filename):
 
     :param filename: String. Filename of skeleton file.
     '''
-    vertices, edges, mesh_to_skel_map, vertex_properties, edge_properties, root = read_skeleton_h5_by_part(filename)
+    vertices, edges, mesh_to_skel_map, vertex_properties, root = read_skeleton_h5_by_part(filename)
     return skeleton.Skeleton(vertices=vertices,
                              edges=edges,
                              mesh_to_skel_map=mesh_to_skel_map,
                              vertex_properties=vertex_properties,
-                             edge_properties=edge_properties,
                              root=root)
 
 
@@ -153,7 +144,7 @@ def _build_swc_array(skel, node_labels, radius, xyz_scaling):
     new_ids = np.arange(len(ds))
     order_map = dict(zip(order_old, new_ids))
 
-    node_labels = node_labels[order_old]
+    node_labels = np.array(node_labels)[order_old]
     xyz = skel.vertices[order_old]
     radius = radius[order_old]
     par_ids = np.array([order_map.get(nid, -1)

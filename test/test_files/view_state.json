@@ -1,0 +1,57 @@
+{
+    "layers": [
+      {
+        "source": "precomputed://https://storage.googleapis.com/neuroglancer/pinky100_v0/son_of_alignment_v15_rechunked",
+        "type": "image",
+        "name": "img"
+      },
+      {
+        "source": "graphene://https://www.dynamicannotationframework.com/segmentation/1.0/pinky100_sv16",
+        "type": "segmentation",
+        "chunkedGraph": "https://www.dynamicannotationframework.com/segmentation/1.0/pinky100_sv16",
+        "segments": [
+          "648518346349499581"
+        ],
+        "name": "seg"
+      },
+      {
+        "type": "annotation",
+        "annotations": [],
+        "voxelSize": [
+          4,
+          4,
+          40
+        ],
+        "name": "ann"
+      }
+    ],
+    "navigation": {
+      "pose": {
+        "position": {
+          "voxelSize": [
+            4,
+            4,
+            40
+          ],
+          "voxelCoordinates": [
+            84114.96875,
+            48754.65234375,
+            825.0543212890625
+          ]
+        }
+      },
+      "zoomFactor": 4
+    },
+    "perspectiveOrientation": [
+      -0.9780447483062744,
+      -0.011954282410442829,
+      -0.14136159420013428,
+      -0.1526515781879425
+    ],
+    "perspectiveZoom": 34.344646549229594,
+    "selectedLayer": {
+      "layer": "seg",
+      "visible": true
+    },
+    "layout": "3d"
+  }
