@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 import os
 import imageio
+import json 
 
 def compare_img_to_test_file(fname, back_val = 255, close=15):
     img_test = imageio.imread(fname)
@@ -176,3 +177,19 @@ def test_full_cell_with_links(full_cell_mesh, full_cell_merge_log, tmp_path, mon
                                 filename=filepath,
                                 back_color=(1,1,1))
     compare_img_to_test_file(filepath)                  
+
+def test_ngl_state(full_cell_mesh, tmp_path):
+    with open('test/test_files/view_state.json', 'r') as fp:
+        ngl_state = json.load(fp)
+    
+    camera = trimesh_vtk.camera_from_ngl_state(ngl_state)
+    mesh_actor = trimesh_vtk.mesh_actor(full_cell_mesh)
+    
+    fname = 'full_cell_ngl_view.png'
+    filepath = os.path.join(tmp_path, fname)
+    trimesh_vtk.render_actors([mesh_actor], do_save =True,
+                                scale=2,
+                                camera=camera,
+                                filename=filepath,
+                                back_color=(1,1,1))
+    compare_img_to_test_file(filepath)    
