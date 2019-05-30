@@ -254,13 +254,9 @@ def test_link_edges(full_cell_mesh, full_cell_merge_log, full_cell_soma_pt, monk
 
     out=mesh_filters.filter_largest_component(full_cell_mesh)
     mesh_filter = full_cell_mesh.apply_mask(out)
-    skel_out = skeletonize.skeletonize_mesh(mesh_filter,
-                                            invalidation_d=10000,
-                                            soma_pt=full_cell_soma_pt,
-                                            return_map=True)
-    skel_verts, skel_edges, smooth_verts, skel_verts_orig, skel_vert_map = skel_out
-    skel = skeleton.Skeleton(skel_verts, skel_edges, mesh_to_skel_map=skel_vert_map)
-    assert(len(skel.branch_points)==87)
-    assert(skel.n_branch_points == 87)
+    skel = skeletonize.skeletonize_mesh(mesh_filter,
+                                        invalidation_d=10000,
+                                        soma_pt=full_cell_soma_pt)
+    assert(skel.n_branch_points == 83)
 
 
