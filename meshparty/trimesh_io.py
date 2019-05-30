@@ -25,7 +25,7 @@ from tqdm import trange
 
 from meshparty import utils, trimesh_repair
 
-def read_mesh_h5(filename, masked_mesh=False):
+def read_mesh_h5(filename):
     """Reads a mesh's vertices, faces and normals from an hdf5 file"""
     assert os.path.isfile(filename)
 
@@ -50,10 +50,7 @@ def read_mesh_h5(filename, masked_mesh=False):
             node_mask = f["node_mask"][()]
         else:
             node_mask = None
-    if masked_mesh:
-        return vertices, faces, normals, link_edges, node_mask
-    else:
-        return vertices, faces, normals, link_edges
+    return vertices, faces, normals, link_edges, node_mask
 
 
 def write_mesh_h5(filename, vertices, faces,
@@ -80,30 +77,29 @@ def write_mesh_h5(filename, vertices, faces,
             f.create_dataset("node_mask", data=node_mask, compression="gzip")
 
 
-def read_mesh(filename, masked_mesh=False):
+def read_mesh(filename):
     """Reads a mesh's vertices, faces and normals from obj or h5 file"""
 
     if filename.endswith(".obj"):
         with open(filename,'r') as fp:
             mesh_d = exchange.wavefront.load_wavefront(fp)
+        vertices = mesh_d[0]['vertices']
+        faces =  mesh_d[0]['faces']
+        normals = mesh_d[0].get('normals', None)
         link_edges = None
-        return mesh_d[0]['vertices'], mesh_d[0]['faces'], mesh_d[0].get('normals', None), link_edges
+        node_mask = None
     elif filename.endswith(".h5"):
-        mesh_data = read_mesh_h5(filename, masked_mesh)
-        if masked_mesh:
-            vertices, faces, normals, link_edges, node_mask = mesh_data
-            return vertices, faces, normals, link_edges, node_mask
-        else:
-            vertices, faces, normals, link_edges = mesh_data
-            return vertices, faces, normals, link_edges
+        mesh_data = read_mesh_h5(filename)
+        vertices, faces, normals, link_edges, node_mask = mesh_data
     else:
         raise Exception("Unknown filetype")
+    return vertices, faces, normals, link_edges, node_mask
 
 
 def _download_meshes_thread(args):
     """ Helper to Download meshes into target directory """
     seg_ids, cv_path, target_dir, fmt, overwrite, \
-        merge_large_components, map_gs_to_https = args
+        merge_large_components, stitch_mesh_chunks, map_gs_to_https = args
 
     cv = cloudvolume.CloudVolumeFactory(cv_path, map_gs_to_https=map_gs_to_https)
 
@@ -116,7 +112,7 @@ def _download_meshes_thread(args):
         print('file does not exist {}'.format(target_file))
 
         try:
-            cv_mesh = cv.mesh.get(seg_id, remove_duplicate_vertices=False)
+            cv_mesh = cv.mesh.get(seg_id, remove_duplicate_vertices=stitch_mesh_chunks)
 
             faces = np.array(cv_mesh["faces"])
             if len(faces.shape) == 1:
@@ -143,7 +139,8 @@ def _download_meshes_thread(args):
 
 def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
                     n_threads=1, verbose=False,
-                    merge_large_components=True, 
+                    stitch_mesh_chunks=True, 
+                    merge_large_components=False, 
                     map_gs_to_https=True, fmt="hdf5"):
     """ Downloads meshes in target directory (in parallel)
 
@@ -171,7 +168,7 @@ def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
     multi_args = []
     for seg_id_block in seg_id_blocks:
         multi_args.append([seg_id_block, cv_path, target_dir, fmt,
-                           overwrite, merge_large_components,
+                           overwrite, merge_large_components, stitch_mesh_chunks,
                             map_gs_to_https])
 
     if n_jobs == 1:
@@ -234,8 +231,9 @@ class MeshMeta(object):
 
     def mesh(self, filename=None, seg_id=None, cache_mesh=True,
              merge_large_components=False,
+             stitch_mesh_chunks=True,
              overwrite_merge_large_components=False,
-             force_download=False, masked_mesh=False):
+             force_download=False):
         """ Loads mesh either from cache, disk or google storage
 
         :param filename: str
@@ -246,7 +244,10 @@ class MeshMeta(object):
         :param merge_large_components: bool
             if True: large (>100 vx) mesh connected components are linked
             and the additional edges strored in .link_edges
-            this information is cached as well
+            this information is cached as well (default False)
+        :param stitch_mesh_chunks: bool
+            if True it will stitch the mesh fragments together into a single graph
+            (default True)
         :param overwrite_merge_large_components: bool
             if True: recalculate large components
         :return: Mesh
@@ -256,19 +257,10 @@ class MeshMeta(object):
 
         if filename is not None:
             if filename not in self._mesh_cache:
-                mesh_data = read_mesh(filename, masked_mesh=masked_mesh)
-                if masked_mesh:
-                    vertices, faces, normals, link_edges, node_mask = mesh_data
-                    mesh = Mesh(vertices=vertices, faces=faces, normals=normals,
-                                        link_edges=link_edges, node_mask=node_mask, process=False)
-                else:
-                    vertices, faces, normals, link_edges = mesh_data
-                    mesh = Mesh(vertices=vertices, faces=faces, normals=normals,
-                                link_edges=link_edges)
-
-                if (merge_large_components and (len(mesh.link_edges)==0)) or \
-                        overwrite_merge_large_components:
-                    mesh.merge_large_components()
+                mesh_data = read_mesh(filename)
+                vertices, faces, normals, link_edges, node_mask = mesh_data
+                mesh = Mesh(vertices=vertices, faces=faces, normals=normals,
+                                        link_edges=link_edges, node_mask=node_mask)
 
                 if cache_mesh and len(self._mesh_cache) < self.cache_size:
                     self._mesh_cache[filename] = mesh
@@ -286,8 +278,7 @@ class MeshMeta(object):
                     mesh = self.mesh(filename=self._filename(seg_id),
                                      cache_mesh=cache_mesh,
                                      merge_large_components=merge_large_components,
-                                     overwrite_merge_large_components=overwrite_merge_large_components,
-                                     masked_mesh=masked_mesh)
+                                     overwrite_merge_large_components=overwrite_merge_large_components)
                     return mesh
 
             if seg_id not in self._mesh_cache or force_download is True:
@@ -296,12 +287,8 @@ class MeshMeta(object):
                 if (len(faces.shape) == 1):
                     faces = faces.reshape(-1, 3)
 
-                    mesh = Mesh(vertices=cv_mesh["vertices"],
-                                faces=faces)
-
-                    if (merge_large_components and (len(mesh.link_edges)==0)) or \
-                            overwrite_merge_large_components:
-                        mesh.merge_large_components()
+                mesh = Mesh(vertices=cv_mesh["vertices"],
+                            faces=faces)
 
                 if cache_mesh and len(self._mesh_cache) < self.cache_size:
                     self._mesh_cache[seg_id] = mesh
@@ -312,7 +299,10 @@ class MeshMeta(object):
                                   link_edges=mesh.link_edges)
             else:
                 mesh = self._mesh_cache[seg_id]
-
+    
+        if (merge_large_components and (len(mesh.link_edges)==0)) or \
+                        overwrite_merge_large_components:
+                    mesh.merge_large_components()
         return mesh
 
 class Mesh(trimesh.Trimesh):
@@ -368,10 +358,17 @@ class Mesh(trimesh.Trimesh):
         kwargs['process'] = False
         
         super(Mesh, self).__init__(*new_args, **kwargs)
-        if link_edges is not None:
-            self.link_edges = utils.filter_shapes(np.flatnonzero(node_mask), link_edges)[0]
+        if apply_mask:
+            if link_edges is not None:
+                if any(self.node_mask == False):
+                    self.link_edges = utils.filter_shapes(np.flatnonzero(node_mask), link_edges)[0]
+                else:
+                    self.link_edges = link_edges
+            else:
+                self.link_edges = None
         else:
-            self.link_edges = None
+            self.link_edges = link_edges
+
         self._index_map = None
         
     @property

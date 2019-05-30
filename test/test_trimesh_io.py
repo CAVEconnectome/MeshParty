@@ -47,9 +47,9 @@ def test_file_read_write(
     #   obj always overwrites
     if file_exist and not overwrite_flag and file_ext == '.h5':
         with pytest.raises(OSError):
-            mvtx, mfaces, mnormals, link_edges = trimesh_io.read_mesh(fname)
+            mvtx, mfaces, mnormals, link_edges, node_mask = trimesh_io.read_mesh(fname)
     else:
-        mvtx, mfaces, mnormals, mlink_edges = trimesh_io.read_mesh(fname)
+        mvtx, mfaces, mnormals, mlink_edges, node_mask = trimesh_io.read_mesh(fname)
         assert numpy.array_equal(mvtx, m.vertices)
         assert numpy.array_equal(mfaces, m.faces)
 

@@ -32,8 +32,8 @@ def basic_mesh():
 @contextlib.contextmanager
 def build_full_cell_mesh():
     filepath = 'test/test_files/648518346349499581.h5'
-    vertices, faces, normals, link_edges = trimesh_io.read_mesh_h5(filepath)
-    mesh = trimesh_io.MaskedMesh(vertices, faces, process=False)
+    vertices, faces, normals, link_edges, node_mask = trimesh_io.read_mesh_h5(filepath)
+    mesh = trimesh_io.Mesh(vertices, faces)
     yield mesh
 
 @contextlib.contextmanager
@@ -199,24 +199,20 @@ def test_masked_mesh(cv_path, full_cell_mesh_id, full_cell_soma_pt, tmpdir):
     mm = trimesh_io.MeshMeta(cv_path=cv_path,
                             cache_size=0,
                             disk_cache_path=os.path.join(tmpdir,'mesh_cache'))
-    mmesh = mm.mesh(seg_id=full_cell_mesh_id,
-                    masked_mesh=True)
+    mmesh = mm.mesh(seg_id=full_cell_mesh_id)
 
     assert(mmesh is not None)
     # read again to test file caching with memory caching on
 
-    mmesh_cache = mm.mesh(seg_id=full_cell_mesh_id,
-                          masked_mesh=True)
+    mmesh_cache = mm.mesh(seg_id=full_cell_mesh_id)
     
     # now set it up with memory caching enabled
     mm = trimesh_io.MeshMeta(cv_path=cv_path,
                              cache_size=1)
     # read it again with memory caching enabled
-    mmesh = mm.mesh(seg_id=full_cell_mesh_id,
-                    masked_mesh=True)
+    mmesh = mm.mesh(seg_id=full_cell_mesh_id)
     # read it again to use memory cache
-    mmesh_mem_cache = mm.mesh(seg_id=full_cell_mesh_id,
-                              masked_mesh=True)
+    mmesh_mem_cache = mm.mesh(seg_id=full_cell_mesh_id)
 
 
 
@@ -238,8 +234,7 @@ def test_masked_mesh(cv_path, full_cell_mesh_id, full_cell_soma_pt, tmpdir):
     fname = os.path.join(tmpdir, 'test_mask_mesh.h5')
     double_soma_mesh.write_to_file(fname)
     
-    double_soma_read = mm.mesh(filename=fname,
-                               masked_mesh=True)
+    double_soma_read = mm.mesh(filename=fname)
 
 
 def test_link_edges(full_cell_mesh, full_cell_merge_log, full_cell_soma_pt, monkeypatch):
