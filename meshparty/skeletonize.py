@@ -11,38 +11,6 @@ from trimesh.ray import ray_pyembree
 from collections import defaultdict
 
 
-def recenter_verts(verts, edges, centers):
-    edge_df = pd.DataFrame()
-    edge_df['start_edge']=np.array(edges[:,0], np.int64)
-    edge_df['end_edge']=np.array(edges[:,1], np.int64)
-    edge_df['center_x']=np.array(centers)[:,0]
-    edge_df['center_y']=np.array(centers)[:,1]
-    edge_df['center_z']=np.array(centers)[:,2]
-    start_mean = edge_df.groupby('start_edge').mean()[['center_x','center_y','center_z']]
-    new_verts = np.copy(verts)
-    new_verts[start_mean.index.values,:]=start_mean.values
-    return new_verts
-
-
-def reduce_verts(verts, faces):
-    """removes unused vertices from a graph or mesh
-
-    verts = NxD numpy array of vertex locations
-    faces = MxK numpy array of connected shapes (i.e. edges or tris)
-    (entries are indices into verts)
-
-    returns: 
-    new_verts, new_face, used_verts
-    a filtered set of vertices and reindexed set of faces
-    along with the index of the new_verts in the old verst
-    """
-    used_verts = np.unique(faces.ravel())
-    new_verts = verts[used_verts, :]
-    new_face = np.zeros(faces.shape, dtype=faces.dtype)
-    for i in range(faces.shape[1]):
-        new_face[:, i] = np.searchsorted(used_verts, faces[:, i])
-    return new_verts, new_face, used_verts
-
 def skeletonize_mesh(mesh, soma_pt=None, soma_thresh=7500,
                 invalidation_d=10000, smooth_neighborhood=5,
                 large_skel_path_threshold=5000,
@@ -109,10 +77,6 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_thresh=7500,
     else:
         all_paths, roots, tot_path_lengths = skeletonize_output
 
-    # if merge_components_at_tips is True:
-    #     tot_edges = merge_tips(mesh, all_paths, roots, tot_path_lengths,
-    #                            large_skel_path_threshold=large_skel_path_threshold, max_tip_d=max_tip_d)
-    # else:
     all_edges = []
     for comp_paths in all_paths:
         all_edges.append(utils.paths_to_edges(comp_paths))
@@ -133,154 +97,24 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_thresh=7500,
 
     return output_tuple
 
+def reduce_verts(verts, faces):
+    """removes unused vertices from a graph or mesh
 
-def skeletonize(mesh_meta, seg_id, soma_pt=None, soma_thresh=7500,
-                invalidation_d=10000, smooth_neighborhood=5,
-                large_skel_path_threshold=5000,
-                cc_vertex_thresh=100, return_map=False):
-    
+    verts = NxD numpy array of vertex locations
+    faces = MxK numpy array of connected shapes (i.e. edges or tris)
+    (entries are indices into verts)
 
-    mesh = mesh_meta.mesh(seg_id=seg_id,
-                          merge_large_components=False)
-
-    return skeletonize_mesh(mesh, soma_pt=soma_pt, soma_thresh=soma_thresh,
-                invalidation_d=invalidation_d, smooth_neighborhood=smooth_neighborhood,
-                large_skel_path_threshold=large_skel_path_threshold,
-                cc_vertex_thresh=cc_vertex_thresh, return_map=return_map)
-
-
-def skeletonize_axon(mesh_meta, axon_id, invalidation_d=5000, smooth_neighborhood=5,
-                     large_skel_path_threshold=5000, cc_vertex_thresh=100,
-                     return_map=False):
-    return skeletonize(mesh_meta, axon_id,
-                       invalidation_d=invalidation_d,
-                       smooth_neighborhood=smooth_neighborhood,
-                       large_skel_path_threshold=large_skel_path_threshold,
-                       cc_vertex_thresh=cc_vertex_thresh,
-                       return_map=return_map)
-
-
-def merge_tips(mesh, all_paths, roots, tot_path_lengths,
-               large_skel_path_threshold=5000, max_tip_d=2000):
-
-    # collect all the tips of the skeletons (including roots)
-    skel_tips = []
-    all_tip_indices = []
-    for paths, root in zip(all_paths, roots):
-        tips = []
-        tip_indices = []
-        for path in paths:
-            tip_ind = path[0]
-            tip = mesh.vertices[tip_ind, :]
-            tips.append(tip)
-            tip_indices.append(tip_ind)
-        root_tip = mesh.vertices[root, :]
-        tips.append(root_tip)
-        tip_indices.append(root)
-        skel_tips.append(np.vstack(tips))
-        all_tip_indices.append(np.array(tip_indices))
-    # this is our overall tip matrix merged together
-    all_tips = np.vstack(skel_tips)
-    # and the vertex index of those tips in the original mesh
-    all_tip_indices = np.concatenate(all_tip_indices)
-    
-    # variable to keep track of what component each tip was from
-    tip_component = np.zeros(all_tips.shape[0])
-    # counter to keep track of an overall tip index as we go through 
-    # the components with different numbers of tips
-    ind_counter = 0
-
-    # setup the prize collection steiner forest problem variables
-    # prizes will be related to path length of the tip components
-    tip_prizes = [] 
-    # where to collect all the tip<>tip edges
-    all_edges = []
-    # where to collect all the tip<>tip edge weights
-    all_edge_weights = []
-
-    # loop over all the components and their tips
-    for k, tips, path_lengths in zip(range(len(tot_path_lengths)), skel_tips, tot_path_lengths):
-        # how many tips in this component
-        ntips = tips.shape[0]
-        # calculate the total path length in this component
-        path_len = np.sum(np.array(path_lengths))
-        # the prize is 0 if this is small, and the path length if big
-        prize = path_len if path_len > large_skel_path_threshold else 0
-        # the cost of traveling within a skeleton is 0 if big, and the path_len if small
-        cost = path_len if path_len <= large_skel_path_threshold else 0
-        # add a block of prizes to the tip prizes for this component
-        tip_prizes.append(prize*np.ones(ntips))
-        # make an array of overall tip index for this component
-        comp_tips = np.arange(ind_counter, ind_counter+ntips, dtype=np.int64)
-        # add edges between this components root and each of the tips
-        root_tips = (ind_counter+ntips-1)*np.ones(ntips, dtype=np.int64)
-        in_tip_edges = np.hstack([root_tips[:, np.newaxis],
-                                  comp_tips[:, np.newaxis]])
-        all_edges.append(in_tip_edges)
-
-        # add a block for the cost of these edges
-        all_edge_weights.append(cost*np.ones(ntips))
-        # note what component each of these tips is from
-        tip_component[comp_tips] = k
-        # increment our overall index counter
-        ind_counter += ntips
-    # gather all the prizes into a single block
-    tip_prizes = np.concatenate(tip_prizes)
-
-    # make a kdtree with all the tips
-    tip_tree = spatial.cKDTree(all_tips)
-    
-    # find the tips near one another
-    close_tips = tip_tree.query_pairs(max_tip_d, output_type='ndarray')
-    # filter out close tips from the same component
-    diff_comp = ~(tip_component[close_tips[:, 0]] == tip_component[close_tips[:, 1]])
-    filt_close_tips = close_tips[diff_comp]
-
-    # add these as edges
-    all_edges.append(filt_close_tips)
-    # with weights equal to their euclidean distance
-    dv = np.linalg.norm(all_tips[filt_close_tips[:,0],:] - all_tips[filt_close_tips[:, 1]], axis=1)
-    all_edge_weights.append(dv)
-
-    # consolidate the edges and weights into a single array
-    inter_tip_weights = np.concatenate(all_edge_weights)
-    inter_tip_edges = np.concatenate(all_edges)
-
-    # run the prize collecting steiner forest optimization
-    mst_verts, mst_edges = pcst_fast.pcst_fast(
-        inter_tip_edges, tip_prizes, inter_tip_weights, -1, 1, 'gw', 1)
-#     # find the set of mst edges that are between connected components
-    new_mst_edges = mst_edges[tip_component[inter_tip_edges[mst_edges, 0]] != tip_component[inter_tip_edges[mst_edges ,1]]]
-    good_inter_tip_edges = inter_tip_edges[new_mst_edges, :]
-    # get these in the original index
-    new_edges_orig_ind = all_tip_indices[good_inter_tip_edges]
-#     # collect all the edges for all the paths into a single list
-#     # with the original indices of the mesh
-    orig_edges = []
-    for paths, root in zip(all_paths, roots):
-        edges = utils.paths_to_edges(paths)
-        orig_edges.append(edges)
-    orig_edges = np.vstack(orig_edges)
-    # and add our new mst edges
-    tot_edges = np.vstack([orig_edges, new_edges_orig_ind])
-
-    return tot_edges
-
-
-# def fix_skeleton(verts, edges):
-#     # fix the skeleton so that it    
-#     # filter out the vertices to be just those included in this skeleton
-#     skel_verts, skel_edges = trimesh_vtk.remove_unused_verts(axon_trimesh.vertices, tot_edges)
-#     Nind = skel_verts.shape[0]
-#     g=sparse.csc_matrix((np.ones(len(skel_edges)), (skel_edges[:,0], skel_edges[:,1])), shape =
-#                         (Nind,Nind))
-
-#     # figure out how many skeleton components we have now
-#     n_skel_comp, skel_labels = sparse.csgraph.connected_components(g,directed=False, return_labels=True)
-#     skel_comp_labels, skel_comp_counts = np.unique(skel_labels, return_counts = True)
-#     larg_skel_cc_ind = np.where(skel_comp_counts>100)[0]
-#     large_skel_components=len(larg_skel_cc_ind)
-
+    returns: 
+    new_verts, new_face, used_verts
+    a filtered set of vertices and reindexed set of faces
+    along with the index of the new_verts in the old verst
+    """
+    used_verts = np.unique(faces.ravel())
+    new_verts = verts[used_verts, :]
+    new_face = np.zeros(faces.shape, dtype=faces.dtype)
+    for i in range(faces.shape[1]):
+        new_face[:, i] = np.searchsorted(used_verts, faces[:, i])
+    return new_verts, new_face, used_verts
 
 def skeletonize_components(mesh,
                            soma_pt=None,
@@ -316,10 +150,10 @@ def skeletonize_components(mesh,
             # find the root using a soma position if you have it
             # it will fall back to a heuristic if the soma
             # is too far away for this component
-            root, root_ds, pred, valid = setup_root_new(mesh,
-                                                        is_soma_pt,
-                                                        soma_d,
-                                                        labels == k)
+            root, root_ds, pred, valid = setup_root(mesh,
+                                                    is_soma_pt,
+                                                    soma_d,
+                                                    labels == k)
             # run teasar on this component
             teasar_output = mesh_teasar(mesh,
                                         root=root,
@@ -347,7 +181,7 @@ def skeletonize_components(mesh,
         return all_paths, roots, tot_path_lengths
 
 
-def setup_root_new(mesh, is_soma_pt=None, soma_d=None, is_valid=None):
+def setup_root(mesh, is_soma_pt=None, soma_d=None, is_valid=None):
     if is_valid is not None:
         valid = np.copy(is_valid)
     else:
@@ -381,47 +215,6 @@ def setup_root_new(mesh, is_soma_pt=None, soma_d=None, is_valid=None):
         root, target, pred, dm, root_ds = utils.find_far_points(mesh, start_ind=start_ind)
     valid[root] = False
     assert(np.all(~np.isinf(root_ds[valid])))
-    return root, root_ds, pred, valid
-
-
-def setup_root(mesh, soma_pt=None, soma_thresh=7500, valid_inds=None):
-    if valid_inds is not None:
-        valid = np.zeros(len(mesh.vertices), np.bool)
-        valid[valid_inds] = True
-    else:
-        valid = np.ones(len(mesh.vertices), np.bool)
-    root = None
-    # soma mode
-    if soma_pt is not None:
-        # pick the first soma as root
-        soma_d, soma_i = mesh.kdtree.query(soma_pt,
-                                           k=len(mesh.vertices),
-                                           distance_upper_bound=soma_thresh)
-        if valid_inds is not None:
-            soma_i, valid_soma_ind, soma_valid_ind = np.intersect1d(soma_i,
-                                                                    valid_inds,
-                                                                    return_indices=True)
-            soma_d = soma_d[valid_soma_ind]
-        if (len(soma_d) > 0):
-            min_d = np.min(soma_d)
-        else:
-            min_d = np.inf 
-        if (min_d < soma_thresh):
-            root = soma_i[np.argmin(soma_d)]
-            root_ds, pred = sparse.csgraph.dijkstra(mesh.csgraph,
-                                                    False,
-                                                    root,
-                                                    return_predecessors=True)
-        else:
-            if valid_inds is not None:
-                root, target, pred, dm, root_ds = utils.find_far_points(mesh, start_ind=valid_inds[0])
-            else:
-                root, target, pred, dm, root_ds = utils.find_far_points(mesh)
-    if root is None:
-        # there is no soma close, so use far point heuristic
-        root, target, pred, dm, root_ds = utils.find_far_points(mesh)
-    valid[root] = False
-
     return root, root_ds, pred, valid
 
 
