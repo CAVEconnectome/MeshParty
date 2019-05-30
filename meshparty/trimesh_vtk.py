@@ -200,8 +200,6 @@ def render_actors(actors, camera=None, do_save=False, filename=None,
 
     ren.SetBackground(*back_color)
     # create a renderwindowinteractor
-    iren = vtk.vtkRenderWindowInteractor()
-    iren.SetRenderWindow(renWin)
 
     for a in actors:
         # assign actor to the renderer
@@ -218,6 +216,9 @@ def render_actors(actors, camera=None, do_save=False, filename=None,
 
 
     if do_save is False:
+        iren = vtk.vtkRenderWindowInteractor()
+        iren.SetRenderWindow(renWin)
+
         trackCamera = vtk.vtkInteractorStyleTrackballCamera()
         iren.SetInteractorStyle(trackCamera)
         # enable user interface interactor

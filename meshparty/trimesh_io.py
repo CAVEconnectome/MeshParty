@@ -296,7 +296,8 @@ class MeshMeta(object):
                 if self.disk_cache_path is not None:
                     write_mesh_h5(self._filename(seg_id), mesh.vertices,
                                   mesh.faces,
-                                  link_edges=mesh.link_edges)
+                                  link_edges=mesh.link_edges,
+                                  overwrite=force_download)
             else:
                 mesh = self._mesh_cache[seg_id]
     
@@ -879,6 +880,7 @@ class Mesh(trimesh.Trimesh):
             if unmasked_shape.ndim == 1:
                 filtered_shape = filtered_shape.reshape((len(filtered_shape),))
         return filtered_shape
+
     def write_to_file(self, filename):
         """ Exports the mesh to any format supported by trimesh
 

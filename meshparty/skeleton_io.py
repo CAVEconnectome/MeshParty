@@ -19,13 +19,13 @@ def write_skeleton_h5(sk, filename, overwrite=False):
                               edges=sk.edges,
                               mesh_to_skel_map=sk.mesh_to_skel_map, 
                               vertex_properties=sk.vertex_properties,
-                              edge_properties=sk.edge_properties,
                               root=sk.root,
                               overwrite=overwrite)
 
 
+
 def write_skeleton_h5_by_part(filename, vertices, edges, mesh_to_skel_map=None,
-                              vertex_properties={}, edge_properties={}, root=None,
+                              vertex_properties={}, root=None,
                               overwrite=False):
     if os.path.isfile(filename):
         if overwrite:
@@ -40,8 +40,6 @@ def write_skeleton_h5_by_part(filename, vertices, edges, mesh_to_skel_map=None,
                              data=mesh_to_skel_map, compression='gzip')
         if len(vertex_properties) > 0:
             _write_dict_to_group(f, 'vertex_properties', vertex_properties)
-        if len(edge_properties) > 0:
-            _write_dict_to_group(f, 'edge_properties', edge_properties)
         if root is not None:
             f.create_dataset('root', data=root)
 
@@ -70,18 +68,12 @@ def read_skeleton_h5_by_part(filename):
                 vertex_properties[vp_key] = json.loads(f['vertex_properties'][vp_key][()],
                                                        object_hook=_convert_keys_to_int)
 
-        edge_properties = {}
-        if 'edge_properties' in f.keys():
-            for ep_key in f['edge_properties'].keys():
-                edge_properties[ep_key] = json.loads(f['edge_properties'][ep_key][()],
-                                                     object_hook=_convert_keys_to_int)
-
         if 'root' in f.keys():
             root = f['root'][()]
         else:
             root = None
 
-    return vertices, edges, mesh_to_skel_map, vertex_properties, edge_properties, root
+    return vertices, edges, mesh_to_skel_map, vertex_properties, root
 
 
 def read_skeleton_h5(filename):
@@ -90,12 +82,11 @@ def read_skeleton_h5(filename):
 
     :param filename: String. Filename of skeleton file.
     '''
-    vertices, edges, mesh_to_skel_map, vertex_properties, edge_properties, root = read_skeleton_h5_by_part(filename)
+    vertices, edges, mesh_to_skel_map, vertex_properties, root = read_skeleton_h5_by_part(filename)
     return skeleton.Skeleton(vertices=vertices,
                              edges=edges,
                              mesh_to_skel_map=mesh_to_skel_map,
                              vertex_properties=vertex_properties,
-                             edge_properties=edge_properties,
                              root=root)
 
 
