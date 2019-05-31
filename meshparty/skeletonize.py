@@ -563,19 +563,6 @@ def collapse_soma_skeleton(soma_pt, verts, edges, soma_d_thresh=12000, mesh_to_s
         return simple_verts, simple_edges
 
 
-def skeleton_index_to_mesh_index_map(skel_map):
-    '''
-    Makes a dict indexed by skeleton vertex with mesh vertex indices that map to it.
-    '''
-    skind_to_mesh_map = defaultdict(list)
-    sk_values = np.unique(skel_map[~np.isnan(skel_map)])
-    nan_map_inds = np.isnan(skel_map)
-    skel_map_nonan = skel_map[~nan_map_inds]
-    map_inds_nonan = np.arange(0,len(skel_map))[~nan_map_inds]
-    for ii, skind in zip(map_inds_nonan, skel_map_nonan):
-        skind_to_mesh_map[skind].append(ii)
-    return skind_to_mesh_map
-
 def ray_trace_distance(vertex_inds, mesh, max_iter=10, rand_jitter=0.001, verbose=False, ray_inter=None):
     '''
     Compute distance to opposite side of the mesh for specified vertex indices on the mesh.
