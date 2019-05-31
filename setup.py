@@ -53,7 +53,7 @@ setup(
     packages=['meshparty'],
     include_package_data=True,
     install_requires=required,
-    setup_requires=['pytest-runner'],
+    setup_requires=['pytest-runner', 'setuptools_scm'],
     dependency_links=dependency_links,
     tests_require=test_required,
     cmdclass={'test': PyTest},
