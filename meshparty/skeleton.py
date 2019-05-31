@@ -4,6 +4,7 @@ from scipy import spatial, sparse
 from pykdtree.kdtree import KDTree as pyKDTree
 from copy import copy
 import json
+from meshparty import skeleton_io
 
 class Skeleton:
     def __init__(self, vertices, edges, mesh_to_skel_map=None, vertex_properties={},
