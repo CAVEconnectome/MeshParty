@@ -112,7 +112,7 @@ def _download_meshes_thread(args):
         print('file does not exist {}'.format(target_file))
 
         try:
-            cv_mesh = cv.mesh.get(seg_id, remove_duplicate_vertices=stitch_mesh_chunks)
+            cv_mesh = cv.mesh.get(seg_id, remove_duplicate_vertices=False)
 
             faces = np.array(cv_mesh["faces"])
             if len(faces.shape) == 1:
