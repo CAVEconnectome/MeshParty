@@ -43,6 +43,13 @@ def build_full_cell_merge_log():
         merge_log = json.load(fp)
     yield merge_log
 
+@contextlib.contextmanager
+def build_full_cell_synapses():
+    filepath = 'test/test_files/648518346349499581_synapses.json'
+    with open(filepath,'r') as fp:
+        synapse_d = json.load(fp)
+    yield synapse_d
+
 @pytest.fixture(scope='module')
 def full_cell_soma_pt():
     return np.array([358304, 219012,  53120])
@@ -50,6 +57,13 @@ def full_cell_soma_pt():
 @pytest.fixture(scope='session')
 def full_cell_merge_log():
     with build_full_cell_merge_log() as ml:
+        yield ml
+
+@pytest.fixture(scope='session')
+def full_cell_synapses():
+    with build_full_cell_synapses() as ml:
+        ml['positions']=np.array(ml['positions'])
+        ml['sizes']=np.array(ml['sizes'])
         yield ml
 
 @pytest.fixture(scope='session')
