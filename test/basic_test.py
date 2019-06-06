@@ -273,4 +273,9 @@ def test_link_edges(full_cell_mesh, full_cell_merge_log, full_cell_soma_pt, monk
                                         soma_pt=full_cell_soma_pt)
     assert(skel.n_branch_points == 83)
 
-
+def test_local_mesh(full_cell_mesh):
+    vertex = 30000
+    local_mesh = full_cell_mesh.get_local_mesh(n_points=500, max_dist = 5000, center_node_id=vertex)
+    assert(len(local_mesh.vertices)==500)
+    local_view = full_cell_mesh.get_local_view(n_points=500, max_dist=5000, center_node_id=vertex)
+    assert(len(local_view[0][0])==500)
