@@ -320,10 +320,35 @@ def camera_from_ngl_state(state_d, zoom_factor=300.0):
     return camera
 
 
+def process_colors(color,xyz):
+    map_colors = False
+    if not isinstance(color, np.ndarray):
+        color = np.array(color)
+    if color.shape == (len(xyz),3):
+        # then we have explicit colors
+        if color.dtype != np.uint8:
+            # if not passing uint8 assume 0-1 mapping
+            assert(np.max(color)<=1.0)
+            assert(np.min(color)>=0)
+            color = np.uint8(color*255)
+    elif color.shape ==(len(xyz),):
+        # then we want to map colors
+        map_colors = True     
+    elif color.shape == (3,):
+        # then we have one explicit color
+        assert(np.max(color)<=1.0)
+        assert(np.min(color)>=0)
+        car = np.array(color, dtype=np.uint8)*255 
+        color = np.repeat(car[np.newaxis,:],len(xyz),axis=0)
+    else:
+        raise ValueError('color must have shapse Nx3 if explicitly setting, or (N,) if mapping, or (3,)')
+    return color, map_colors
+
 def mesh_actor(mesh,
                color=(0, 1, 0),
                opacity=0.1,
-               vertex_scalars=None,
+               vertex_colors=None,
+               face_colors=None,
                lut=None,
                calc_normals=True,
                show_link_edges=False,
@@ -333,8 +358,18 @@ def mesh_actor(mesh,
         mesh_poly = trimesh_to_vtk(mesh.vertices, mesh.faces, mesh.link_edges)
     else:
         mesh_poly = trimesh_to_vtk(mesh.vertices, mesh.faces, None)
-    if vertex_scalars is not None:
-        mesh_poly.GetPointData().SetScalars(numpy_to_vtk(vertex_scalars))
+    if vertex_colors is not None:
+        vertex_color, map_vertex_color =  process_colors(vertex_colors, mesh.vertices)
+        vtk_vert_colors = numpy_to_vtk(vertex_color)
+        vtk_vert_colors.SetName('colors')
+        mesh_poly.GetPointData().SetScalars(vtk_vert_colors)
+    
+    if face_colors is not None:
+        face_color, map_face_colors = process_colors(face_colors, mesh.faces)
+        vtk_face_colors = numpy_to_vtk(face_color)
+        vtk_face_colors.SetName('colors')
+        mesh_poly.GetCellData().SetScalars(vtk_face_colors)
+
     mesh_mapper = vtk.vtkPolyDataMapper()
     if calc_normals and (not show_link_edges):
         norms = vtk.vtkTriangleMeshPointNormals()
@@ -342,10 +377,14 @@ def mesh_actor(mesh,
         mesh_mapper.SetInputConnection(norms.GetOutputPort())
     else:
         mesh_mapper.SetInputData(mesh_poly)
+
     mesh_actor = vtk.vtkActor()
 
     if lut is not None:
         mesh_mapper.SetLookupTable(lut)
+        if face_colors is not None:
+            if map_face_colors:
+                mesh_mapper.SelectColorArray('colors')
     mesh_mapper.ScalarVisibilityOn()
     mesh_actor.SetMapper(mesh_mapper)
     mesh_actor.GetProperty().SetLineWidth(line_width)
@@ -412,27 +451,7 @@ def point_cloud_actor(xyz,
     pc = vtk.vtkPolyData() 
     pc.SetPoints(points)
 
-    map_colors = False
-    if not isinstance(color, np.ndarray):
-        color = np.array(color)
-    if color.shape == (len(xyz),3):
-        # then we have explicit colors
-        if color.dtype != np.uint8:
-            # if not passing uint8 assume 0-1 mapping
-            assert(np.max(color)<=1.0)
-            assert(np.min(color)>=0)
-            color = np.uint8(color*255)
-    elif color.shape ==(len(xyz),):
-        # then we want to map colors
-        map_colors = True     
-    elif color.shape == (3,):
-        # then we have one explicit color
-        assert(np.max(color)<=1.0)
-        assert(np.min(color)>=0)
-        car = np.array(color, dtype=np.uint8)*255 
-        color = np.repeat(car[np.newaxis,:],len(xyz),axis=0)
-    else:
-        raise ValueError('color must have shapse Nx3 if explicitly setting, or (N,) if mapping, or (3,)')
+    color, map_colors = process_colors(color, xyz)
 
     vtk_colors = numpy_to_vtk(color)
     vtk_colors.SetName('colors')
