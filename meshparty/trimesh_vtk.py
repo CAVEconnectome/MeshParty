@@ -200,6 +200,8 @@ def render_actors(actors, camera=None, do_save=False, filename=None,
 
     ren.SetBackground(*back_color)
     # create a renderwindowinteractor
+    iren = vtk.vtkRenderWindowInteractor()
+    iren.SetRenderWindow(renWin)
 
     for a in actors:
         # assign actor to the renderer
@@ -216,9 +218,6 @@ def render_actors(actors, camera=None, do_save=False, filename=None,
 
 
     if do_save is False:
-        iren = vtk.vtkRenderWindowInteractor()
-        iren.SetRenderWindow(renWin)
-
         trackCamera = vtk.vtkInteractorStyleTrackballCamera()
         iren.SetInteractorStyle(trackCamera)
         # enable user interface interactor
@@ -321,10 +320,35 @@ def camera_from_ngl_state(state_d, zoom_factor=300.0):
     return camera
 
 
+def process_colors(color,xyz):
+    map_colors = False
+    if not isinstance(color, np.ndarray):
+        color = np.array(color)
+    if color.shape == (len(xyz),3):
+        # then we have explicit colors
+        if color.dtype != np.uint8:
+            # if not passing uint8 assume 0-1 mapping
+            assert(np.max(color)<=1.0)
+            assert(np.min(color)>=0)
+            color = np.uint8(color*255)
+    elif color.shape ==(len(xyz),):
+        # then we want to map colors
+        map_colors = True     
+    elif color.shape == (3,):
+        # then we have one explicit color
+        assert(np.max(color)<=1.0)
+        assert(np.min(color)>=0)
+        car = np.array(color, dtype=np.uint8)*255 
+        color = np.repeat(car[np.newaxis,:],len(xyz),axis=0)
+    else:
+        raise ValueError('color must have shapse Nx3 if explicitly setting, or (N,) if mapping, or (3,)')
+    return color, map_colors
+
 def mesh_actor(mesh,
                color=(0, 1, 0),
                opacity=0.1,
-               vertex_scalars=None,
+               vertex_colors=None,
+               face_colors=None,
                lut=None,
                calc_normals=True,
                show_link_edges=False,
@@ -334,8 +358,18 @@ def mesh_actor(mesh,
         mesh_poly = trimesh_to_vtk(mesh.vertices, mesh.faces, mesh.link_edges)
     else:
         mesh_poly = trimesh_to_vtk(mesh.vertices, mesh.faces, None)
-    if vertex_scalars is not None:
-        mesh_poly.GetPointData().SetScalars(numpy_to_vtk(vertex_scalars))
+    if vertex_colors is not None:
+        vertex_color, map_vertex_color =  process_colors(vertex_colors, mesh.vertices)
+        vtk_vert_colors = numpy_to_vtk(vertex_color)
+        vtk_vert_colors.SetName('colors')
+        mesh_poly.GetPointData().SetScalars(vtk_vert_colors)
+    
+    if face_colors is not None:
+        face_color, map_face_colors = process_colors(face_colors, mesh.faces)
+        vtk_face_colors = numpy_to_vtk(face_color)
+        vtk_face_colors.SetName('colors')
+        mesh_poly.GetCellData().SetScalars(vtk_face_colors)
+
     mesh_mapper = vtk.vtkPolyDataMapper()
     if calc_normals and (not show_link_edges):
         norms = vtk.vtkTriangleMeshPointNormals()
@@ -343,10 +377,14 @@ def mesh_actor(mesh,
         mesh_mapper.SetInputConnection(norms.GetOutputPort())
     else:
         mesh_mapper.SetInputData(mesh_poly)
+
     mesh_actor = vtk.vtkActor()
 
     if lut is not None:
         mesh_mapper.SetLookupTable(lut)
+        if face_colors is not None:
+            if map_face_colors:
+                mesh_mapper.SelectColorArray('colors')
     mesh_mapper.ScalarVisibilityOn()
     mesh_actor.SetMapper(mesh_mapper)
     mesh_actor.GetProperty().SetLineWidth(line_width)
@@ -403,62 +441,46 @@ def skeleton_actor(sk,
     return actor
 
 def point_cloud_actor(xyz,
-                           size=100,
-                           color=(0,0,0),
-                           opacity=0.5):
+                     size=100,
+                     color=(0,0,0),
+                     opacity=0.5):
+
     points = vtk.vtkPoints()
     points.SetData(numpy_to_vtk(xyz, deep=True))
 
-    scales = vtk.vtkFloatArray()
-    scales.SetName('scale')
+    pc = vtk.vtkPolyData() 
+    pc.SetPoints(points)
 
-    clr = vtk.vtkFloatArray()
-    clr.SetName('color')
+    color, map_colors = process_colors(color, xyz)
 
-    colormap = vtk.vtkLookupTable()
-    if np.array(color).shape == (3,):
-        single_color = True
-        colormap.SetNumberOfTableValues(1)
-        colormap.SetTableValue(0, color[0], color[1], color[2], opacity)
-    else:
-        single_color = False
-        colormap.SetNumberOfTableValues(len(color))
-        for ii, color_row in enumerate(color):
-            colormap.SetTableValue(ii, color_row[0], color_row[1], color_row[2], opacity)
-        
+    vtk_colors = numpy_to_vtk(color)
+    vtk_colors.SetName('colors')
+
     if np.isscalar(size):
         size = np.full(len(xyz), size)
     elif len(size) != len(xyz):
         raise ValueError('Size must be either a scalar or an len(xyz) x 1 array')
-    for ii in range(len(xyz)):
-        scales.InsertNextValue(size[ii])
-        if single_color:
-            clr.InsertNextValue(0)
-        else:
-            clr.InsertNextValue(ii)
-            
-    grid = vtk.vtkUnstructuredGrid()
-    grid.SetPoints(points)
-    grid.GetPointData().AddArray(scales)
-    grid.GetPointData().SetActiveScalars('scale')
-    grid.GetPointData().AddArray(clr)
+    pc.GetPointData().SetScalars(numpy_to_vtk(size))
+    pc.GetPointData().AddArray(vtk_colors)
 
     ss = vtk.vtkSphereSource()
     ss.SetRadius(1)
 
     glyph = vtk.vtkGlyph3D()
-    glyph.SetInputData(grid)
+    glyph.SetInputData(pc)
+    glyph.SetInputArrayToProcess(3, 0, 0, 0, "colors")
+    glyph.SetColorModeToColorByScalar()
     glyph.SetSourceConnection(ss.GetOutputPort())
+    glyph.SetScaleModeToScaleByScalar()
+    glyph.ScalingOn()
+    glyph.Update()
 
     mapper = vtk.vtkPolyDataMapper()
     mapper.SetInputConnection(glyph.GetOutputPort())
-    if single_color:
-        mapper.SetScalarRange(0,0)
-    else:
-        mapper.SetScalarRange(1,len(xyz))
-    mapper.SelectColorArray('color')
-    mapper.SetLookupTable(colormap)
-
+    if map_colors:
+        mapper.SetScalarRange(np.min(color), np.max(color))
+        mapper.SelectColorArray('colors')
+    
     actor = vtk.vtkActor()
     actor.SetMapper(mapper)
     return actor

@@ -4,16 +4,6 @@ import networkx as nx
 import pcst_fast
 
 
-def large_component_filter(mesh, size_thresh=1000):
-    '''
-    Creates a mesh filter without any connected components less than a size threshold
-    '''
-    cc, labels = sparse.csgraph.connected_components(mesh.csgraph, directed=False)
-    uids, counts = np.unique(labels, return_counts=True)
-    good_labels = uids[counts>size_thresh]
-    return np.in1d(labels, good_labels)
-
-
 def connected_component_slice(G, ind=None, return_boolean=False):
     '''
     Gets a numpy slice of the connected component corresponding to a

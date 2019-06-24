@@ -6,17 +6,102 @@ import pandas as pd
 from pykdtree.kdtree import KDTree as pyKDTree
 import pcst_fast
 from tqdm import trange, tqdm
-from meshparty.trimesh_io import Mesh, MaskedMesh
-from meshparty import mesh_filters
+from meshparty.trimesh_io import Mesh
 from meshparty.skeleton import Skeleton
 from trimesh.ray import ray_pyembree
 from collections import defaultdict
+from pykdtree.kdtree import KDTree as pyKDTree
+
+def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True,
+                     invalidation_d=12000, smooth_vertices=False, compute_radius=True,
+                     compute_original_index=True, verbose=True):
+    '''
+    Build skeleton object from mesh skeletonization
+    
+    Parameters
+    ----------
+    mesh: meshparty.trimesh_io.Mesh
+        the mesh to skeletonize, defaults assume vertices in nm
+    soma_pt: np.array
+        a length 3 array specifying to soma location to make the root
+        default=None, in which case a heuristic root will be chosen
+        in units of mesh vertices. 
+    soma_radius: float
+        distance in mesh vertex units over which to consider mesh 
+        vertices close to soma_pt to belong to soma
+        these vertices will automatically be invalidated and no
+        skeleton branches will attempt to reach them.
+        This distance will also be used to collapse all skeleton
+        points within this distance to the soma_pt root if collpase_soma
+        is true. (default=7500 (nm))
+    collapse_soma: bool
+        whether to collapse the skeleton around the soma point (default True)
+    invalidation_d: float
+        the distance along the mesh to invalidate when applying TEASAR
+        like algorithm.  Controls how detailed a structure the skeleton
+        algorithm reaches. default (12000 (nm))
+    smooth_vertices: bool
+        whether to smooth the vertices of the skeleton
+    compute_radius: bool
+        whether to calculate the radius of the skeleton at each point on the skeleton
+        (default True)
+    compute_original_index: bool
+        whether to calculate how each of the mesh nodes maps onto the skeleton
+        (default True)
+    verbose: bool
+        whether to print verbose logging
+
+    Returns
+        meshparty.skeleton.Skeleton
+           a Skeleton object for this mesh
+    '''
+    skel_verts, skel_edges, smooth_verts, orig_skel_index, skel_map = calculate_skeleton_paths_on_mesh(mesh,
+                                                                                       soma_pt=soma_pt,
+                                                                                       soma_thresh=soma_radius,
+                                                                                       invalidation_d=invalidation_d,
+                                                                                       return_map=True)
+    
+    if smooth_vertices is True:
+        skel_verts = smooth_verts
+
+    if collapse_soma is True and soma_pt is not None:
+        soma_verts = mesh_filters.filter_spatial_distance_from_points(mesh, [soma_pt], soma_radius)
+        new_v, new_e, new_skel_map, vert_filter, root_ind = collapse_soma_skeleton(soma_pt, skel_verts, skel_edges,
+                                                                                   soma_d_thresh=soma_radius, mesh_to_skeleton_map=skel_map,
+                                                                                   soma_mesh_indices=soma_verts, return_filter=True,
+                                                                                   return_soma_ind=True)
+    else:
+        new_v, new_e, new_skel_map = skel_verts, skel_edges, skel_map
+        vert_filter = np.arange(len(orig_skel_index))
+
+        if soma_pt is None:
+            sk_graph = utils.create_csgraph(new_v, new_e)
+            root_ind = utils.find_far_points_graph(sk_graph)[0]
+        else:
+            _, qry_inds = pyKDTree(new_v).query(soma_pt[np.newaxis,:]) # Still try to root close to the soma
+            root_ind = qry_inds[0]
 
 
-def skeletonize_mesh(mesh, soma_pt=None, soma_thresh=7500,
-                invalidation_d=10000, smooth_neighborhood=5,
-                large_skel_path_threshold=5000,
-                cc_vertex_thresh=100,  return_map=False):
+    skel_map_full_mesh = np.full(mesh.node_mask.shape, -1, dtype=np.int64)
+    skel_map_full_mesh[mesh.node_mask] = new_skel_map
+    ind_to_fix = mesh.map_boolean_to_unmasked(np.isnan(new_skel_map))
+    skel_map_full_mesh[ind_to_fix] = -1
+
+    props = {}
+    if compute_original_index is True:
+        props['mesh_index'] = np.append(mesh.map_indices_to_unmasked(orig_skel_index[vert_filter]), -1)
+    if compute_radius is True:
+        rs = ray_trace_distance(orig_skel_index[vert_filter], mesh)
+        rs = np.append(rs, soma_radius)
+        props['rs'] = rs
+    
+    sk = Skeleton(new_v, new_e, mesh_to_skel_map=skel_map_full_mesh, vertex_properties=props, root=root_ind)
+    return sk
+
+def calculate_skeleton_paths_on_mesh(mesh, soma_pt=None, soma_thresh=7500,
+                                     invalidation_d=10000, smooth_neighborhood=5,
+                                     large_skel_path_threshold=5000,
+                                     cc_vertex_thresh=100,  return_map=False):
     """ function to turn a trimesh object of a neuron into a skeleton
     Parameters
     ----------
@@ -484,19 +569,6 @@ def collapse_soma_skeleton(soma_pt, verts, edges, soma_d_thresh=12000, mesh_to_s
         simple_verts, simple_edges = trimesh_vtk.remove_unused_verts(verts, edges)
         return simple_verts, simple_edges
 
-
-def skeleton_index_to_mesh_index_map(skel_map):
-    '''
-    Makes a dict indexed by skeleton vertex with mesh vertex indices that map to it.
-    '''
-    skind_to_mesh_map = defaultdict(list)
-    sk_values = np.unique(skel_map[~np.isnan(skel_map)])
-    nan_map_inds = np.isnan(skel_map)
-    skel_map_nonan = skel_map[~nan_map_inds]
-    map_inds_nonan = np.arange(0,len(skel_map))[~nan_map_inds]
-    for ii, skind in zip(map_inds_nonan, skel_map_nonan):
-        skind_to_mesh_map[skind].append(ii)
-    return skind_to_mesh_map
 
 def ray_trace_distance(vertex_inds, mesh, max_iter=10, rand_jitter=0.001, verbose=False, ray_inter=None):
     '''

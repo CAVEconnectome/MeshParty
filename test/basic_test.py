@@ -43,6 +43,13 @@ def build_full_cell_merge_log():
         merge_log = json.load(fp)
     yield merge_log
 
+@contextlib.contextmanager
+def build_full_cell_synapses():
+    filepath = 'test/test_files/648518346349499581_synapses.json'
+    with open(filepath,'r') as fp:
+        synapse_d = json.load(fp)
+    yield synapse_d
+
 @pytest.fixture(scope='module')
 def full_cell_soma_pt():
     return np.array([358304, 219012,  53120])
@@ -50,6 +57,13 @@ def full_cell_soma_pt():
 @pytest.fixture(scope='session')
 def full_cell_merge_log():
     with build_full_cell_merge_log() as ml:
+        yield ml
+
+@pytest.fixture(scope='session')
+def full_cell_synapses():
+    with build_full_cell_synapses() as ml:
+        ml['positions']=np.array(ml['positions'])
+        ml['sizes']=np.array(ml['sizes'])
         yield ml
 
 @pytest.fixture(scope='session')
@@ -254,13 +268,14 @@ def test_link_edges(full_cell_mesh, full_cell_merge_log, full_cell_soma_pt, monk
 
     out=mesh_filters.filter_largest_component(full_cell_mesh)
     mesh_filter = full_cell_mesh.apply_mask(out)
-    skel_out = skeletonize.skeletonize_mesh(mesh_filter,
-                                            invalidation_d=10000,
-                                            soma_pt=full_cell_soma_pt,
-                                            return_map=True)
-    skel_verts, skel_edges, smooth_verts, skel_verts_orig, skel_vert_map = skel_out
-    skel = skeleton.Skeleton(skel_verts, skel_edges, mesh_to_skel_map=skel_vert_map)
-    assert(len(skel.branch_points)==87)
-    assert(skel.n_branch_points == 87)
+    skel = skeletonize.skeletonize_mesh(mesh_filter,
+                                        invalidation_d=10000,
+                                        soma_pt=full_cell_soma_pt)
+    assert(skel.n_branch_points == 83)
 
-
+def test_local_mesh(full_cell_mesh):
+    vertex = 30000
+    local_mesh = full_cell_mesh.get_local_mesh(n_points=500, max_dist = 5000, center_node_id=vertex)
+    assert(len(local_mesh.vertices)==500)
+    local_view = full_cell_mesh.get_local_view(n_points=500, max_dist=5000, center_node_id=vertex)
+    assert(len(local_view[0][0])==500)
