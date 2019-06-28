@@ -16,8 +16,7 @@ class PyTest(TestCommand):
         # import here, cause outside the eggs aren't loaded
         import shlex
         import pytest
-        self.pytest_args += " --cov=meshparty --cov-report html "\
-                            "--junitxml=test-reports/test.xml"
+        self.pytest_args += " --cov=meshparty --cov-report html --junitxml=test-reports/test.xml"
 
         errno = pytest.main(shlex.split(self.pytest_args))
         sys.exit(errno)
@@ -25,23 +24,6 @@ class PyTest(TestCommand):
 
 with open('test_requirements.txt', 'r') as f:
     test_required = f.read().splitlines()
-
-here = os.path.abspath(os.path.dirname(__file__))
-
-
-def read(*parts):
-    with codecs.open(os.path.join(here, *parts), 'r') as fp:
-        return fp.read()
-
-
-def find_version(*file_paths):
-    version_file = read(*file_paths)
-    version_match = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]",
-                              version_file, re.M)
-    if version_match:
-        return version_match.group(1)
-    raise RuntimeError("Unable to find version string.")
-
 
 with open('requirements.txt', 'r') as f:
     required = f.read().splitlines()
@@ -60,11 +42,8 @@ for i_l in range(len(required)):
 for i_l in del_ls[::-1]:
     del required[i_l]
 
-print(dependency_links)
-print(required)
-
 setup(
-    version=find_version("meshparty", "__init__.py"),
+    use_scm_version=True,
     name='meshparty',
     description='a service to work with meshes',
     author='Sven Dorkenwald',
@@ -73,7 +52,7 @@ setup(
     packages=['meshparty'],
     include_package_data=True,
     install_requires=required,
-    setup_requires=['pytest-runner'],
+    setup_requires=['pytest-runner', 'setuptools_scm'],
     dependency_links=dependency_links,
     tests_require=test_required,
     cmdclass={'test': PyTest},

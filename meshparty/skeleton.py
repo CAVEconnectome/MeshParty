@@ -1,207 +1,28 @@
 import numpy as np
 from meshparty import utils
 from scipy import spatial, sparse
-from pykdtree.kdtree import KDTree
+from pykdtree.kdtree import KDTree as pyKDTree
 from copy import copy
 import json
-
-
-def load_from_json(path, use_smooth_vertices=False):
-    with open(path, 'r') as fp:
-        d = json.load(fp)
-
-    if use_smooth_vertices:
-        assert 'smooth_vertices' in d
-        skel_vertices = np.array(d['smooth_vertices'], dtype=np.float)
-    else:
-        skel_vertices = np.array(d['vertices'], dtype=np.float)
-
-    if "root" in d:
-        root = np.array(d['root'], dtype=np.float)
-    else:
-        root = None
-
-    skel_edges = np.array(d['edges'], dtype=np.int64)
-
-    return SkeletonForest(skel_vertices, skel_edges, root=root)
-
-
-class SkeletonForest:
-    def __init__(self, vertices, edges, vertex_properties={},
-                 edge_properties={}, vertex_lists={}, root=None):
-        self._vertex_components = np.full(len(vertices), None)
-        self._vertex_order = np.full(len(vertices), 0, dtype=int)  # Original order of vertices
-        self._edge_components = np.full(len(edges), None)
-        self._vertex_lists = {}
-        self._skeletons = []
-        self._kdtree = None
-        self._csgraph = None
-        self._csgraph_binary = None
-        self._root = None
-
-        vertices = np.array(vertices)
-        edges = np.array(edges)
-        bin_csgraph = utils.create_csgraph(vertices, edges,
-                                           euclidean_weight=False)
-
-        nc, v_lbls = sparse.csgraph.connected_components(bin_csgraph)
-        lbls, count = np.unique(v_lbls, return_counts=True)
-        lbl_order = np.argsort(count)[::-1]
-
-        ind_base = 0
-        for lbl in lbls[lbl_order]:
-            v_filter = np.flatnonzero(v_lbls == lbl)
-            vertices_f, edges_f, filters = utils.reduce_vertices(vertices,
-                                                                 edges,
-                                                                 v_filter=v_filter,
-                                                                 return_filter_inds=True)
-            vertex_properties_f = {vp_n: np.array(vp_v)[filters[0]]
-                                   for vp_n, vp_v in vertex_properties.items()}
-            edge_properties_f = {ep_n: np.array(ep_v)[filters[1]]
-                                 for ep_n, ep_v in edge_properties.items()}
-
-            self._vertex_components[filters[0]] = lbl
-            self._edge_components[filters[1]] = lbl
-            if root in v_filter:
-                root_f = np.where(root == v_filter)[0][0]
-                self._root = ind_base + root_f
-            else:
-                root_f = None
-            self._vertex_order[v_filter] = ind_base + np.arange(len(vertices_f))
-            ind_base += len(vertices_f)
-            self._skeletons.append(Skeleton(vertices_f, edges_f,
-                                            vertex_properties_f,
-                                            edge_properties_f,
-                                            root=root_f))
-
-        for list_name, indices in vertex_lists.items():
-            self.add_vertex_list(list_name, indices, remap_from_original_order=True)
-
-
-    def __getitem__(self, key):
-        return self._skeletons[key]
-
-    @property
-    def vertices(self):
-        vs_list = [skeleton.vertices for skeleton in self._skeletons]
-        return np.vstack(vs_list)
-    
-    @property
-    def n_vertices(self):
-        return len(self.vertices)
-
-    @property
-    def edges(self):
-        return self._agglomerate_nodes_across_skeletons('edges')
-
-    @property
-    def end_points(self):
-        return self._agglomerate_nodes_across_skeletons('end_points')
-
-    @property
-    def branch_points(self):
-        return self._agglomerate_nodes_across_skeletons('branch_points')
-
-    @property
-    def kdtree(self):
-        if self._kdtree is None:
-            self._kdtree = KDTree(self.vertices)
-        return self._kdtree
-
-    @property
-    def csgraph(self):
-        if self._csgraph is None:
-            self._csgraph = self._create_csgraph()
-        return self._csgraph.copy()
-
-    @property
-    def csgraph_binary(self):
-        if self._csgraph_binary is None:
-            self._csgraph_binary = self._create_csgraph(euclidean_weight=False)
-        return self._csgraph_binary
-
-    @property
-    def vertex_properties(self):
-        vp = {}
-        for vp_name in self._skeletons[0].vertex_properties.keys(): 
-            vp[vp_name] = self._vertex_property(vp_name)
-        return vp
-
-    @property
-    def edge_properties(self):
-        ep = {}
-        for ep_name in self._skeletons[0].edge_properties.keys(): 
-            ep[ep_name] = self._edge_property(ep_name)
-        return ep
-
-
-    @property
-    def root(self):
-        return self._root
-    
-
-    def _vertex_property(self, property_name):
-        vp_list = [skeleton.vertex_properties[property_name]
-                   for skeleton in self._skeletons if len(skeleton.vertices) > 1]
-        return np.concatenate(vp_list)
-
-    def _edge_property(self, property_name):
-        ep_list = [skeleton.edge_properties[property_name]
-                   for skeleton in self._skeletons]
-        return np.concatenate(ep_list)
-
-    def _create_csgraph(self, euclidean_weight=True, directed=False):
-        return utils.create_csgraph(self.vertices, self.edges,
-                                    euclidean_weight=euclidean_weight,
-                                    directed=directed)
-
-    def _agglomerate_nodes_across_skeletons(self, property_name):
-        nodes_stacked = []
-        n_shift = 0
-        for skeleton in self._skeletons:
-            node_inds = getattr(skeleton, property_name)
-            if len(node_inds) > 0:
-                nodes_stacked.append(node_inds + n_shift)
-                n_shift += skeleton.n_vertices
-        if len(nodes_stacked) > 0:
-            return np.concatenate(nodes_stacked)
-        else:
-            return np.array([])
-
-    def add_vertex_list(self, name, vertex_list, remap_from_original_order=False):
-        if remap_from_original_order:
-            self._vertex_lists[name] = self.remap_vertex_list(vertex_list)
-        else:
-            self._vertex_lists[name] = vertex_list
-
-
-    @property
-    def vertex_lists(self):
-        return self._vertex_lists
-
-    def remap_vertex_list(self, vertex_list):
-        '''
-        Given a vertex list from the original coordinates, returns the version
-        for the internally managed vertex list
-        '''
-        new_vertex_list = np.full(len(vertex_list), np.nan)
-        new_vertex_list[~np.isnan(vertex_list)] = np.take(self._vertex_order,
-                                                          vertex_list[~np.isnan(vertex_list)].astype(int))
-        return new_vertex_list
-
+from meshparty import skeleton_io
 
 class Skeleton:
-    def __init__(self, vertices, edges, vertex_properties={},
-                 edge_properties={}, root=None):
+    def __init__(self, vertices, edges, mesh_to_skel_map=None, vertex_properties={},
+                 root=None):
         self._vertices = np.array(vertices)
         self._edges = np.vstack(edges).astype(int)
         self.vertex_properties = vertex_properties
-        self.edge_properties = edge_properties
+        self._mesh_to_skel_map = mesh_to_skel_map
 
         self._root = None
         self._paths = None
+        self._segments = None
+        self._segment_map = None
+
         self._parent_node_array = None
         self._kdtree = None
+        self._pykdtree = None
+
         self._csgraph = None
         self._csgraph_binary = None
         self._branch_points = None
@@ -215,11 +36,27 @@ class Skeleton:
 
     @property
     def vertices(self):
-        return self._vertices.copy()
+        return self._vertices
 
     @property
     def edges(self):
-        return self._edges.copy()
+        return self._edges
+
+    @property
+    def mesh_to_skel_map(self):
+        return self._mesh_to_skel_map
+    
+    @property
+    def segments(self):
+        if self._segments is None:
+            self._segments, self._segment_map = self._compute_segments()
+        return self._segments
+
+    @property
+    def segment_map(self):
+        if self._segment_map is None:
+            self._segments, self._segment_map = self._compute_segments()
+        return self._segment_map
 
     @property
     def csgraph(self):
@@ -252,10 +89,17 @@ class Skeleton:
         return copy(self._root)
 
     @property
+    def pykdtree(self):
+        if self._pykdtree is None:
+            self._pykdtree = pyKDTree(self.vertices)
+        return self._pykdtree
+
+    @property
     def kdtree(self):
         if self._kdtree is None:
-            self._kdtree = KDTree(self.vertices)
+            self._kdtree = spatial.cKDTree(self.vertices)
         return self._kdtree
+    
 
     @property
     def branch_points(self):
@@ -299,9 +143,10 @@ class Skeleton:
         '''
         path = [v_ind]
         ind = v_ind
+        ind = self._parent_node(ind)
         while ind is not None:
-            ind = self._parent_node(ind)
             path.append(ind)
+            ind = self._parent_node(ind)
         return path
 
     def path_length(self, paths=None):
@@ -313,6 +158,8 @@ class Skeleton:
         return L
 
     def reroot(self, new_root):
+        if new_root > self.n_vertices:
+            raise ValueError('New root must be between 0 and n_vertices-1')
         self._root = new_root
         self._parent_node_array = np.full(self.n_vertices, None)
 
@@ -344,6 +191,8 @@ class Skeleton:
         self._csgraph = None
         self._csgraph_binary = None
         self._paths = None
+        self._segments = None
+        self._segment_map = None
 
     def _create_csgraph(self,
                         directed=True,
@@ -361,7 +210,7 @@ class Skeleton:
     def _single_path_length(self, path):
         xs = self.vertices[path[:-1]]
         ys = self.vertices[path[1:]]
-        return sum(np.linalg.norm(ys-xs))
+        return np.sum(np.linalg.norm(ys-xs, axis=1))
 
     def _compute_paths(self):
         '''
@@ -400,26 +249,40 @@ class Skeleton:
             path.append(n_ind)
         return path, visited
 
-    def _build_swc_array(self, node_labels, radius, xyz_scaling):
-        '''
-        Helper function for producing the numpy table for an swc.        
-        '''
-        ds = self.distance_to_root
-        order_old = np.argsort(ds)
-        new_ids = np.arange(len(ds))
-        order_map = dict(zip(order_old, new_ids))
+    def _compute_segments(self):
+        segments = []
+        segment_map = np.zeros(len(self.vertices))-1
 
-        node_labels = node_labels[order_old]
-        xyz = self.vertices[order_old]
-        radius = radius[order_old]
-        par_ids = np.array([order_map.get(nid, -1) for nid in self._parent_node_array[order_old]])
+        path_queue = self.end_points.tolist()
+        bp_all = self.branch_points
+        bp_seen = []
+        seg_ind = 0
 
-        swc_dat = np.hstack((new_ids[:, np.newaxis],
-                             node_labels[:, np.newaxis],
-                             xyz / xyz_scaling,
-                             radius[:, np.newaxis] / xyz_scaling,
-                             par_ids[:, np.newaxis]))
-        return swc_dat
+        while len(path_queue)>0:
+            ind = path_queue.pop()
+            segment = [ind]
+            ptr = self.path_to_root(ind)
+            if len(ptr)>1:
+                for pind in ptr[1:]:
+                    if pind in bp_all:
+                        segments.append(np.array(segment))
+                        segment_map[segment] = seg_ind
+                        seg_ind += 1
+                        if pind not in bp_seen:
+                            path_queue.append(pind)
+                            bp_seen.append(pind)
+                        break
+                    else:
+                        segment.append(pind)
+                else:
+                    segments.append(np.array(segment))
+                    segment_map[segment] = seg_ind
+                    seg_ind += 1
+            else:
+                segments.append(np.array(segment))
+                segment_map[segment] = seg_ind
+                seg_ind += 1
+        return segments, segment_map.astype(int)
 
     def export_to_swc(self, filename, node_labels=None, radius=None, header=None, xyz_scaling=1000):
         '''
@@ -435,25 +298,8 @@ class Skeleton:
         :param header: Dict, default None. Each key value pair in the dict becomes
                        a parameter line in the swc header.
         :param xyz_scaling: Number, default 1000. Down-scales spatial units from the skeleton's units to
-                            whatever is desired by the swc. E.g.
-
+                            whatever is desired by the swc. E.g. nm to microns has scaling=1000.
         '''
 
-        if header is None:
-            header_string = ''
-        else:
-            header_string = '\n'.join(['{}: {}'.format(k, v) for k, v in header.items()])
-
-        if radius is None:
-            radius = np.full(len(self.vertices), 1000)
-        elif np.issubdtype(type(radius), int):
-            radius = np.full(len(self.vertices), radius)
-
-        if node_labels is None:
-            node_labels = np.full(len(self.vertices), 3)
-
-        swc_dat = self._build_swc_array(node_labels, radius, xyz_scaling)
-
-        with open(filename, 'w') as f:
-            np.savetxt(f, swc_dat, delimiter=' ', header=header_string, comments='#',
-                       fmt=['%i', '%i', '%.3f', '%.3f', '%.3f', '%.3f', '%i'])
+        skeleton_io.export_to_swc(self, filename, node_labels=node_labels,
+                                  radius=radius, header=header, xyz_scaling=xyz_scaling)

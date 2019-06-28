@@ -17,7 +17,7 @@ io_file_exist = [True, False]
 def write_meshobject_h5(mesh, filename, overwrite):
     trimesh_io.write_mesh_h5(filename, mesh.vertices,
                              mesh.faces, mesh.face_normals,
-                             graph_edges=mesh.graph_edges,
+                             link_edges=mesh.link_edges,
                              overwrite=overwrite)
 
 
@@ -47,16 +47,16 @@ def test_file_read_write(
     #   obj always overwrites
     if file_exist and not overwrite_flag and file_ext == '.h5':
         with pytest.raises(OSError):
-            mvtx, mfaces, mnormals, mgraph_edges = trimesh_io.read_mesh(fname)
+            mvtx, mfaces, mnormals, link_edges, node_mask = trimesh_io.read_mesh(fname)
     else:
-        mvtx, mfaces, mnormals, mgraph_edges = trimesh_io.read_mesh(fname)
+        mvtx, mfaces, mnormals, mlink_edges, node_mask = trimesh_io.read_mesh(fname)
         assert numpy.array_equal(mvtx, m.vertices)
         assert numpy.array_equal(mfaces, m.faces)
 
         # not sure why, but normals are not being returned in obj
         if file_ext != '.obj':
             assert numpy.array_equal(mnormals, m.face_normals)
-            assert numpy.array_equal(mgraph_edges, m.graph_edges)
+            assert numpy.array_equal(mlink_edges, m.link_edges)
 
 
 @pytest.mark.parametrize("indicator_fstring,propstring", [

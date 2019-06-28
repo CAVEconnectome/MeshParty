@@ -4,16 +4,6 @@ import networkx as nx
 import pcst_fast
 
 
-def large_component_filter(mesh, size_thresh=1000):
-    '''
-    Creates a mesh filter without any connected components less than a size threshold
-    '''
-    cc, labels = sparse.csgraph.connected_components(mesh.csgraph, directed=False)
-    uids, counts = np.unique(labels, return_counts=True)
-    good_labels = uids[counts>size_thresh]
-    return np.in1d(labels, good_labels)
-
-
 def connected_component_slice(G, ind=None, return_boolean=False):
     '''
     Gets a numpy slice of the connected component corresponding to a
@@ -163,8 +153,8 @@ def create_csgraph(vertices, edges, euclidean_weight=True, directed=False):
         weights = np.linalg.norm(xs-ys, axis=1)
         use_dtype = np.float32
     else:   
-        weights = np.ones((len(edges),)).astype(bool)
-        use_dtype = bool 
+        weights = np.ones((len(edges),)).astype(np.int8)
+        use_dtype = np.int8 
 
     if directed:
         edges = edges.T
@@ -308,8 +298,8 @@ def nanfilter_shapes(node_ids, shapes):
     '''
     Wraps filter_shapes to handle shapes with nans.
     '''
-    if not any(np.isnan(shapes)):
-        return filter_shapes(node_ids, shapes)
+    # if not any(np.isnan(shapes)):
+    #     return filter_shapes(node_ids, shapes)[0].reshape(shapes.shape)
 
     long_shapes = shapes.ravel()
     ind_rows = ~np.isnan(long_shapes)

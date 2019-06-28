@@ -4,7 +4,7 @@ from meshparty import utils
 import pykdtree
 import time
 import numpy as np
-
+from meshparty import trimesh_io
 
 def np_shared_rows(A,B):
     A_flat = np.ascontiguousarray(np.sort(A, axis=1)).view(dtype=('i8,i8'))
@@ -41,7 +41,7 @@ def find_all_close_edges(vertices, labels, ccs, distance_upper_bound=2500):
             all_edges.append(find_close_edges_sym(vertices, labels, i, j, distance_upper_bound))
     return np.vstack(all_edges)
 
-def find_edges_to_link(mesh, vert_ind_a, vert_ind_b, distance_upper_bound=2500):
+def find_edges_to_link(mesh, vert_ind_a, vert_ind_b, distance_upper_bound=2500, verbose=False):
     '''Given a mesh and two points on that mesh
     find a way to add edges to the  mesh graph so that those indices
     are on the same connected component '''
@@ -84,10 +84,12 @@ def find_edges_to_link(mesh, vert_ind_a, vert_ind_b, distance_upper_bound=2500):
     # if there is now way to do this, fall back to adding all 
     # edges that are close
     if len(new_edges)==0:
-        print('finding all close edges')
-        new_edges =find_all_close_edges(mask_mesh.vertices, labels, ccs,
+        if verbose:
+            print('finding all close edges')
+        new_edges = find_all_close_edges(mask_mesh.vertices, labels, ccs,
                                         distance_upper_bound=distance_upper_bound)
-        print(f'new_edges shape {new_edges.shape}')
+        if verbose:
+            print(f'new_edges shape {new_edges.shape}')
     # if there are still not edges we have a problem
     if len(new_edges)==0:
         raise Exception('no close edges found')
@@ -117,7 +119,8 @@ def find_edges_to_link(mesh, vert_ind_a, vert_ind_b, distance_upper_bound=2500):
     good_edges = np_shared_rows(path_as_edges, new_edges)
     good_edges = np.sort(path_as_edges[good_edges], axis=1)
     timings['remap answers']=time.time()-start_time
-    print(timings)
+    if verbose:
+        print(timings)
     return mask_mesh.map_indices_to_unmasked(good_edges)
     
 
@@ -172,6 +175,10 @@ def merge_points_to_merge_indices(mesh, merge_event_points, close_map_distance =
 
     # we want to reconsider the other end of the merge edge and get their xyz coords
     far_points = merge_event_points[remap_merges,(1-close_merge)[remap_merges],:]
+    # If no candidates are available, return an empty array
+    if len(far_points)==0:
+        return np.zeros((0,2))
+
     # this is the connected component label for the close_merge end of the merge point
     closest_label = cc_labels[np.arange(0,len(cc_labels)), close_merge]
     # use a query_ball_point to find all the potential 'close' partners to the 
@@ -199,37 +206,47 @@ def merge_points_to_merge_indices(mesh, merge_event_points, close_map_distance =
             # into the mesh vertex index.
             close_inds[ind] = mesh.faces[arr[np.where(other_comp_points)[0][np.argmin(d)]],0]
             # reset the is_join_merge index to True for this case
-            is_join_merge[ind] = True
+            is_join_merge[remap_merges[k]] = True
 
     # return the close_inds reshaped into Nmerge x 2, and filtered to only be those
     # that are connected differente connected components    
     return close_inds.reshape((Nmerge,2))[is_join_merge,:]
 
 def get_link_edges(mesh, seg_id, dataset_name, close_map_distance = 300,
-                   server_address="https://www.dynamicannotationframework.com"):
+                   server_address="https://www.dynamicannotationframework.com", verbose=False):
     # initialize a chunkedgraph client
     cg_client = chunkedgraph.ChunkedGraphClient(server_address=server_address,
                                                 dataset_name=dataset_name)
     
-    # get the merge log 
+    # get the merge log
+    if type(seg_id) is np.int64:
+        seg_id = int(seg_id)    
     merge_log = cg_client.get_merge_log(seg_id)
     # convert the coordinates to numpy array and count them
     merge_event_points = np.array(merge_log['merge_edge_coords'])
-    
     # map these merge edge coordinates to indices on the mesh
-    merge_edge_inds = merge_points_to_merge_indices(mesh,
-                                                    merge_event_points,
-                                                    close_map_distance = close_map_distance)
+    if len(merge_event_points)>0:
+        merge_edge_inds = merge_points_to_merge_indices(mesh,
+                                                        merge_event_points,
+                                                        close_map_distance = close_map_distance)
+    else:
+        merge_edge_inds=[]
 
+    if verbose:
+        print(len(merge_edge_inds), len(merge_event_points))
     # iterate over these merge indices and find the minimal edge
     # that links these two connected componets
     total_link_edges=[]
+
     for merge_ind in merge_edge_inds:
         link_edges = find_edges_to_link(mesh, merge_ind[0], merge_ind[1])
         total_link_edges.append(link_edges)
     
     # reshape the combined result into a M x 2 matrix
-    link_edges = np.concatenate(total_link_edges)
+    if len(total_link_edges)>0:
+        link_edges = np.concatenate(total_link_edges)
+    else:
+        link_edges = np.array([])
     link_edges = link_edges.reshape((len(link_edges), 2))
 
     return link_edges
