@@ -839,13 +839,6 @@ class Mesh(trimesh.Trimesh):
         self.update_faces(faces_to_keep)
         self.link_edges = self.filter_unmasked_indices(link_edge_unmask)
 
-        return Mesh(vertices_unmask,
-                    faces_unmask,
-                    apply_mask=True,
-                    node_mask=joint_mask,
-                    unmasked_size=self.unmasked_size,
-                    link_edges=link_edges_unmask,
-                    **kwargs)
 
     def map_indices_to_unmasked(self, unmapped_indices):
         '''
