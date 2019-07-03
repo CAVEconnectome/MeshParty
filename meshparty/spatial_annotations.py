@@ -1,8 +1,5 @@
 import numpy as np
 from meshparty import utils, skeleton
-from meshparty.trimesh_io import MaskedMesh
-from scipy import spatial, sparse
-from pykdtree.kdtree import KDTree as pyKDTree
 from copy import copy
 
 
@@ -11,7 +8,7 @@ def annotation_location_indices(mesh, anno_df, pos_column, sk_map=None, max_dist
     '''
     For a synapse dataframe associated with a given neuron, find the mesh indices associated with each synapse.
 
-    :param mesh: trimesh Mesh or MaskedMesh
+    :param mesh: trimesh Mesh
     :param synapse_df: DataFrame with at least one position column
     :param pos_column: string, column of dataframe to use for annotation positions
     :param sk_map: Optional, Numpy array with skeleton vertex index for every mesh vertex index.
@@ -26,12 +23,9 @@ def annotation_location_indices(mesh, anno_df, pos_column, sk_map=None, max_dist
             return np.array([]), np.array([])
 
     anno_positions = np.vstack(anno_df[pos_column].values) * voxel_resolution
-    ds, mesh_inds = mesh.pykdtree.query(anno_positions)
+    ds, mesh_inds = mesh.kdtree.query(anno_positions)
     mesh_inds[ds>max_dist] = -1
     
-    if type(mesh) is MaskedMesh:
-        mesh_inds = mesh.map_indices_to_unmasked(mesh_inds)
-
     if sk_map is None:
         return mesh_inds
     else:
