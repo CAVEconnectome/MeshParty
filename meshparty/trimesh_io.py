@@ -818,11 +818,11 @@ class Mesh(trimesh.Trimesh):
         else:
             raise ValueError('Incompatible shape. Must be either original length or current length of vertices.')
 
-        new_mesh = MaskedMesh(self.vertices,
-                              self.faces,
-                              node_mask=joint_mask,
-                              unmasked_size=self.unmasked_size,
-                              **kwargs)
+        new_mesh = Mesh(self.vertices,
+                        self.faces,
+                        node_mask=joint_mask,
+                        unmasked_size=self.unmasked_size,
+                        **kwargs)
         link_edge_unmask = self.map_indices_to_unmasked(self.link_edges)        
         new_mesh._apply_new_mask_in_place(new_mask, link_edge_unmask)
         return new_mesh
