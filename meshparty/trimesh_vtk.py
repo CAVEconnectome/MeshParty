@@ -507,7 +507,7 @@ def linked_point_actor(vertices_a, vertices_b,
 
     link_actor = vtk.vtkActor()
     link_actor.SetMapper(mapper)
-    link_actor.GetProperty().SetLineWidth(linewidth)
+    link_actor.GetProperty().SetLineWidth(line_width)
     link_actor.GetProperty().SetColor(color)
     link_actor.GetProperty().SetOpacity(opacity)
     return link_actor
