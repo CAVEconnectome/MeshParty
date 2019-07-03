@@ -486,9 +486,9 @@ def point_cloud_actor(xyz,
     return actor
 
 
-def vtk_linked_point_actor(vertices_a, vertices_b,
-                           inds_a=None, inds_b=None,
-                           linewidth=1, color=(0, 0, 0), opacity=0.2):
+def linked_point_actor(vertices_a, vertices_b,
+                       inds_a=None, inds_b=None,
+                       line_width=1, color=(0, 0, 0), opacity=0.2):
     if inds_a is None:
         inds_a = np.arange(len(vertices_a))
     if inds_b is None:
