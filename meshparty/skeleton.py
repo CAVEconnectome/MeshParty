@@ -273,20 +273,6 @@ class Skeleton:
             seen[ptr] = True
         return cover_paths
 
-    def _unvisited_path_on_tree(self, ind, visited):
-        '''
-        Find path from ind to a visited node along G
-        Assumes that G[i,j] means i->j
-        '''
-        n_ind = ind
-        path = [n_ind]
-
-        while not visited[n_ind]:
-            visited[n_ind] = True
-            n_ind = self.parent_node(n_ind)
-            path.append(n_ind)
-        return path, visited
-
     def _compute_segments(self):
         segments = []
         segment_map = np.zeros(len(self.vertices))-1
