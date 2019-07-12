@@ -860,7 +860,7 @@ class Mesh(trimesh.Trimesh):
         '''
         return unmasked_boolean[self.node_mask]
 
-    def filter_unmasked_indices(self, unmasked_shape, mask=None, include_outside=False):
+    def filter_unmasked_indices(self, unmasked_shape, mask=None):
         if mask is None:
             mask = self.node_mask
         new_index = np.zeros(mask.shape)-1
@@ -872,11 +872,7 @@ class Mesh(trimesh.Trimesh):
         else:
             keep_rows = new_shape>=0
 
-        if include_outside:
-            new_shape[~keep_rows] = np.nan
-            return new_shape
-        else:
-            return new_shape[keep_rows]
+        return new_shape[keep_rows]
 
     def write_to_file(self, filename):
         """ Exports the mesh to any format supported by trimesh
