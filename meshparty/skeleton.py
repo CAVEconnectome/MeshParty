@@ -196,6 +196,7 @@ class Skeleton:
                                     euclidean_weight=euclidean_weight,
                                     directed=directed)
 
+
     def downstream_nodes(self, vinds):
         if np.isscalar(vinds):
             vinds = [vinds]
@@ -205,13 +206,14 @@ class Skeleton:
 
         dns = []
         for vind in vinds:
-            g = self.cut_graph(vinds)
-            _, lbls = sparse.csgraph.connected_components(g)
-            dns.append(np.flatnonzero(lbls==lbls[vind]))
-
+            g = self.cut_graph(vind)
+            d = sparse.csgraph.dijkstra(g.T, indices=[vind])
+            dns.append(np.flatnonzero(~np.isinf(d[0])))
+        
         if return_single:
             dns=dns[0]
         return dns
+
 
     def child_nodes(self, vinds):
         if np.isscalar(vinds):
