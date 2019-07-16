@@ -92,6 +92,10 @@ def test_swc_write(simple_skeleton_with_properties, tmp_path):
     sk_pd = pd.read_csv(fname, sep=' ', header=None, names=['index', 'type', 'x', 'y', 'z', 'r', 'parent'])
     assert sk_pd.loc[3].parent == 2 
 
+    sk.export_to_swc(fname, radius=sk.vertex_properties['test'], node_labels=labels, xyz_scaling=1)
+    sk_pd = pd.read_csv(fname, sep=' ', header=None, names=['index', 'type', 'x', 'y', 'z', 'r', 'parent'])
+    assert sk_pd.loc[3].parent == 2 
+
 
 def test_skeleton_h5_read(full_cell_skeleton):
     print(full_cell_skeleton.root)

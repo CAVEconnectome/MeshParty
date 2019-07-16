@@ -196,6 +196,7 @@ class Skeleton:
                                     euclidean_weight=euclidean_weight,
                                     directed=directed)
 
+
     def downstream_nodes(self, vinds):
         if np.isscalar(vinds):
             vinds = [vinds]
@@ -205,13 +206,14 @@ class Skeleton:
 
         dns = []
         for vind in vinds:
-            g = self.cut_graph(vinds)
-            _, lbls = sparse.csgraph.connected_components(g)
-            dns.append(np.flatnonzero(lbls==lbls[vind]))
-
+            g = self.cut_graph(vind)
+            d = sparse.csgraph.dijkstra(g.T, indices=[vind])
+            dns.append(np.flatnonzero(~np.isinf(d[0])))
+        
         if return_single:
             dns=dns[0]
         return dns
+
 
     def child_nodes(self, vinds):
         if np.isscalar(vinds):
@@ -272,20 +274,6 @@ class Skeleton:
             cover_paths.append(ptr[~seen[ptr]])
             seen[ptr] = True
         return cover_paths
-
-    def _unvisited_path_on_tree(self, ind, visited):
-        '''
-        Find path from ind to a visited node along G
-        Assumes that G[i,j] means i->j
-        '''
-        n_ind = ind
-        path = [n_ind]
-
-        while not visited[n_ind]:
-            visited[n_ind] = True
-            n_ind = self.parent_node(n_ind)
-            path.append(n_ind)
-        return path, visited
 
     def _compute_segments(self):
         segments = []
