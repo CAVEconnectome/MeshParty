@@ -133,8 +133,8 @@ def cv(cv_path):
         chunk_size=[512, 512, 16],
         volume_size=[512, 512, 512]
     )
-    cv = cloudvolume.CloudVolumeFactory(cloudurl=cv_path,
-                                        info=info)
+    cv = cloudvolume.CloudVolume(cloudpath=cv_path,
+                                 info=info)
     cv.commit_info()
 
     yield cv

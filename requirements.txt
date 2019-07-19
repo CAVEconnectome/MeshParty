@@ -6,12 +6,10 @@ sklearn
 networkx
 multiwrapper
 trimesh
--e git+https://github.com/seung-lab/cloud-volume.git@graphene#egg=cloud-volume
+cloud-volume>=0.53.6
 pymeshfix>=0.12.3
 pykdtree
 vtk
 pcst_fast
-annotationframeworkclient>=0.2.0
-pyembree
 shapely
 imageio

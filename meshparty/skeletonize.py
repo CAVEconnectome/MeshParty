@@ -8,9 +8,11 @@ import pcst_fast
 from tqdm import trange, tqdm
 from meshparty.trimesh_io import Mesh
 from meshparty.skeleton import Skeleton
-from trimesh.ray import ray_pyembree
 from collections import defaultdict
 from pykdtree.kdtree import KDTree as pyKDTree
+import trimesh.ray
+from trimesh.ray import ray_pyembree
+
 
 def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True,
                      invalidation_d=12000, smooth_vertices=False, compute_radius=True,
@@ -91,10 +93,11 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True,
     if compute_original_index is True:
         props['mesh_index'] = np.append(mesh.map_indices_to_unmasked(orig_skel_index[vert_filter]), -1)
     if compute_radius is True:
+
         rs = ray_trace_distance(orig_skel_index[vert_filter], mesh)
         rs = np.append(rs, soma_radius)
         props['rs'] = rs
-    
+ 
     sk = Skeleton(new_v, new_e, mesh_to_skel_map=skel_map_full_mesh, vertex_properties=props, root=root_ind)
     return sk
 
@@ -567,6 +570,9 @@ def ray_trace_distance(vertex_inds, mesh, max_iter=10, rand_jitter=0.001, verbos
     '''
     Compute distance to opposite side of the mesh for specified vertex indices on the mesh.
     '''
+    if not trimesh.ray.has_embree:
+        logging.warning("calculating rays without pyembree, conda install pyembree for large speedup")
+
     if ray_inter is None:
         ray_inter = ray_pyembree.RayMeshIntersector(mesh)
 
