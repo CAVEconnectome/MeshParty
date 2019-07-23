@@ -83,9 +83,9 @@ def read_mesh(filename):
     if filename.endswith(".obj"):
         with open(filename,'r') as fp:
             mesh_d = exchange.obj.load_obj(fp)
-        vertices = mesh_d[0]['vertices']
-        faces =  mesh_d[0]['faces']
-        normals = mesh_d[0].get('normals', None)
+        vertices = mesh_d['vertices']
+        faces =  mesh_d['faces']
+        normals = mesh_d.get('normals', None)
         link_edges = None
         node_mask = None
     elif filename.endswith(".h5"):
