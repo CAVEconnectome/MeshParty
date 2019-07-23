@@ -173,7 +173,9 @@ def merge_points_to_merge_indices(mesh, merge_event_points, close_map_distance =
     # but ended up being on the same connected component
     # these are remapping candidates
     remap_merges = np.where(close_mapped & ~is_join_merge)[0]
-
+    if (np.sum(remap_merges)==0):
+        return close_inds.reshape((Nmerge,2))[is_join_merge,:]
+    
     # pick out the coordinates of our candidates
     merge_coords = merge_event_points[close_mapped,:,:]
     # figure out which of the endpoint of the merge edge was the closest one

@@ -233,6 +233,9 @@ def test_masked_mesh(cv_path, full_cell_mesh_id, full_cell_soma_pt, tmpdir):
     ds = np.linalg.norm(mmesh.vertices - full_cell_soma_pt, axis=1)
     soma_mesh = mmesh.apply_mask(ds<15000)
 
+    is_big = mesh_filters.filter_largest_component(soma_mesh)
+    soma_mesh = soma_mesh.apply_mask(is_big)
+    
     ds = np.linalg.norm(soma_mesh.vertices - full_cell_soma_pt, axis=1)
     double_soma_mesh = soma_mesh.apply_mask(ds<10000)
 
