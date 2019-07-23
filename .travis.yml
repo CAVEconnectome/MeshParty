@@ -32,6 +32,7 @@ install:
   - pip install codecov numpy cython --upgrade
   - pip install -r requirements.txt
   - pip install -r test_requirements.txt
+  - pip install -r optional_requirements.txt
 script:
   - python setup.py test -a test # or py.test for Python versions 3.5 and below
 after_success:
