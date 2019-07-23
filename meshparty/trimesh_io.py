@@ -543,6 +543,7 @@ class Mesh(trimesh.Trimesh):
 
         dists, node_ids = self.kdtree.query(center_coords, sample_n_points,
                                             distance_upper_bound=max_dist)
+
         if n_points is not None:
             if sample_n_points > n_points:
                 if fisheye:
@@ -606,6 +607,8 @@ class Mesh(trimesh.Trimesh):
 
     def get_local_view(self, n_points=None, max_dist=np.inf,
                        sample_n_points=None,
+                       adapt_unit_sphere_norm=False,
+                       fisheye=False,
                        pc_align=False, center_node_id=None,
                        center_coord=None, method="kdtree", verbose=False,
                        return_node_ids=False, svd_solver="auto",
@@ -626,6 +629,8 @@ class Mesh(trimesh.Trimesh):
                                     pc_align=pc_align,
                                     center_node_ids=[center_node_id],
                                     center_coords=[center_coord],
+                                    adapt_unit_sphere_norm=adapt_unit_sphere_norm,
+                                    fisheye=fisheye,
                                     verbose=verbose,
                                     return_node_ids=return_node_ids,
                                     svd_solver=svd_solver,
