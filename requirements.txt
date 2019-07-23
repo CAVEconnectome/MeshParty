@@ -6,7 +6,7 @@ sklearn
 networkx
 multiwrapper
 cloud-volume>=0.53.6
-trimesh>=2.38.42<3.0
+trimesh>=3.0.14
 pymeshfix>=0.12.3
 pykdtree
 vtk

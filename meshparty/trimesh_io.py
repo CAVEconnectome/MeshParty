@@ -82,7 +82,7 @@ def read_mesh(filename):
 
     if filename.endswith(".obj"):
         with open(filename,'r') as fp:
-            mesh_d = exchange.wavefront.load_wavefront(fp)
+            mesh_d = exchange.obj.load_obj(fp)
         vertices = mesh_d[0]['vertices']
         faces =  mesh_d[0]['faces']
         normals = mesh_d[0].get('normals', None)
