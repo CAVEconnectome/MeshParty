@@ -101,7 +101,7 @@ def _download_meshes_thread(args):
     seg_ids, cv_path, target_dir, fmt, overwrite, \
         merge_large_components, stitch_mesh_chunks, map_gs_to_https = args
 
-    cv = cloudvolume.CloudVolumeFactory(cv_path, map_gs_to_https=map_gs_to_https)
+    cv = cloudvolume.CloudVolume(cv_path, use_https=map_gs_to_https)
 
     for seg_id in seg_ids:
         print('downloading {}'.format(seg_id))
@@ -219,8 +219,8 @@ class MeshMeta(object):
     @property
     def cv(self):
         if self._cv is None and self.cv_path is not None:
-            self._cv = cloudvolume.CloudVolumeFactory(self.cv_path, parallel=10,
-                                        map_gs_to_https=self._map_gs_to_https)
+            self._cv = cloudvolume.CloudVolume(self.cv_path, parallel=10,
+                                               use_https=self._map_gs_to_https)
 
         return self._cv
 
