@@ -114,11 +114,11 @@ def _download_meshes_thread(args):
         try:
             cv_mesh = cv.mesh.get(seg_id, remove_duplicate_vertices=False)
 
-            faces = np.array(cv_mesh["faces"])
+            faces = np.array(cv_mesh.faces)
             if len(faces.shape) == 1:
                 faces = faces.reshape(-1, 3)
 
-            mesh = Mesh(vertices=cv_mesh["vertices"],
+            mesh = Mesh(vertices=cv_mesh.vertices,
                         faces=faces,
                         process=False)
 
@@ -283,11 +283,11 @@ class MeshMeta(object):
 
             if seg_id not in self._mesh_cache or force_download is True:
                 cv_mesh = self.cv.mesh.get(seg_id, remove_duplicate_vertices=False)
-                faces = np.array(cv_mesh["faces"])
+                faces = np.array(cv_mesh.faces)
                 if (len(faces.shape) == 1):
                     faces = faces.reshape(-1, 3)
 
-                mesh = Mesh(vertices=cv_mesh["vertices"],
+                mesh = Mesh(vertices=cv_mesh.vertices,
                             faces=faces)
 
                 if cache_mesh and len(self._mesh_cache) < self.cache_size:
