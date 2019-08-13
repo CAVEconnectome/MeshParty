@@ -5,6 +5,12 @@ from skeleton_io_test import full_cell_skeleton
 from basic_test import full_cell_mesh_with_links
 
 
+def test_mesh_csgraph(full_cell_mesh, full_cell_mesh_with_links):
+    try_csgraph = full_cell_mesh.csgraph
+    assert True
+    try_csgraph_links = full_cell_mesh_with_links.csgraph
+    assert True
+
 
 def test_skeleton_quality(full_cell_skeleton, full_cell_mesh_with_links):
     sk = full_cell_skeleton
