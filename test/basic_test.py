@@ -74,8 +74,8 @@ def full_cell_mesh():
 @pytest.fixture(scope='session')
 def mesh_link_edges():
     filepath = 'test/test_files/link_edges_for_mesh.npy'
-    return np.load(filepath)
-
+    link_edges = np.load(filepath)
+    yield link_edges
 
 @contextlib.contextmanager
 def build_basic_cube_mesh():
