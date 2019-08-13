@@ -192,25 +192,3 @@ def pblast_score_sliding(data, window=400, interval=50, p_ratio=DEFAULT_P_RATIO,
             if new_pscore < worst_pscore:
                 worst_pscore = new_pscore
         return worst_pscore
-
-
-def find_mixed_segments(pscore, sk, pscore_fail=0):
-    is_good_score = np.zeros(len(sk.vertices))
-    is_good_pot = np.zeros(len(sk.vertices))
-
-    for ii, ep in enumerate(sk.end_points):
-        ptr = sk.path_to_root(ep)
-        is_good_pot[ptr] += 1
-        if pscore[ii] > pscore_fail:
-            is_good_score[ptr] += 1
-
-    mixed_segs = []
-    for jj, seg in enumerate(sk.segments):
-        if len(seg)>1:
-            end_bad = is_good_score[seg[0]]==0
-            start_ind = sk.parent_node(seg[-1])
-            start_mixed = is_good_score[start_ind] > 0 and is_good_score[start_ind] < is_good_pot[start_ind]
-            if end_bad and start_mixed:
-                mixed_segs.append(jj)
-
-    return mixed_segs
