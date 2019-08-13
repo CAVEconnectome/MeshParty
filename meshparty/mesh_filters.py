@@ -49,33 +49,6 @@ def filter_largest_component(mesh):
     max_label = np.argmax(counts)
     return labels==max_label
 
-# def filter_large_component(mesh, size_thresh=1000):
-#     '''
-#     Returns a mesh filter without any connected components less than a size threshold
-
-#     :param mesh: Trimesh-like mesh with N vertices
-#     :param size_thresh: Integer, min size of a component to keep. Optional, default=1000.
-#     :returns: N-length boolean array
-#     '''
-#     cc, labels = sparse.csgraph.connected_components(mesh.csgraph, directed=False)
-#     uids, counts = np.unique(labels, return_counts=True)
-#     good_labels = uids[counts>size_thresh]
-#     return np.in1d(labels, good_labels)
-
-
-# def filter_small_component(mesh, size_thresh=1000):
-#     '''
-#     Returns a mesh filter without any connected components less than a size threshold
-
-#     :param mesh: Trimesh-like mesh with N vertices
-#     :param size_thresh: Integer, min size of a component to keep. Optional, default=1000.
-#     :returns: N-length boolean array
-#     '''
-#     cc, labels = sparse.csgraph.connected_components(mesh.csgraph, directed=False)
-#     uids, counts = np.unique(labels, return_counts=True)
-#     good_labels = uids[counts<size_thresh]
-#     return np.in1d(labels, good_labels)
-
 
 def filter_spatial_distance_from_points(mesh, pts, d_max):
     close_enough = np.full((len(mesh.vertices), len(pts)), False)

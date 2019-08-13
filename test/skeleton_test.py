@@ -75,20 +75,20 @@ def test_sk_csgraph(simple_skeleton):
 def test_branch_and_endpoints(full_cell_skeleton):
     sk = full_cell_skeleton
 
-    assert len(sk.end_points) == 80
-    assert sk.n_end_points == 80
-    assert len(sk.branch_points) == 73
-    assert sk.n_branch_points == 73
+    assert len(sk.end_points) == 79 
+    assert sk.n_end_points == 79
+    assert len(sk.branch_points) == 78
+    assert sk.n_branch_points == 78
 
     path = sk.path_to_root(sk.end_points[1])
-    assert np.isclose(sk.path_length([path]), 156245.865, atol=0.01)
+    assert np.isclose(sk.path_length([path]), 340750.5386, atol=0.01)
 
 def test_cover_paths(full_cell_skeleton):
     sk = full_cell_skeleton
     cover_paths = sk.cover_paths
     assert len(np.unique(np.concatenate(cover_paths))) == len(sk.vertices)
     assert cover_paths[0][-1] == sk.root
-    assert len(cover_paths) == 80
+    assert len(cover_paths) == sk.n_end_points
 
 def test_cut_graph(full_cell_skeleton):
     sk = full_cell_skeleton
@@ -109,4 +109,4 @@ def test_child_nodes(full_cell_skeleton):
 def test_downstream_nodes(full_cell_skeleton):
     sk = full_cell_skeleton
     assert len(sk.downstream_nodes(sk.root)) == sk.n_vertices
-    assert len(sk.downstream_nodes(300)) == 135
+    assert len(sk.downstream_nodes(300)) == 43747

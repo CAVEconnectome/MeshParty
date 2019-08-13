@@ -100,4 +100,4 @@ def test_swc_write(simple_skeleton_with_properties, tmp_path):
 def test_skeleton_h5_read(full_cell_skeleton):
     print(full_cell_skeleton.root)
     assert type(full_cell_skeleton) is skeleton.Skeleton
-    assert full_cell_skeleton.root == 42591
+    assert full_cell_skeleton.root == 0
