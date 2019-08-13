@@ -1,7 +1,6 @@
 import numpy as np 
 from scipy import sparse
 import networkx as nx
-import pcst_fast
 
 
 def connected_component_slice(G, ind=None, return_boolean=False):
