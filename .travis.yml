@@ -28,7 +28,8 @@ install:
   - conda info -a
   - conda create -q -n test-env python=$(echo $TRAVIS_PYTHON_VERSION|sed 's/-dev//')
   - source activate test-env
-  - conda install -c conda-forge pyembree vtk cython numpy==1.16.4
+  - conda install -c conda-forge pyembree vtk cython numpy
+  - conda install -c conda-forge scipy
   - pip install codecov --upgrade
   - pip install -r requirements.txt
   - pip install -r test_requirements.txt
