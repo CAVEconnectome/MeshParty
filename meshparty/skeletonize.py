@@ -4,7 +4,6 @@ import time
 from meshparty import trimesh_vtk, utils, mesh_filters
 import pandas as pd
 from pykdtree.kdtree import KDTree
-import pcst_fast
 from tqdm import trange, tqdm
 from meshparty.trimesh_io import Mesh
 from meshparty.skeleton import Skeleton
