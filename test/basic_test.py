@@ -72,12 +72,9 @@ def full_cell_mesh():
         yield m
 
 @pytest.fixture(scope='session')
-def full_cell_mesh_with_links():
+def mesh_link_edges():
     filepath = 'test/test_files/link_edges_for_mesh.npy'
-    link_edges = np.load(filepath)
-    with build_full_cell_mesh() as m:
-        m.link_edges = link_edges
-        yield m
+    return np.load(filepath)
 
 
 @contextlib.contextmanager
