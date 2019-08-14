@@ -99,7 +99,7 @@ def read_mesh(filename):
 def _download_meshes_thread(args):
     """ Helper to Download meshes into target directory """
     seg_ids, cv_path, target_dir, fmt, overwrite, \
-        merge_large_components, stitch_mesh_chunks, map_gs_to_https = args
+        merge_large_components, stitch_mesh_chunks, map_gs_to_https, remove_duplicate_vertices = args
 
     cv = cloudvolume.CloudVolume(cv_path, use_https=map_gs_to_https)
 
@@ -112,7 +112,7 @@ def _download_meshes_thread(args):
         print('file does not exist {}'.format(target_file))
 
         try:
-            cv_mesh = cv.mesh.get(seg_id, remove_duplicate_vertices=False)
+            cv_mesh = cv.mesh.get(seg_id, remove_duplicate_vertices=remove_duplicate_vertices)
 
             faces = np.array(cv_mesh["faces"])
             if len(faces.shape) == 1:
@@ -141,6 +141,7 @@ def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
                     n_threads=1, verbose=False,
                     stitch_mesh_chunks=True, 
                     merge_large_components=False, 
+                    remove_duplicate_vertices=False,
                     map_gs_to_https=True, fmt="hdf5"):
     """ Downloads meshes in target directory (in parallel)
 
@@ -169,7 +170,7 @@ def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
     for seg_id_block in seg_id_blocks:
         multi_args.append([seg_id_block, cv_path, target_dir, fmt,
                            overwrite, merge_large_components, stitch_mesh_chunks,
-                            map_gs_to_https])
+                            map_gs_to_https, remove_duplicate_vertices])
 
     if n_jobs == 1:
         mu.multiprocess_func(_download_meshes_thread,
@@ -233,6 +234,7 @@ class MeshMeta(object):
              merge_large_components=False,
              stitch_mesh_chunks=True,
              overwrite_merge_large_components=False,
+             remove_duplicate_vertices=False,
              force_download=False):
         """ Loads mesh either from cache, disk or google storage
 
@@ -282,7 +284,7 @@ class MeshMeta(object):
                     return mesh
 
             if seg_id not in self._mesh_cache or force_download is True:
-                cv_mesh = self.cv.mesh.get(seg_id, remove_duplicate_vertices=False)
+                cv_mesh = self.cv.mesh.get(seg_id, remove_duplicate_vertices=remove_duplicate_vertices)
                 faces = np.array(cv_mesh["faces"])
                 if (len(faces.shape) == 1):
                     faces = faces.reshape(-1, 3)
