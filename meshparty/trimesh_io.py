@@ -433,7 +433,13 @@ class Mesh(trimesh.Trimesh):
 
     @caching.cache_decorator
     def graph_edges(self):
-        return np.vstack([self.edges, self.link_edges])
+        # mesh.edges has bidirectional edges, so we need to pass bidirectional link_edges.
+        if len(self.link_edges)>0:
+            link_edges_sym = np.vstack((self.link_edges, self.link_edges[:,[0,1]]))
+            link_edges_sym_unique = np.unique(link_edges_sym, axis=1)
+        else:
+            link_edges_sym_unique = self.link_edges
+        return np.vstack([self.edges, link_edges_sym_unique])
 
     def fix_mesh(self, wiggle_vertices=False, verbose=False):
         """ Executes rudimentary fixing function from pymeshfix
@@ -786,7 +792,8 @@ class Mesh(trimesh.Trimesh):
     def _create_csgraph(self):
         """ Computes csgraph """
         return utils.create_csgraph(self.vertices, self.graph_edges, euclidean_weight=True,
-                                    directed=False)
+                                    directed=True)
+
     @property
     def node_mask(self):
         '''
