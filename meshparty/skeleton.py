@@ -286,6 +286,8 @@ class Skeleton:
 
         while len(path_queue)>0:
             ind = path_queue.pop()
+            if ind == self.root:
+                continue
             segment = [ind]
             ptr = self.path_to_root(ind)
             if len(ptr)>1:
