@@ -280,7 +280,7 @@ def test_link_edges(full_cell_mesh, full_cell_merge_log, full_cell_soma_pt, monk
     skel = skeletonize.skeletonize_mesh(mesh_filter,
                                         invalidation_d=10000,
                                         soma_pt=full_cell_soma_pt)
-    assert(skel.n_branch_points == 83)
+    assert(skel.n_branch_points == 52)
 
 def test_local_mesh(full_cell_mesh):
     vertex = 30000
