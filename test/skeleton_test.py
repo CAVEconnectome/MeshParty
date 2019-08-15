@@ -1,7 +1,8 @@
 import numpy as np
-from meshparty import skeleton
+from meshparty import skeleton, skeleton_quality
 import pytest
 from skeleton_io_test import full_cell_skeleton, simple_skeleton, simple_skeleton_with_properties, simple_verts, simple_edges
+from basic_test import full_cell_mesh, mesh_link_edges
 from scipy.sparse import csgraph
 from copy import deepcopy
 
@@ -110,3 +111,14 @@ def test_downstream_nodes(full_cell_skeleton):
     sk = full_cell_skeleton
     assert len(sk.downstream_nodes(sk.root)) == sk.n_vertices
     assert len(sk.downstream_nodes(300)) == 135
+
+def test_skeleton_quality(full_cell_skeleton, full_cell_mesh, mesh_link_edges):
+    sk = full_cell_skeleton
+    mesh = deepcopy(full_cell_mesh)
+    mesh.link_edges = mesh_link_edges
+    pscore, sk_paths, ms_paths, sk_inds_list, mesh_inds_list, path_distances = \
+                                        skeleton_quality.skeleton_path_quality(sk, mesh, return_path_info=True)
+    assert len(pscore) == len(sk.cover_paths)
+    assert np.isclose(pscore.sum(), 9.9216, 0.001)
+
+
