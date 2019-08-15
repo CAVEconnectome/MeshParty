@@ -435,7 +435,7 @@ class Mesh(trimesh.Trimesh):
     def graph_edges(self):
         # mesh.edges has bidirectional edges, so we need to pass bidirectional link_edges.
         if len(self.link_edges)>0:
-            link_edges_sym = np.vstack((self.link_edges, self.link_edges[:,[0,1]]))
+            link_edges_sym = np.vstack((self.link_edges, self.link_edges[:,[1,0]]))
             link_edges_sym_unique = np.unique(link_edges_sym, axis=1)
         else:
             link_edges_sym_unique = self.link_edges
