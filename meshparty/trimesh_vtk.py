@@ -483,6 +483,7 @@ def point_cloud_actor(xyz,
     
     actor = vtk.vtkActor()
     actor.SetMapper(mapper)
+    actor.GetProperty().SetOpacity(opacity)
     return actor
 
 
