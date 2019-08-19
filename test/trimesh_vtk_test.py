@@ -192,19 +192,22 @@ def test_point_cloud(full_cell_mesh, full_cell_synapses, full_cell_soma_pt, tmp_
     # size points by size, fixed color
     syn_actor = trimesh_vtk.point_cloud_actor(full_cell_synapses['positions'],
                                               size=sizes,
-                                              color=(1,0,0))
+                                              color=(1,0,0),
+                                              opacity=1)
     eval_actor_image([mesh_actor, syn_actor], 'full_cell_with_synapes_size_scaled.png', tmp_path, camera=camera)
 
     # color points by size, mapping sizes
     syn_actor = trimesh_vtk.point_cloud_actor(full_cell_synapses['positions'],
                                             size=500,
-                                            color=np.clip(sizes, 0, 1000))
+                                            color=np.clip(sizes, 0, 1000),
+                                            opacity=1)
     eval_actor_image([mesh_actor, syn_actor], 'full_cell_synapes_colored_size.png', tmp_path, camera=camera)
 
     # color and size points
     syn_actor = trimesh_vtk.point_cloud_actor(full_cell_synapses['positions'],
                                             size=sizes,
-                                            color=np.clip(sizes, 0, 1000))
+                                            color=np.clip(sizes, 0, 1000),
+                                            opacity=1)
     eval_actor_image([mesh_actor, syn_actor], 'full_cell_synapes_colored_and_size.png', tmp_path, camera=camera)
 
     # random colors
@@ -215,14 +218,16 @@ def test_point_cloud(full_cell_mesh, full_cell_synapses, full_cell_soma_pt, tmp_
     
     syn_actor = trimesh_vtk.point_cloud_actor(full_cell_synapses['positions'],
                                             size=500,
-                                            color=rand_colors)
+                                            color=rand_colors,
+                                            opacity=1)
     eval_actor_image([mesh_actor, syn_actor], 'full_cell_synapes_random_colors.png', tmp_path, camera=camera)
 
     # random colors uint8
     rand_colors_uint8 = np.uint8(rand_colors*255)
     syn_actor = trimesh_vtk.point_cloud_actor(full_cell_synapses['positions'],
                                               size=500,
-                                              color=rand_colors_uint8)
+                                              color=rand_colors_uint8,
+                                              opacity=1)
     eval_actor_image([mesh_actor, syn_actor], 'full_cell_synapes_random_colors_uint8.png', tmp_path, camera=camera)
 
     # test failure modes

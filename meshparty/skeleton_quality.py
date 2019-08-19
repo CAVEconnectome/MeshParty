@@ -7,16 +7,61 @@ DEFAULT_P_RATIO = np.array([1.66337261,  1.47190522,  1.60522673,  1.27751097,  
                             -0.0630327 , -1.44133147, -2.25994548, -2.77429373, -2.77863396,
                             -4.52941582, -4.68640886, -5.67060111, -6.41176085, -9.43203527])
 
-def skeleton_path_quality(sk, mesh, skind_to_mind_map, sk_norm, max_graph_dist=10000,
-                          p_ratio=DEFAULT_P_RATIO, bins=DEFAULT_BINS_GRAPH, normalize_to_self=True,
-                          sliding=True, window=400, interval=50, return_path_info=False):
+def skeleton_path_quality(sk, mesh, skind_to_mind_map=None, sk_norm=None, max_graph_dist=10000,
+                          p_ratio=None, bins=None, normalize_to_self=True,
+                          sliding=True, window=400, interval=50, return_path_info=False, filter_skind_map=True):
     '''
-    Compute path quality for all endpoints of a skeletonization.
+    Compute path quality for all endpoints of a skeletonization by comparing paths from skeleton tips to root to
+    the shortest path between the same points along the mesh.
+
+    :param sk: MeshParty Skeleton, derived from the mesh also given as an argument. The skeleton has N_s vertices.
+    :param mesh: MeshParty Mesh. The mesh has N_m vertices.
+    :param skind_to_mind_map: N_s length array or list. Optional, default is None. Each the value of the ith
+                entry is the index of the mesh vertex corresponding to the ith skeleton vertex. If none is given,
+                the value defaults to sk.vertex_properties['mesh_index'], created by default in skeletonization.skeletonize_mesh.
+    :param sk_norm: Float or N_s length array or list. Optional, default is None. A normalization value for the distance
+                between paths to account for different-width neurites. If None is given, the value defaults to 
+                sk.vertex_properties['rs'], the mesh radius value created by default in skeletonization.skeletonize_mesh.
+                If the radius is used, the pre-computed default likelihood ratio/binning.
+    :param max_graph_dist: Float. Optional, default=10000. Values behind this are treated as infinity in distance computations.
+    :param p_ratio: List with M values. Optional, defualt is None. Denotes the log likelihood ratio that a given distance bin came from a matched
+                path pair vs an unmatched path pair.  If None is given, it defaults to the value DEFAULT_P_RATIO above, trained on
+                a collection of paths from seven pyramidal neurons in the Pinky100 dataset.
+    :param bins: List with M+1 values. Optional, default is None. Gives the bin edges for the distances corresponding to the
+                p_ratio values. If None is given, it defaults to DEFAULT_BINS_GRAPH.
+    :param normalize_to_self: Boolean. Optional, default is True. If False, the sum of log likelihoods for path pairs is given.
+                If True, the values are normalized to the best-case scenario of the log-likelihood distane of the skeleton path to itself.
+    :param sliding: Boolean. Optional, default is True. If True, takes the worst score along a sliding window along the paths to avoid
+                path length diluting a small misalignment between paths. If False, the whole paths are used.
+    :param window: Int. Optional, default is 400. The path length (in hops) of the window to use for the sliding quality measure.
+    :param interval: Int. Optional, default is 50. The interval between window starts in teh sliding quality measure.
+    :param return_path_info: Boolean. Optional, default is False. If True, returns a list of path_quality values and the paths themselves.
+                If False, returns only the path quality.
+    :param filter_skind_map: Boolean. Optional, default is True. If True, assumes the skind_to_mind_map is in the indices of the original
+                mesh, not a filtered version. Otherwise, ignores the node_mask. Should be True if using default values for skind_to_mind_map.
+
+    :returns: path_quality (if return_path_info is False)
+              path_quality, sk_paths, ms_paths, sk_inds_list, mesh_inds_list, path_distances (if return_path_info is True)
     '''
+    if skind_to_mind_map is None:
+        skind_to_mind_map = sk.vertex_properties['mesh_index']
+    if sk_norm is None:
+        sk_norm = sk.vertex_properties['rs']
+    elif p_ratio is not None:
+            print('Warning: If sk_norm is not the radius, the default calibration does not apply!')
+
+    if p_ratio is None:
+        p_ratio = DEFAULT_P_RATIO
+
+    if bins is None:
+        bins = DEFAULT_BINS_GRAPH
+
     if type(skind_to_mind_map) is list:
         skind_to_mind_map = np.array(skind_to_mind_map)
     if type(sk_norm) is list:
         sk_norm = np.array(sk_norm)
+    if filter_skind_map is True:
+        skind_to_mind_map = mesh.filter_unmasked_indices(skind_to_mind_map)
     sk_paths, ms_paths, sk_inds_list, mesh_inds_list = compute_path_pairs(sk, mesh, skind_to_mind_map=skind_to_mind_map)
     path_distances = matched_path_distances_mesh(sk_inds_list, mesh_inds_list, skind_to_mind_map, mesh,
                                                  sk_norm=sk_norm, max_dist=max_graph_dist)
@@ -45,11 +90,12 @@ def compute_path_pairs(sk, mesh, skind_to_mind_map=None, return_indices=True):
     :returns: sk_paths ms_paths, sk_path_indices, ms_path_indices
     '''
     end_points = sk.end_points
-    soma_minds = np.flatnonzero(sk.mesh_to_skel_map==sk.root)
+    mesh_to_skel_map = sk.mesh_to_skel_map[mesh.node_mask]
+    root_minds = np.flatnonzero(mesh_to_skel_map==sk.root)
 
     # Compute a minimal set of indices to use in the dijkstra to avoid extra computation if all soma indices are included.
     mesh_vec = np.zeros((len(mesh.vertices),1))
-    mesh_vec[soma_minds] = 1
+    mesh_vec[root_minds] = 1
     meshgraph = mesh.csgraph>0
     soma_boundary_plus_vec = (((meshgraph * mesh_vec)>0).astype(int) - mesh_vec).astype(int)
     soma_boundary_inds = np.flatnonzero(np.logical_and((meshgraph * soma_boundary_plus_vec > 0), mesh_vec>0))
@@ -61,9 +107,9 @@ def compute_path_pairs(sk, mesh, skind_to_mind_map=None, return_indices=True):
         ms_path_indices = []
         sk_path_indices = []
     for sk_ep in sk.end_points:
-        rel_minds = np.flatnonzero(sk.mesh_to_skel_map==sk_ep)
+        rel_minds = np.flatnonzero(mesh_to_skel_map==sk_ep)
         if skind_to_mind_map is None:
-            rel_minds = np.flatnonzero(sk.mesh_to_skel_map==sk_ep)
+            rel_minds = np.flatnonzero(mesh_to_skel_map==sk_ep)
             ms_ep = rel_minds[np.argmin(np.linalg.norm(mesh.vertices[rel_minds] - sk.vertices[sk_ep], axis=1))]
         else:
             ms_ep = skind_to_mind_map[sk_ep]
@@ -146,25 +192,3 @@ def pblast_score_sliding(data, window=400, interval=50, p_ratio=DEFAULT_P_RATIO,
             if new_pscore < worst_pscore:
                 worst_pscore = new_pscore
         return worst_pscore
-
-
-def find_mixed_segments(pscore, sk, pscore_fail=0):
-    is_good_score = np.zeros(len(sk.vertices))
-    is_good_pot = np.zeros(len(sk.vertices))
-
-    for ii, ep in enumerate(sk.end_points):
-        ptr = sk.path_to_root(ep)
-        is_good_pot[ptr] += 1
-        if pscore[ii] > pscore_fail:
-            is_good_score[ptr] += 1
-
-    mixed_segs = []
-    for jj, seg in enumerate(sk.segments):
-        if len(seg)>1:
-            end_bad = is_good_score[seg[0]]==0
-            start_ind = sk.parent_node(seg[-1])
-            start_mixed = is_good_score[start_ind] > 0 and is_good_score[start_ind] < is_good_pot[start_ind]
-            if end_bad and start_mixed:
-                mixed_segs.append(jj)
-
-    return mixed_segs
