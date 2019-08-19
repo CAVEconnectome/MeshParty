@@ -254,8 +254,6 @@ class MeshMeta(object):
             if True: recalculate large components
         :return: Mesh
         """
-        assert filename is not None or \
-            (seg_id is not None and self.cv is not None)
 
         if filename is not None:
             if filename not in self._mesh_cache:
@@ -282,7 +280,7 @@ class MeshMeta(object):
                                      merge_large_components=merge_large_components,
                                      overwrite_merge_large_components=overwrite_merge_large_components)
                     return mesh
-
+            assert (seg_id is not None and self.cv is not None)
             if seg_id not in self._mesh_cache or force_download is True:
                 cv_mesh = self.cv.mesh.get(seg_id, remove_duplicate_vertices=remove_duplicate_vertices)
                 faces = np.array(cv_mesh["faces"])
