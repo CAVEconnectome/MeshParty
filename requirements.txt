@@ -10,7 +10,6 @@ trimesh>=3.0.14
 pymeshfix>=0.12.3
 pykdtree
 vtk
-pcst_fast
 shapely
 imageio
 pandas
