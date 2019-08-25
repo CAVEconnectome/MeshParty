@@ -13,12 +13,47 @@ except ImportError:
 
 
 def np_shared_rows(A,B):
+    """ a utility to find intersection of two arrays
+
+    Parameters
+    ----------
+    A: np.array
+        a Nx2 array of np.int32 values
+    B: np.array
+        a Mx2 array of np.int32 values
+    
+    Returns
+    -------
+    np.array
+        a Kx2 array of np.int32 values where the rows of A were also in B
+    """
     A_flat = np.ascontiguousarray(np.sort(A, axis=1)).view(dtype=('i8,i8'))
     B_flat = np.ascontiguousarray(np.sort(B, axis=1)).view(dtype=('i8,i8')) 
     good_edges = np.where(np.in1d(A_flat, B_flat))[0]
     return good_edges
 
 def find_close_edges(vertices, labels, label_a, label_b):
+    """ a function to find the closest vertex in one compoment for every vertex of another
+    component
+
+    Parameters
+    ----------
+    vertices: np.array
+        a Nx3 array of mesh vertex locations
+    labels: np.array
+        A N np.array of ints across vertices where connected components have the same label
+    label_a: int
+        the label of the first connected component
+    label_b: int
+        the label of the second connected component
+    
+    Returns:
+    np.array
+        close_edges, a Kx2 array (where K is the np.sum(labels==label_a) of vertex indices,
+        where the first column entry is all the vertices in  component a
+        and the second column entry is the index of the vertex in component b that is closest
+        to the vertex in the first column.
+    """
     a_inds = np.where(labels==label_a)[0]
     b_inds = np.where(labels==label_b)[0]
     b_tree = spatial.cKDTree(vertices[b_inds,:], balanced_tree=False)
@@ -28,6 +63,29 @@ def find_close_edges(vertices, labels, label_a, label_b):
     return np.hstack((a_close[:,np.newaxis],b_close[:,np.newaxis]))
 
 def find_close_edges_sym(vertices, labels, label_a, label_b):
+    """ a function to find the mutually closest vertices between two compoments of a mesh
+    meaning.. vertex 1 is the closest vertex from component a to vertex 2
+    and vertex 2 is the closest vertex in component b to vertex 1.
+
+    Parameters
+    ----------
+    vertices: np.array
+        a Nx3 array of mesh vertex locations
+    labels: np.array
+        A N np.array of ints across vertices where connected components have the same label
+    label_a: int
+        the label of the first connected component
+    label_b: int
+        the label of the second connected component
+    
+    Returns:
+    np.array
+        close_edges, a Kx2 array of vertex indices,
+        where the first column entry is an index in component a
+        the second column entry is an index in component b
+        and each vertex is mutually the closest vertex to the other component
+    """
+
     new_edges_a = find_close_edges(vertices,
                                    labels,
                                    label_a,
@@ -40,17 +98,56 @@ def find_close_edges_sym(vertices, labels, label_a, label_b):
     return new_edges_a[is_both,:]
     
 
-def find_all_close_edges(vertices, labels, ccs, distance_upper_bound=2500):
+def find_all_close_edges(vertices, labels, ccs):
+    """ Find all the mutually closest edges between all components of the mesh
+
+    Parameters
+    ----------
+    vertices: np.array
+        a Nx3 array of xyz vertex position
+    labels: np.array
+        a labelling of the vertices that reflect components of the mesh
+    ccs: int
+        the number of connected components in the mesh
+
+    Returns
+    -------
+    np.array
+        a Kx2 array of vertex indices that are mutually closest to each other
+        across all combinations of components
+    """
     all_edges = []
     for i in range(ccs):
         for j in range(i,ccs):
-            all_edges.append(find_close_edges_sym(vertices, labels, i, j, distance_upper_bound))
+            all_edges.append(find_close_edges_sym(vertices, labels, i, j))
     return np.vstack(all_edges)
 
 def find_edges_to_link(mesh, vert_ind_a, vert_ind_b, distance_upper_bound=2500, verbose=False):
     '''Given a mesh and two points on that mesh
     find a way to add edges to the  mesh graph so that those indices
-    are on the same connected component '''
+    are on the same connected component 
+    
+    Parameters
+    ----------
+    mesh: trimesh_io.Mesh
+        a mesh to find edges on
+    vert_ind_a: int
+        one index into mesh.vertices, the first point
+    vert_ind_b: int
+        a second index into mesh.vertices, the second point
+    distance_upper_bound: float
+        a maximum distance to (default 2500 in units of mesh.vertices)
+    verbose: bool
+        whether to print debug info
+
+    Returns
+    -------
+    np.array
+        a Kx2 array of mesh indices that represent edges to add to the mesh to link the two points
+        in a way that creates the shortest path between the points across mututally closest vertices
+        from connected components.. not adding edges if they are larger than distance_upper_bound
+        TODO: distance_upper_bound not presently implemented
+    '''
     timings = {}
     start_time = time.time()
     
@@ -92,8 +189,7 @@ def find_edges_to_link(mesh, vert_ind_a, vert_ind_b, distance_upper_bound=2500, 
     if len(new_edges)==0:
         if verbose:
             print('finding all close edges')
-        new_edges = find_all_close_edges(mask_mesh.vertices, labels, ccs,
-                                        distance_upper_bound=distance_upper_bound)
+        new_edges = find_all_close_edges(mask_mesh.vertices, labels, ccs)
         if verbose:
             print(f'new_edges shape {new_edges.shape}')
     # if there are still not edges we have a problem
@@ -131,7 +227,26 @@ def find_edges_to_link(mesh, vert_ind_a, vert_ind_b, distance_upper_bound=2500, 
     
 
 def merge_points_to_merge_indices(mesh, merge_event_points, close_map_distance = 300):
+    """ function to take merge points in 3d space and find the right mesh.vertices indices
+    filtering out merge events that merge the same component or are far away
 
+    Parameters
+    ----------
+    mesh : trimesh_io.Mesh
+        mesh to map points to
+    merge_event_points: np.array
+        a Nx2x3 matrix of merge points, where the last dimension is xyz
+    close_map_distance: float or int
+        a maximum distance to map points to indices (default 300)
+    
+    Returns
+    -------
+    np.array
+        close_inds, a Mx2 matrix of indices into mesh.vertices
+        M<N because some merge pairs might not have been able to both be mapped 
+        in under close_map_distance, and merge_points that only seem to connect
+        already connected components are not added.
+    """
     Nmerge = merge_event_points.shape[0]
     # find the connected components of the mesh
     ccs, labels = sparse.csgraph.connected_components(mesh.csgraph, return_labels=True)
@@ -223,6 +338,30 @@ def merge_points_to_merge_indices(mesh, merge_event_points, close_map_distance =
 def get_link_edges(mesh, seg_id, dataset_name, close_map_distance = 300,
                    server_address="https://www.dynamicannotationframework.com",
                    verbose=False):
+    """function to get a set of edges that should be added to a mesh
+
+    Parameters
+    ----------
+    mesh : trimesh_io.Mesh
+        the mesh to add edges to
+    seg_id : np.uint64 or int
+        the seg_id to query the PCG endpoint for merges
+    dataset_name: str
+        the name of the dataset to query
+    close_map_distance: int or float
+        the maximum distance to map (default 300 in units of mesh.vertices)
+    server_address: str
+        the url to the root of the framework deployment
+        default "https://www.dynamicannotationframework.com"
+    verbose: bool
+        whether to print debug statements
+
+    Returns
+    -------
+    link_edges, a Kx2 array of mesh.vertices indices representing edges
+    that should be added to the mesh graph
+    """
+
     # initialize a chunkedgraph client
     cg_client = chunkedgraph.ChunkedGraphClient(server_address=server_address,
                                                 dataset_name=dataset_name)
