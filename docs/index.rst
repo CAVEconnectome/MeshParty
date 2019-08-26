@@ -10,6 +10,18 @@ Welcome to MeshParty's documentation!
    :maxdepth: 2
    :caption: Contents:
 
+   includeme
+   guide/loading
+   guide/visualization
+   guide/filtering
+   guide/skeletons
+
+API
+---
+.. toctree::
+   :maxdepth: 2
+   :caption: Contents:
+
    source/meshparty
 
 Indices and tables

@@ -53,3 +53,5 @@ html_static_path = ['_static']
 extensions = ['sphinx.ext.autodoc', 'sphinx.ext.coverage', 'sphinx.ext.napoleon', 'sphinx.ext.viewcode',
     'sphinx.ext.githubpages', 'sphinx.ext.intersphinx']
 autodoc_inherit_docstrings = False
+
+intersphinx_mapping = {'trimesh':('https://trimsh.org/', None)}
