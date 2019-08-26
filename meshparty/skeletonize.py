@@ -105,6 +105,7 @@ def calculate_skeleton_paths_on_mesh(mesh, soma_pt=None, soma_thresh=7500,
                                      large_skel_path_threshold=5000,
                                      cc_vertex_thresh=100,  return_map=False):
     """ function to turn a trimesh object of a neuron into a skeleton
+    
     Parameters
     ----------
     mesh: meshparty.trimesh_io.Mesh
@@ -454,20 +455,31 @@ def smooth_graph(verts, edges, mask=None, neighborhood=2, iterations=100, r=.1):
         calculates the average position of neighboring vertices
         and relaxes the vertices toward that average
 
-        :param verts: a NxK numpy array of vertex positions
-        :param edges: a Mx2 numpy array of vertex indices that are edges
-        :param mask: optional N boolean vector of values to mask
-        the vert locations.  the result will return a result at every vert
-        but the values that are false in this mask will be ignored and not
-        factored into the smoothing.
-        :param neighborhood: an integer of how far in the graph to relax over
-        as being local to any vertex (default = 2)
-        :param iterations: number of relaxation iterations (default = 100)
-        :param r: relaxation factor at each iteration
-        new_vertex = (1-r)*old_vertex*mask + (r+(1-r)*(1-mask))*(local_avg)
+        Parameters
+        ----------
+        verts : numpy.array
+            a NxK numpy array of vertex positions
+        edges : numpy.array
+            a Mx2 numpy array of vertex indices that are edges
+        mask : numpy.array
+            optional N boolean vector of values to mask
+            the vert locations.  the result will return a result at every vert
+            but the values that are false in this mask will be ignored and not
+            factored into the smoothing.
+        neighborhood : int
+            an integer of how far in the graph to relax over
+            as being local to any vertex (default = 2)
+        iterations : int
+            number of relaxation iterations (default = 100)
+        r : float
+            relaxation factor at each iteration
+            new_vertex = (1-r)*old_vertex*mask + (r+(1-r)*(1-mask))*(local_avg)
+            default = .1
 
-        :return: new_verts
-        verts is a Nx3 list of new smoothed vertex positions
+        Returns
+        -------
+        np.array
+            new_verts, a Nx3 list of new smoothed vertex positions
 
     """
     N = len(verts)

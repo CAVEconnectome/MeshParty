@@ -556,7 +556,8 @@ class Mesh(trimesh.Trimesh):
         
     @property
     def link_edges(self):
-        """the extra edges you want to store in the mesh graph, edges will return this plus face_edges"""
+        """numpy.array : a Kx2 set of textra edges you want to store in the mesh graph,
+        :func:`edges` will return this plus :func:`face_edges`"""
         return self._data['link_edges']
 
     @link_edges.setter
@@ -593,22 +594,22 @@ class Mesh(trimesh.Trimesh):
 
     @caching.cache_decorator
     def nxgraph(self):
-        """a networkx graph of the mesh"""
+        """networkx.graph : networkx graph of the mesh"""
         return self._create_nxgraph()
 
     @caching.cache_decorator
     def csgraph(self):
-        """a scipy.sparse.csgraph graph of the mesh"""
+        """scipy.sparse.csgraph : graph of the mesh"""
         return self._create_csgraph()
 
     @caching.cache_decorator
     def pykdtree(self):
-        """a pykdtree KDTree of the mesh vertices"""
+        """pykdtree.KDTree : KDTree of the mesh vertices"""
         return KDTree(self.vertices)
 
     @caching.cache_decorator
     def kdtree(self, balanced_tree=False):
-        """a scipy.spatial.cKDTree kdtree of the mesh vertices
+        """scipy.spatial.cKDTree : kdtree of the mesh vertices
 
         Parameters
         ----------
@@ -624,12 +625,12 @@ class Mesh(trimesh.Trimesh):
 
     @property
     def n_faces(self):
-        """int: how many faces are in the mesh"""
+        """int : how many faces are in the mesh"""
         return len(self.faces)
 
     @caching.cache_decorator
     def graph_edges(self):
-        """the edges from triangle faces, plus the link_edges"""
+        """np.array : a Nx2 of the edges from triangle faces, plus the link_edges"""
         return np.vstack([self.edges, self.link_edges])
 
     def fix_mesh(self, wiggle_vertices=False, verbose=False):
@@ -1232,7 +1233,7 @@ class Mesh(trimesh.Trimesh):
                           overwrite=True)
         else:
             exchange.export.export_mesh(self, filename)
-            
+
     @property
     def index_map(self):
         '''

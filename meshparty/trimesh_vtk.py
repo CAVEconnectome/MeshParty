@@ -15,6 +15,7 @@ def numpy_to_vtk_cells(mat):
     -------
     vtk.vtkCellArray
         representing the numpy array, has the same shaped cell (N) at each of the M indices
+
     """
 
 
@@ -51,6 +52,7 @@ def numpy_rep_to_vtk(vertices, shapes, edges=None):
         a polydata object with point set according to vertices,
     vtkCellArray
         a vtkCellArray of the shapes
+
     """
 
     mesh = vtk.vtkPolyData()
@@ -90,6 +92,7 @@ def graph_to_vtk(vertices, edges):
     ------
     ValueError
         if edges is not 2d or refers to out of bounds vertices
+
     """
     if edges.shape[1] != 2:
         raise ValueError('graph_to_vtk() only works on edge lists')
@@ -102,7 +105,7 @@ def graph_to_vtk(vertices, edges):
 
 
 def trimesh_to_vtk(vertices, tris, graph_edges=None):
-    """Return a `vtkPolyData` representation of a :map:`TriMesh` instance
+    """Return a `vtkPolyData` representation of a :obj:`TriMesh` instance
 
     Parameters
     ----------
@@ -116,13 +119,14 @@ def trimesh_to_vtk(vertices, tris, graph_edges=None):
     Returns
     -------
     vtk_mesh : vtk.vtkPolyData
-        A VTK mesh representation of the mesh :map:`TriMesh` data
+        A VTK mesh representation of the mesh :obj:`trimesh.TriMesh` data
 
     Raises
     ------
     ValueError:
         If the input trimesh is not 3D
         or tris refers to out of bounds vertex indices
+
     """
 
     if tris.shape[1] != 3:
@@ -154,6 +158,7 @@ def vtk_cellarray_to_shape(vtk_cellarray, ncells):
     np.array
         cellarray, a ncells x K array of cells, where K is the
         uniform shape of the cells.  Will error if cells are not uniform
+
     """
     cellarray = vtk_to_numpy(vtk_cellarray)
     cellarray = cellarray.reshape(ncells, int(len(cellarray)/ncells))
@@ -176,6 +181,7 @@ def decimate_trimesh(trimesh, reduction=.1):
         points, the Nx3 mesh of vertices
     np.array
         tris, the Kx3 indices of faces
+
     """
 
     poly = trimesh_to_vtk(trimesh.vertices, trimesh.faces)
@@ -209,6 +215,7 @@ def remove_unused_verts(verts, faces):
         new_verts a filtered set of vertices s
     new_face
         a reindexed set of faces
+
     """
     used_verts = np.unique(faces.ravel())
     new_verts = verts[used_verts, :]
@@ -234,6 +241,7 @@ def poly_to_mesh_components(poly):
         tris, the KxD set of faces (assumes a uniform cellarray)
     np.array
         edges, if exists uses the GetLines to make edges
+
     """
     points = vtk_to_numpy(poly.GetPoints().GetData())
     ntris = poly.GetNumberOfPolys()
@@ -261,7 +269,7 @@ def render_actors(actors, camera=None, do_save=False, filename=None,
     ----------
     actors :  list[vtkActor]
         list of actors to render (see mesh_actor, point_cloud_actor, skeleton_actor)
-    camera : vtkCamera
+    camera : :obj:`vtkCamera`
         camera to use for scence (optional..default to fit scene)
     do_save: bool
         write png image to disk, if false will open interactive window (default False)
@@ -274,9 +282,10 @@ def render_actors(actors, camera=None, do_save=False, filename=None,
 
     Returns
     -------
-    vtk.vtkRenderer
+    :obj:`vtk.vtkRenderer`
         renderer when code was finished
         (useful for retrieving user input camera position ren.GetActiveCamera())
+
     """
     if do_save:
         assert(filename is not None)
@@ -338,7 +347,7 @@ def render_actors(actors, camera=None, do_save=False, filename=None,
 
 def camera_from_quat(pos_nm, orient_quat, camera_distance=10000, ngl_correct=True):
     """define a vtk camera with a particular orientation
-    
+
     Parameters
     ----------
     pos_nm: np.array, list, tuple
@@ -353,6 +362,7 @@ def camera_from_quat(pos_nm, orient_quat, camera_distance=10000, ngl_correct=Tru
     -------
     vtk.vtkCamera
         a vtk camera setup according to these rules
+
     """
     camera = vtk.vtkCamera()
     # define the quaternion in vtk, note the swapped order
@@ -391,6 +401,7 @@ def camera_from_quat(pos_nm, orient_quat, camera_distance=10000, ngl_correct=Tru
 
 def camera_from_ngl_state(state_d, zoom_factor=300.0):
     """define a vtk camera from a neuroglancer state dictionary
+    
     Parameters
     ----------
     state_d: dict
@@ -403,6 +414,7 @@ def camera_from_ngl_state(state_d, zoom_factor=300.0):
     -------
     vtk.vtkCamera
         a vtk camera setup that mathces this state
+
     """
 
     orient = state_d.get('perspectiveOrientation', [0.0,0.0,0.0,1.0])
@@ -503,6 +515,7 @@ def mesh_actor(mesh,
     -------
     vtk.vtkActor
         vtkActor representing the mesh (to be passed to render_actors)
+
     """
     if show_link_edges:
         mesh_poly = trimesh_to_vtk(mesh.vertices, mesh.faces, mesh.link_edges)
@@ -583,6 +596,7 @@ def skeleton_actor(sk,
     -------
     vtk.vtkActor
         actor representing the skeleton
+
     """
     sk_mesh = graph_to_vtk(sk.vertices, sk.edges)
     mapper = vtk.vtkPolyDataMapper()
@@ -644,7 +658,8 @@ def point_cloud_actor(xyz,
     -------
     vtk.vtkActor
         an actor with each of the xyz points as spheres of the specified size and color
-    """"
+
+    """
     points = vtk.vtkPoints()
     points.SetData(numpy_to_vtk(xyz, deep=True))
 
@@ -713,6 +728,7 @@ def linked_point_actor(vertices_a, vertices_b,
     vtk.vtkActor
         an actor representing the lines between the points given with the color and opacity
         specified. To be passed to render_actors
+
     """
     if inds_a is None:
         inds_a = np.arange(len(vertices_a))
@@ -759,6 +775,7 @@ def oriented_camera(center, up_vector=(0, -1, 0), backoff=500, backoff_vector=(0
     -------
     vtk.vtkCamera
         the camera object representing the desired camera location, orientation and focus parameters
+
     '''
     camera = vtk.vtkCamera()
 
