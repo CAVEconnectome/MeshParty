@@ -67,7 +67,7 @@ class Skeleton:
 
     @property
     def mesh_to_skel_map(self):
-        """ dict : keys are vertices indices, and values are d
+        """ dict : keys are vertices indices, and values are lists of mesh indices that map to that skeleton index"""
         return self._mesh_to_skel_map
     
     @property
