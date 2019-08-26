@@ -7,8 +7,29 @@ import json
 from meshparty import skeleton_io
 
 class Skeleton:
+    """Class to manage skeleton data"""
     def __init__(self, vertices, edges, mesh_to_skel_map=None, vertex_properties={},
                  root=None):
+        """
+
+        Parameters
+        ----------
+        vertices : np.array
+            a Nx3 list of xyz locations of skeleton nodes
+        edges : np.array
+            a Kx2 list of edges in the skeleton, going from away from root to root
+        mesh_to_skel_map : dict
+            a dictionary where the keys are indices into skeleton vertices
+            and the values are a list of indices in a mesh that map to it
+        vertex_properties: dict
+            a dictionary of keys with strings
+            where each value is a numpy.array of len(N) of properties of skeleton vertices
+        root : None
+            what vertex index should be root (default None will find a vertex far from others) 
+
+        """
+
+
         self._vertices = np.array(vertices)
         self._edges = np.vstack(edges).astype(int)
         self.vertex_properties = vertex_properties
@@ -36,14 +57,17 @@ class Skeleton:
 
     @property
     def vertices(self):
+        """ numpy.array : Nx3 set of xyz coordinates of skeletons"""
         return self._vertices
 
     @property
     def edges(self):
+        """ numpy.array : Mx2 set of edges as indices into vertices """
         return self._edges
 
     @property
     def mesh_to_skel_map(self):
+        """ dict : keys are vertices indices, and values are d
         return self._mesh_to_skel_map
     
     @property
