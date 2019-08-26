@@ -1,7 +1,7 @@
 MeshParty
 #########
-
-Installation
+docs https://meshparty.readthedocs.io/en/docs/index.html
+ 
 ############
 
 From pypi:
