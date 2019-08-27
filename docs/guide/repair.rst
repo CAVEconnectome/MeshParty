@@ -10,7 +10,7 @@ The :mod:`meshparty.trimesh_repair` is oriented around this process.  Presently 
 a set of merge point operations that were performed on an object, and uses those locations to add edges between mesh vertices.
 
 add_link_edges
-==============
+--------------
 
 The main routine of this module is :func:`meshparty.trimesh_repair.add_link_edges`.
 This function downloads the merge points from a server, then maps those point to mesh points,
