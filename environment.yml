@@ -6,3 +6,4 @@ dependencies:
   - pyembree
   - pykdtree
   - gevent
+  - scikit-build
