@@ -7,5 +7,5 @@ dependencies:
   - pykdtree
   - gevent
   - scikit-build
-  - pip
+  - pip:
     - dracopy
