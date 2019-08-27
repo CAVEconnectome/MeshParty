@@ -1047,7 +1047,8 @@ class Mesh(trimesh.Trimesh):
     def _create_nxgraph(self):
         """ Computes networkx graph for this mesh
         
-        Returns:
+        Returns
+        -------
         networkx.NxGraph
         """
         return utils.create_nxgraph(self.vertices, self.graph_edges, euclidean_weight=True,

@@ -47,7 +47,8 @@ def find_close_edges(vertices, labels, label_a, label_b):
     label_b: int
         the label of the second connected component
     
-    Returns:
+    Returns
+    -------
     np.array
         close_edges, a Kx2 array (where K is the np.sum(labels==label_a) of vertex indices,
         where the first column entry is all the vertices in  component a
@@ -78,7 +79,8 @@ def find_close_edges_sym(vertices, labels, label_a, label_b):
     label_b: int
         the label of the second connected component
     
-    Returns:
+    Returns
+    -------
     np.array
         close_edges, a Kx2 array of vertex indices,
         where the first column entry is an index in component a

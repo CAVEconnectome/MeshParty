@@ -8,12 +8,23 @@ def filter_close_to_line(mesh, line_end_pts, line_dist_th, axis=1, endcap_buffer
     a plane defined by a normal axis (e.g. the y axis defines distances in the
     xy plane)
 
-    :param mesh: Trimesh-like mesh with N vertices
-    :param line_end_pts: 2x3 numpy array defining the two end points
-    :param line_dist_th: numeric, distance threshold
-    :param axis: integer 0-2. Defines which axis is normal to the plane in
-                 which distances is computed. optional, default 1 (y-axis).
-    :returns:  N-length boolean array
+    Parameters
+    ----------
+    mesh : meshparty.trimesh_io.Mesh
+        Trimesh-like mesh with N vertices
+    line_end_pts: numpy.array
+        2x3 numpy array defining the two end points
+    line_dist_th: numeric
+        numeric, distance threshold
+    axis: int
+        integer 0-2. Defines which axis is normal to the plane in
+        which distances is computed. optional, default 1 (y-axis).
+    
+    Returns
+    -------
+    numpy.array
+        N-length boolean array
+
     '''
     line_pt_ord = np.argsort(line_end_pts[:,axis])
     ds = _dist_from_line( mesh.vertices, line_end_pts, axis)
@@ -79,33 +90,6 @@ def filter_largest_component(mesh):
     uids, counts = np.unique(labels, return_counts=True)
     max_label = np.argmax(counts)
     return labels==max_label
-
-# def filter_large_component(mesh, size_thresh=1000):
-#     '''
-#     Returns a mesh filter without any connected components less than a size threshold
-
-#     :param mesh: Trimesh-like mesh with N vertices
-#     :param size_thresh: Integer, min size of a component to keep. Optional, default=1000.
-#     :returns: N-length boolean array
-#     '''
-#     cc, labels = sparse.csgraph.connected_components(mesh.csgraph, directed=False)
-#     uids, counts = np.unique(labels, return_counts=True)
-#     good_labels = uids[counts>size_thresh]
-#     return np.in1d(labels, good_labels)
-
-
-# def filter_small_component(mesh, size_thresh=1000):
-#     '''
-#     Returns a mesh filter without any connected components less than a size threshold
-
-#     :param mesh: Trimesh-like mesh with N vertices
-#     :param size_thresh: Integer, min size of a component to keep. Optional, default=1000.
-#     :returns: N-length boolean array
-#     '''
-#     cc, labels = sparse.csgraph.connected_components(mesh.csgraph, directed=False)
-#     uids, counts = np.unique(labels, return_counts=True)
-#     good_labels = uids[counts<size_thresh]
-#     return np.in1d(labels, good_labels)
 
 
 def filter_spatial_distance_from_points(mesh, pts, d_max):
