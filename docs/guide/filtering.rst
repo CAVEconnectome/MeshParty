@@ -34,5 +34,5 @@ finds mesh vertices that are close to a set of one or more points.
 
 More complex still, :func:`meshparty.mesh_filters.filter_two_point_distance` that finds mesh vertices
 which are close to the shortest path between two points.
-This is useful for filtering out stretch of dendrite of axon between two points.
+This is useful for filtering out stretch or dendrite of axon between two points.
 
