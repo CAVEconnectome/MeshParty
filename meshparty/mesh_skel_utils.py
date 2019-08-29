@@ -4,12 +4,16 @@ import trimesh
 from . import utils
 
 
-#function to find the path along the mesh between a point on the mesh and the skeleton (closest skeleton point)
-#if the point is not on the mesh, the point used is the mesh vertex that is closest to the point
-
 def point_to_skel_meshpath(mesh,sk,pt):
+    '''
 
-    #mesh indices of skeleton vertices:
+    Given a mesh, a skeleton and a point,  find the path along the mesh between a point on the mesh and the skeleton (closest skeleton point). If the point is not on the mesh, the point used is the mesh vertex that is closest to the point
+    :param mesh: Trimesh-like mesh with N vertices
+    :param sk: a skeleton whose vertices are a subset of the vertices of mesh
+    :param pt : a length 3 array specifying a point location
+    
+    '''
+
     t = sk.vertex_properties['mesh_index']
     sk_inds = [val for i,val in enumerate(t) if not val == -1 ]
 
