@@ -1,4 +1,4 @@
-from meshparty import utils,mesh_to_skel_utils,mesh_filters
+from meshparty import utils,mesh_skel_utils,mesh_filters
 import numpy as np
 import os
 
