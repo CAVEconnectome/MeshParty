@@ -476,7 +476,7 @@ def smooth_graph(values, edges, mask=None, neighborhood=2, iterations=100, r=.1)
         Parameters
         ----------
         values : numpy.array
-            a NxK numpy array of values, for examples xyz positions
+            a NxK numpy array of values, for example xyz positions
         edges : numpy.array
             a Mx2 numpy array of indices into values that are edges
         mask : numpy.array
