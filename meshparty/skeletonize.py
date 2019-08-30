@@ -501,7 +501,7 @@ def smooth_graph(values, edges, mask=None, neighborhood=2, iterations=100, r=.1)
             new_verts, a Nx3 list of new smoothed vertex positions
 
     """
-    N = len(verts)
+    N = len(values)
     E = len(edges)
 
     # setup a sparse matrix with the edges
@@ -541,12 +541,12 @@ def smooth_graph(values, edges, mask=None, neighborhood=2, iterations=100, r=.1)
     A = C + (1-r)*eye
 
     # make a copy of original vertices to no destroy inpuyt
-    new_verts = np.copy(verts)
+    new_values = np.copy(values)
 
     # iteratively relax the vertices
     for i in range(iterations):
-        new_verts = A*new_verts
-    return new_verts
+        new_values = A*new_values
+    return new_values
 
 
 def collapse_soma_skeleton(soma_pt, verts, edges, soma_d_thresh=12000, mesh_to_skeleton_map=None,
