@@ -1,94 +1,93 @@
 meshparty package
 =================
 
-Submodules
-----------
 
-meshparty.iterator module
--------------------------
+trimesh\_io
+----------------------------
+Mesh objects, and loading functionality
 
-.. automodule:: meshparty.iterator
+.. automodule:: meshparty.trimesh_io
    :members:
    :undoc-members:
    :show-inheritance:
-
-meshparty.mesh\_filters module
+   
+mesh\_filters
 ------------------------------
+Functions for creating mesh masks
 
 .. automodule:: meshparty.mesh_filters
    :members:
    :undoc-members:
    :show-inheritance:
 
-meshparty.meshlabserver module
-------------------------------
-
-.. automodule:: meshparty.meshlabserver
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-meshparty.skeleton module
--------------------------
-
-.. automodule:: meshparty.skeleton
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-meshparty.skeleton\_io module
------------------------------
-
-.. automodule:: meshparty.skeleton_io
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-meshparty.skeletonize module
-----------------------------
-
-.. automodule:: meshparty.skeletonize
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-meshparty.trimesh\_io module
-----------------------------
-
-.. automodule:: meshparty.trimesh_io
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-meshparty.trimesh\_repair module
+trimesh\_repair
 --------------------------------
+Functions for adding edges to meshes
 
 .. automodule:: meshparty.trimesh_repair
    :members:
    :undoc-members:
    :show-inheritance:
 
-meshparty.trimesh\_vtk module
+skeletonize
+----------------------------
+Functions for turnings meshes into skeletons
+
+.. automodule:: meshparty.skeletonize
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+skeleton
+-------------------------
+Skeleton class with useful methods for skeleton analysis
+
+.. automodule:: meshparty.skeleton
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+skeleton\_io
 -----------------------------
+Functions for reading and writing skeletons to disk
+
+.. automodule:: meshparty.skeleton_io
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+trimesh\_vtk
+-----------------------------
+Functions for creating vtk objects and visualizing meshes, skeletons and points
 
 .. automodule:: meshparty.trimesh_vtk
    :members:
    :undoc-members:
    :show-inheritance:
 
-meshparty.utils module
+utils
 ----------------------
+Utility functions used in other modules
 
 .. automodule:: meshparty.utils
    :members:
    :undoc-members:
    :show-inheritance:
 
+meshlabserver
+------------------------------
+Facilities for interacting with meshlab
 
-Module contents
----------------
+.. automodule:: meshparty.meshlabserver
+   :members:
+   :undoc-members:
+   :show-inheritance:
 
-.. automodule:: meshparty
+iterator
+-------------------------
+Facilities for iterating over views of a mesh. Useful for ML applications.
+
+.. automodule:: meshparty.iterator
    :members:
    :undoc-members:
    :show-inheritance:

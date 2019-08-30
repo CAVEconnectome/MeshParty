@@ -299,9 +299,7 @@ def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
 
 
 class MeshMeta(object):
-    def __init__(self, cache_size=400, cv_path=None, disk_cache_path=None,
-                 map_gs_to_https=True):
-        """ Manager class to keep meshes in memory and seemingless download them
+    """ Manager class to keep meshes in memory and seemingless download them
 
         Parameters
         ----------
@@ -316,6 +314,10 @@ class MeshMeta(object):
         map_gs_to_https: bool
             whether to change gs paths to https paths, via cloudvolume's use_https option
         """
+
+    def __init__(self, cache_size=400, cv_path=None, disk_cache_path=None,
+                 map_gs_to_https=True):
+
         self._mesh_cache = {}
         self._cache_size = cache_size
         self._cv_path = cv_path
@@ -464,8 +466,7 @@ class MeshMeta(object):
         return mesh
 
 class Mesh(trimesh.Trimesh):
-    def __init__(self, *args, node_mask=None, unmasked_size=None, apply_mask=False, link_edges=None, **kwargs):
-        """An extension of trimesh.Trimesh class to allow more features
+    """An extension of trimesh.Trimesh class to allow more features
 
         Parameters
         ----------
@@ -489,7 +490,7 @@ class Mesh(trimesh.Trimesh):
         **kwargs:
             all the other keyword args you want to pass to :class:`trimesh.Trimesh`
         """
-
+    def __init__(self, *args, node_mask=None, unmasked_size=None, apply_mask=False, link_edges=None, **kwargs):
         if 'vertices' in kwargs:
             vertices_all = kwargs.pop('vertices')
         else:
