@@ -8,6 +8,7 @@ that is implemented on the mesh graph, meaning the graph of mesh vertices, where
 to their euclidean distance. 
 
 .. [1] Sato, M., Bitter, I., Bender, M. A., Kaufman, A. E., & Nakajima, M. (n.d.). TEASAR: tree-structure extraction algorithm for accurate and robust skeletons. In Proceedings the Eighth Pacific Conference on Computer Graphics and Applications. IEEE Comput. Soc. https://doi.org/10.1109/pccga.2000.883951
+
 Example
 -------
 Again assuming you have a mesh object loaded, the key function is :func:`meshparty.skeletonize.skeletonize_mesh`
@@ -115,7 +116,7 @@ according to the vertex normal at those indices, and then smooth the result usin
 Skeleton Analysis
 -----------------
 The returned skeleton objects are of :class:`meshparty.skeleton.Skeleton`, contain many of the same useful properties that meshes have.
-Including networkx and csgraph representations, as well breaking the skeleton into segments, finding tips. 
+Including :class:`networkx.Graph` and :mod:`scipy.sparse.csgraph` representations, as well breaking the skeleton into segments, finding tips. 
 
 Skeleton IO
 ----------------

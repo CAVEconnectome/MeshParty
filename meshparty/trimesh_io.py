@@ -468,28 +468,30 @@ class MeshMeta(object):
 class Mesh(trimesh.Trimesh):
     """An extension of trimesh.Trimesh class to allow more features
 
-        Parameters
-        ----------
-        *args : a list of :class:`trimesh.Trimesh` arguments
-            the first most commonly used...
-            vertices : np.array
-                a Nx3 array of x,y,z of vertex positions
-            faces: np.array
-                a Mx3 array of abc indices into vertices that form triangle faces
-            normals: np.array
-                a Mx3 array of face normals
-        node_mask : np.array
-            a N long boolean array of which vertices are masked
-        unmasked_size: np.array
-            how long the original vertex list is (relevant for masked meshes)
-        apply_mask: bool
-            whether to apply the node_mask to the result
-        link_edges: np.array
-            a Kx2 array of indices into vertices that represent extra edges you 
-            want to store in the mesh graph
-        **kwargs:
-            all the other keyword args you want to pass to :class:`trimesh.Trimesh`
-        """
+    Parameters
+    ----------
+    *args : a list of :class:`trimesh.Trimesh` arguments
+        the first most commonly used...
+        vertices : np.array
+            a Nx3 array of x,y,z of vertex positions
+        faces: np.array
+            a Mx3 array of abc indices into vertices that form triangle faces
+        normals: np.array
+            a Mx3 array of face normals
+    node_mask : np.array
+        a N long boolean array of which vertices are masked
+    unmasked_size: np.array
+        how long the original vertex list is (relevant for masked meshes)
+    apply_mask: bool
+        whether to apply the node_mask to the result
+    link_edges: np.array
+        a Kx2 array of indices into vertices that represent extra edges you 
+        want to store in the mesh graph
+    **kwargs:
+        all the other keyword args you want to pass to :class:`trimesh.Trimesh`
+    
+    """
+
     def __init__(self, *args, node_mask=None, unmasked_size=None, apply_mask=False, link_edges=None, **kwargs):
         if 'vertices' in kwargs:
             vertices_all = kwargs.pop('vertices')
@@ -595,12 +597,12 @@ class Mesh(trimesh.Trimesh):
 
     @caching.cache_decorator
     def nxgraph(self):
-        """networkx.graph : networkx graph of the mesh"""
+        """:class:`networkx.Graph` : networkx graph of the mesh"""
         return self._create_nxgraph()
 
     @caching.cache_decorator
     def csgraph(self):
-        """scipy.sparse.csgraph : graph of the mesh"""
+        """:mod:`scipy.sparse.csgraph` : graph of the mesh"""
         return self._create_csgraph()
 
     @caching.cache_decorator
@@ -1050,7 +1052,7 @@ class Mesh(trimesh.Trimesh):
         
         Returns
         -------
-        networkx.NxGraph
+        :class:`networkx.Graph`
         """
         return utils.create_nxgraph(self.vertices, self.graph_edges, euclidean_weight=True,
                                     directed=False)

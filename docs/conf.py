@@ -54,4 +54,6 @@ extensions = ['sphinx.ext.autodoc', 'sphinx.ext.coverage', 'sphinx.ext.napoleon'
     'sphinx.ext.githubpages', 'sphinx.ext.intersphinx']
 autodoc_inherit_docstrings = False
 
-intersphinx_mapping = {'trimesh':('https://trimsh.org/', None)}
+intersphinx_mapping = {'trimesh':('https://trimsh.org/', None),
+                       'networkx':('https://networkx.github.io/documentation/stable', None),
+                       'scipy':('https://docs.scipy.org/doc/scipy/reference/', None)}
