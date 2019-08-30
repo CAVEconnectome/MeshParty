@@ -7,27 +7,28 @@ import json
 from meshparty import skeleton_io
 
 class Skeleton:
-    """Class to manage skeleton data"""
+    """Class to manage skeleton data
+        
+    Parameters
+    ----------
+    vertices : np.array
+        a Nx3 list of xyz locations of skeleton nodes
+    edges : np.array
+        a Kx2 list of edges in the skeleton, going from away from root to root
+    mesh_to_skel_map : dict
+        a dictionary where the keys are indices into skeleton vertices
+        and the values are a list of indices in a mesh that map to it
+    vertex_properties: dict
+        a dictionary of keys with strings
+        where each value is a numpy.array of len(N) of properties of skeleton vertices
+    root : None
+        what vertex index should be root (default None will find a vertex far from others) 
+
+    """
+
     def __init__(self, vertices, edges, mesh_to_skel_map=None, vertex_properties={},
                  root=None):
-        """
 
-        Parameters
-        ----------
-        vertices : np.array
-            a Nx3 list of xyz locations of skeleton nodes
-        edges : np.array
-            a Kx2 list of edges in the skeleton, going from away from root to root
-        mesh_to_skel_map : dict
-            a dictionary where the keys are indices into skeleton vertices
-            and the values are a list of indices in a mesh that map to it
-        vertex_properties: dict
-            a dictionary of keys with strings
-            where each value is a numpy.array of len(N) of properties of skeleton vertices
-        root : None
-            what vertex index should be root (default None will find a vertex far from others) 
-
-        """
 
 
         self._vertices = np.array(vertices)
@@ -72,6 +73,7 @@ class Skeleton:
     
     @property
     def segments(self):
+        """ numpy.array : """
         if self._segments is None:
             self._segments, self._segment_map = self._compute_segments()
         return self._segments

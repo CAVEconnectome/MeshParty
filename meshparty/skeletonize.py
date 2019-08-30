@@ -54,7 +54,7 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True,
 
     Returns
     -------
-        meshparty.skeleton.Skeleton
+    :obj:`meshparty.skeleton.Skeleton`
            a Skeleton object for this mesh
     '''
     skel_verts, skel_edges, smooth_verts, orig_skel_index, skel_map = calculate_skeleton_paths_on_mesh(mesh,
