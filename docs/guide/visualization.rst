@@ -55,7 +55,7 @@ cameras in a parameterization that makes more sense to us :func:`meshparty.trime
     trimesh_vtk.render_actors([mesh_actor], camera=camera)
 
 You might have a perspective that someone setup from a neuroglancer link.  You can convert that to a camera
-using :func:`trimesh.trimesh_vtk.camera_from_ngl_state` with the state dictionary.
+using :func:`meshparty.trimesh_vtk.camera_from_ngl_state` with the state dictionary.
 
 Advanced coloring
 -----------------
