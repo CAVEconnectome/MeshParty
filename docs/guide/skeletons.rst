@@ -3,10 +3,11 @@ Skeletons
 
 Skeletonization
 ---------------
-The :mod:`meshparty.skeletonize` module provides facilities to turn a mesh into a skeleton by implementing a Teasar like algorithm
+The :mod:`meshparty.skeletonize` module provides facilities to turn a mesh into a skeleton by implementing a Teasar [1]_ like algorithm
 that is implemented on the mesh graph, meaning the graph of mesh vertices, where edges between vertices have weights according
 to their euclidean distance. 
 
+.. [1] Sato, M., Bitter, I., Bender, M. A., Kaufman, A. E., & Nakajima, M. (n.d.). TEASAR: tree-structure extraction algorithm for accurate and robust skeletons. In Proceedings the Eighth Pacific Conference on Computer Graphics and Applications. IEEE Comput. Soc. https://doi.org/10.1109/pccga.2000.883951
 Example
 -------
 Again assuming you have a mesh object loaded, the key function is :func:`meshparty.skeletonize.skeletonize_mesh`
@@ -25,7 +26,7 @@ There are a number of parameter options that are best understood after understan
 Algorithm
 ---------
 The algorithm at it's core works on a connected component of the mesh graph.
-Disconnected components are skeletonized seperately, and trivially combined.
+Disconnected components are skeletonized separately, and trivially combined.
 
 For each component, first a root node is found.  A discussion of root node finding is below.
 
@@ -37,7 +38,7 @@ If :obj:`compute_original_index` is selected, the algorithm will remember which 
 This is saved in :obj:`skeleton.mesh_to_skel_map`.  Incidentally, the mesh index of every skeleton node index is saved at :obj:`skeleton.vertex_properties['mesh_index']`
 
 This loop continues until all vertices are invalidated, and because we analyze one connected component at a time
-this is gaurunteed to finish.  Finally, at the end, optionally if :obj:`compute_radius` is selected, pyembree will be used to 
+this is guaranteed to finish.  Finally, at the end, optionally if :obj:`compute_radius` is selected, pyembree will be used to 
 shine a ray along the vertex normal (pointed inward) of every skeleton node, and measure how far that ray travels till it 
 intersects the other side of the mesh.  This is one way to estimate the local caliber of the mesh.
 This is saved in :obj:`skeleton.vertex_properties['rs']`. 
@@ -67,13 +68,14 @@ It is possible to store all the data from a single neuron in memory on a normal 
 can be run within a global context of the neuron.  Voxelized skeletonization algorithms typically must break 
 large data up into chunks, skeletonize each without any understanding of how that chunk fits into the global context,
 and then hope to stitch the result of all those chunks back together again.  Typical mesh representations have already
-seperated data according to objects and so parallelization across objects is trivial, where voxelized approaches must pay 
-a much larger IO and memory cost on every skeletonization approach.  Dense skeletonization approaches such as kimamaro 
+separated data according to objects and so parallelism across objects is trivial, where voxelized approaches must pay 
+a much larger IO and memory cost on every skeletonization approach. 
+Dense skeletonization approaches such as `kimimaro <https://github.com/seung-lab/kimimaro>`_
 effectively avoid these costs by skeletonizing all components in a chunk.
-This however is not pratical when segmentation is changing rapidly.
+This however is not practical when segmentation is changing rapidly.
 
-In addition, the result is directly tied to the mesh. In fact, skeleton vertices are gaurunteed to be a subset of mesh vertices and there is a map between all mesh vertices
-and the corresponding skelton vertex which caused that vertex to be invalid.
+In addition, the result is directly tied to the mesh. In fact, skeleton vertices are guaranteed to be a subset of mesh vertices and there is a map between all mesh vertices
+and the corresponding skeleton vertex which caused that vertex to be invalid.
 This is useful analytically for correctly assigning say mesh nodes near synapses to skeleton nodes.
 
 Finally, because the mesh graph can accurately reflect the true topology of the object.
@@ -83,7 +85,7 @@ By using the mesh graph to define distance, this kind of mistake can be avoided.
 A related point is locations where an object contacts itself.  
 In neuroscience terms, when a dendrite touches another dendrite of the same cell,
 or an axons of a cell touches its own dendrite.
-Voxel based skeletonization often assummes that voxels that are adjacent are connected,
+Voxel based skeletonization often assumes that voxels that are adjacent are connected,
 and thus cannot prevent skeletonization from crossing from axon to dendrite at such locations. 
 The mesh graph can encode the fact the axon and dendrite come into contact but in fact there is no path
 from one to the other at those self contact locations (assuming the mesh data is of high quality... see below)
@@ -92,14 +94,14 @@ from one to the other at those self contact locations (assuming the mesh data is
 disadvantages
 -------------
 The flip side of the algorithm having access to the mesh graph to more intelligently handle invalidation and self contacts,
-is that it is senstive to the validity of the mesh graph data.  It is commonplace for meshing approaches to produce
+is that it is sensitive to the validity of the mesh graph data.  It is commonplace for meshing approaches to produce
 meshes which are perfectly reasonable for visualization, but not for this type of analysis.
-For example, many mesh packages and processes remove duplicate vertices and reindex faces and edges
+For example, many mesh packages and processes remove duplicate vertices and re-index faces and edges
 to reference unique coordinates.  This is a reasonable way to reduce the mesh and stitch together fragments
 that might share faces.  However, as mentioned above when objects contact themselves, one doesn't always want to merge vertices.
 On the other hand, there are also situations where meshes of objects can be disconnected, but in fact one wants them to be connected.
 When axons get very small, and move at oblique angles, it is possible for voxels to not be connected.
-In such case, many meshing approaches with produce a mesh which is disconnected, and this algorithm will skeletonize them seperately.
+In such case, many meshing approaches with produce a mesh which is disconnected, and this algorithm will skeletonize them separately.
 There are potential ways to repair the mesh or the skeleton, but they conflict fundamentally with avoiding merging self contacts.
 In summary, mesh based skeletonization requires a high quality mesh graph to be able to operate effectively. 
 

@@ -53,6 +53,7 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True,
         whether to print verbose logging
 
     Returns
+    -------
         meshparty.skeleton.Skeleton
            a Skeleton object for this mesh
     '''
@@ -144,6 +145,7 @@ def calculate_skeleton_paths_on_mesh(mesh, soma_pt=None, soma_thresh=7500,
         based upon how it was invalidated.
 
     Returns
+    -------
         skel_verts: np.array
             a Nx3 matrix of skeleton vertex positions
         skel_edges: np.array
@@ -154,6 +156,7 @@ def calculate_skeleton_paths_on_mesh(mesh, soma_pt=None, soma_thresh=7500,
             a N long index of skeleton vertices in the original mesh vertex index
         (mesh_to_skeleton_map): np.array
             a Mx2 map of mesh vertex indices to skeleton vertex indices
+            
     """
 
     skeletonize_output = skeletonize_components(mesh,

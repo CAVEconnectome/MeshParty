@@ -13,7 +13,7 @@ which you pass an folder, and/or an cloudvolume path, and a memory cache size.
 Example
 -------
 
-Here's an example of downloading a mesh from the publically available kasthuri2011 dataset.
+Here's an example of downloading a mesh from the publicly available kasthuri2011 dataset.
 (Kasthuri, Narayanan, et al. "Saturated reconstruction of a volume of neocortex." Cell 162.3 (2015): 648-661.)
 ::
 

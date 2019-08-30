@@ -60,7 +60,7 @@ using :func:`trimesh.trimesh_vtk.camera_from_ngl_state` with the state dictionar
 Advanced coloring
 -----------------
 
-One common visualizaiton need is to color the visualized objects according to some data,
+One common visualization need is to color the visualized objects according to some data,
 the actor creation functions provide some facilities to assist with this, again assuming its numpy arrays.
 
 Here's an example which colors the mesh according to the distance from the first vertex of the mesh

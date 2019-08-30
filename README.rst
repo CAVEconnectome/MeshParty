@@ -19,7 +19,7 @@ We try to keep the pypi version up to date. To install the git version do:
     pip install . --upgrade
 
 
-to make optional features of ray tracing and interaction with the PyChunkedGraph work properly you need to install the optional dependancies
+to make optional features of ray tracing and interaction with the PyChunkedGraph work properly you need to install the optional dependencies
 
 ::
 

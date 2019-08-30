@@ -13,3 +13,4 @@ test-reports/
 .pytest_cache/
 .coverage.*
 **_build/
+*.bak

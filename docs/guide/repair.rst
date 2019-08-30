@@ -1,7 +1,7 @@
 Mesh Repair
 ===========
 
-Mesh representations of objects can be imperfect.  Particular to neurons, meshes from one object can be artificially seperated
+Mesh representations of objects can be imperfect.  Particular to neurons, meshes from one object can be artificially separated
 into multiple connected components due to imperfections of the data because many segmentation approaches will only join together voxels
 that share a connected component.  
 
@@ -18,12 +18,12 @@ then goes through a process of finding the minimal set of edges between vertices
 distinct connected components that are near the merge locations.   These edges are what we refer to as link_edges. 
 
 One can call add_link_edges through the method :func:`meshparty.trimesh_io.Mesh.add_link_edges`.
-This will store the the edges seperately from the other components of the mesh,
+This will store the the edges separately from the other components of the mesh,
 but a joint representation of the edges contained in faces and link_edges 
 is available at :obj:`meshparty.trimesh_io.Mesh.graph_edges`.
 
 
 Presently this functionality is designed to work with a specific deployment of the
-PyChunkedGraph webservice. As such, :func:`meshparty.trimesh_repair.add_link_edges` 
+PyChunkedGraph web-service. As such, :func:`meshparty.trimesh_repair.add_link_edges` 
 expects a seg_id a dataset_name and a server_address.  
 
