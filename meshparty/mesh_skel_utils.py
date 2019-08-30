@@ -8,21 +8,29 @@ from . import utils
 def point_to_skel_meshpath(mesh,sk,pt,filterpts=None):
     '''
 
-    Given a mesh, a skeleton and a point,  find the path along the mesh between a point on the mesh and the skeleton (closest skeleton point). If the point is not on the mesh, the point used is the mesh vertex that is closest to the point
+    Given a mesh, a skeleton and a point,  find the path along the mesh between a point 
+    on the mesh and the skeleton (closest skeleton point). If the point is not on the mesh, 
+    the point used is the mesh vertex that is closest to the point.
 
     Parameters
     ----------
-    mesh: Trimesh-like mesh with N vertices
-    sk: a skeleton whose vertices are a subset of the vertices of mesh
-    pt : a length 3 array specifying a point location
-    filterpts: a boolean array which is the filter that was used to generate "mesh", 
-     if "mesh" is a filtered version of the mesh that was used to generate the skeleton "sk".
-     If sk was generated from mesh as is, then use filter=None
+    mesh: meshparty.trimesh_io.Mesh
+          Trimesh-like mesh with N vertices
+    sk: meshparty.trimesh_io.Mesh
+          Skeleton whose vertices are a subset of the vertices of mesh
+    pt : 1 x 3 numpy.array
+          Array specifying a point location
+    filterpts: Bool array 
+          Filter that was used to generate "mesh", 
+          If "mesh" is a filtered version of the mesh that was used to generate the skeleton "sk".
+          If sk was generated from mesh as is, then use filter=None.
 
 
     Returns
     -------
-    path: indices of vertices on mesh which trace the path from the point (pt) to the skeleton in order
+
+    path: int array
+          Indices of vertices on mesh which trace the path from the point (pt) to the skeleton (sk)
 
     '''
 
