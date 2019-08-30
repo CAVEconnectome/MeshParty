@@ -16,7 +16,8 @@ def point_to_skel_meshpath(mesh,sk,pt,filter=None):
     :param sk: a skeleton whose vertices are a subset of the vertices of mesh
     :param pt : a length 3 array specifying a point location
     :param filter: a boolean array which is the filter that was used to generate "mesh", 
-     if "mesh" is a filtered version of the mesh that was used to generate the skeleton "sk"
+     if "mesh" is a filtered version of the mesh that was used to generate the skeleton "sk".
+     If sk was generated from mesh as is, then use filter=None
     '''
 
 
