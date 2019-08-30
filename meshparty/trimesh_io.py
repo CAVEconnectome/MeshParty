@@ -50,7 +50,9 @@ def read_mesh_h5(filename):
     :obj:`np.array`
         node_mask, a N length np.bool area of whether to mask this index (None if doesn't exist)
         None if this doesn't exist
-    Raises:
+        
+    Raises
+    ------
         AssertionError
             if the filename is not a file
     """
@@ -88,7 +90,7 @@ def write_mesh_h5(filename, vertices, faces,
     ----------
     filename: str
         a path to a h5 file to write a mesh
-    vertices (:obj: np.array
+    vertices : np.array
         a Nx3 x,y,z coordinates (float)
     faces: np.array
         a Mx3 a,b,c index into vertices for triangle faces np.int32  
@@ -136,17 +138,17 @@ def read_mesh(filename):
 
     Returns
     -------
-    :obj:`np.array`
+    :obj:`numpy.array`
         vertices, a Nx3 x,y,z coordinates (float)
-    :obj:`np.array`
+    :obj:`numpy.array`
         faces, a Mx3 a,b,c index into vertices for triangle faces np.int32
-    :obj:`np.array`:
+    :obj:`numpy.array`:
         normals, A Mx3 x,y,z direction for face normals, np.float32
         None if it doesn't exist
-    :obj:`np.array`
+    :obj:`numpy.array`
         link_edges, a Kx2 a,b list of extra link edges to add to the mesh graph np.int32
         None if this doesn't exist or is an obj file
-    :obj:`np.array`
+    :obj:`numpy.array`
         node_mask, a N length np.bool area of whether to mask this index (None if doesn't exist)
         None if this doesn't exist or is an obj file
 
@@ -269,7 +271,7 @@ def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
         whether to trigger cloudvolume.CloudVolume use_https option. Probably should be true unless you have
         a private bucket and have ~/.cloudvolume/secrets setup properly (default True)
     fmt: str
-        'hdf5', 'obj', 'stl' or any format supported by 'func':`write_to_file` (default 'hdf5')
+        'hdf5', 'obj', 'stl' or any format supported by :func:`meshparty.trimesh_io.Mesh.write_to_file` (default 'hdf5')
     """
 
     if n_threads > 1:
@@ -1225,7 +1227,7 @@ class Mesh(trimesh.Trimesh):
             the path to where to write the filename. Will use extension to infer format
             '.h5' for hdf5
             '.obj' for wavefront
-            all others supported by trimesh.exchange.export.export_mesh
+            all others supported by :func:`trimesh.exchange.export.export_mesh`
         """
         if os.path.splitext(filename)[1]=='.h5':
             write_mesh_h5(filename,

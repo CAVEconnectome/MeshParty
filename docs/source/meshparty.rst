@@ -2,7 +2,7 @@ meshparty package
 =================
 
 
-trimesh\_io
+trimesh\_io module
 ----------------------------
 Mesh objects, and loading functionality
 
@@ -11,7 +11,7 @@ Mesh objects, and loading functionality
    :undoc-members:
    :show-inheritance:
    
-mesh\_filters
+mesh\_filters module
 ------------------------------
 Functions for creating mesh masks
 
@@ -20,7 +20,7 @@ Functions for creating mesh masks
    :undoc-members:
    :show-inheritance:
 
-trimesh\_repair
+trimesh\_repair module
 --------------------------------
 Functions for adding edges to meshes
 
@@ -29,7 +29,7 @@ Functions for adding edges to meshes
    :undoc-members:
    :show-inheritance:
 
-skeletonize
+skeletonize module
 ----------------------------
 Functions for turnings meshes into skeletons
 
@@ -38,7 +38,7 @@ Functions for turnings meshes into skeletons
    :undoc-members:
    :show-inheritance:
 
-skeleton
+skeleton module
 -------------------------
 Skeleton class with useful methods for skeleton analysis
 
@@ -47,7 +47,7 @@ Skeleton class with useful methods for skeleton analysis
    :undoc-members:
    :show-inheritance:
 
-skeleton\_io
+skeleton\_io module
 -----------------------------
 Functions for reading and writing skeletons to disk
 
@@ -56,7 +56,7 @@ Functions for reading and writing skeletons to disk
    :undoc-members:
    :show-inheritance:
 
-trimesh\_vtk
+trimesh\_vtk module
 -----------------------------
 Functions for creating vtk objects and visualizing meshes, skeletons and points
 
@@ -65,7 +65,7 @@ Functions for creating vtk objects and visualizing meshes, skeletons and points
    :undoc-members:
    :show-inheritance:
 
-utils
+utils module
 ----------------------
 Utility functions used in other modules
 
@@ -74,7 +74,7 @@ Utility functions used in other modules
    :undoc-members:
    :show-inheritance:
 
-meshlabserver
+meshlabserver module
 ------------------------------
 Facilities for interacting with meshlab
 
@@ -83,7 +83,7 @@ Facilities for interacting with meshlab
    :undoc-members:
    :show-inheritance:
 
-iterator
+iterator module
 -------------------------
 Facilities for iterating over views of a mesh. Useful for ML applications.
 

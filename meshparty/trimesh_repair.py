@@ -360,8 +360,9 @@ def get_link_edges(mesh, seg_id, dataset_name, close_map_distance = 300,
 
     Returns
     -------
-    link_edges, a Kx2 array of mesh.vertices indices representing edges
-    that should be added to the mesh graph
+    np.array
+        link_edges, a Kx2 array of mesh.vertices indices representing edges that should be added to the mesh graph
+
     """
 
     # initialize a chunkedgraph client
