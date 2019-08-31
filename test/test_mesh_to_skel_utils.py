@@ -6,8 +6,8 @@ import os
 def test_point_to_skel_meshpath(full_cell_mesh,full_cell_skeleton):
 
     pt = [306992, 214288, 11560]
-    filterpts = mesh_filters.filter_spatial_distance_from_points(mesh, [pt], 2000)
-    loc_mesh = mesh.apply_mask(filterpts)
+    filterpts = mesh_filters.filter_spatial_distance_from_points(full_cell_mesh, [pt], 2000)
+    loc_mesh = full_cell_mesh.apply_mask(filterpts)
 
     path = mesh_to_skel_utils.point_to_skel_meshpath(loc_mesh,full_cell_skeleton,pt,filterpts)
 
