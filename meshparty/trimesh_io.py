@@ -25,6 +25,10 @@ from tqdm import trange
 
 from meshparty import utils, trimesh_repair
 
+class EmptyMaskException(Exception):
+    """Raised when applying a mask that has all zeros"""
+    pass
+
 def read_mesh_h5(filename):
     """Reads a mesh's vertices, faces and normals from an hdf5 file"""
     assert os.path.isfile(filename)
@@ -814,6 +818,9 @@ class Mesh(trimesh.Trimesh):
         new_mask is a boolean array, either of the original length or the
         masked length (in which case it is padded with zeros appropriately).
         '''
+        if not np.any(new_mask):
+            raise(EmptyMaskException("new_mask is all False, mesh will be empty"))
+            
         # We need to express the mask in the current vertex indices
         if np.size(new_mask) == np.size(self.node_mask):
             joint_mask = self.node_mask & new_mask
