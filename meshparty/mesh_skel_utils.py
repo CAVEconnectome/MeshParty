@@ -36,12 +36,12 @@ def point_to_skel_meshpath(mesh,sk,pt,filterpts=None):
 
 
     if filterpts is None:
-    	t = sk.vertex_properties['mesh_index']
-    	sk_inds = [val for i,val in enumerate(t) if not val == -1 ]
+      t = sk.vertex_properties['mesh_index']
+      sk_inds = [val for i,val in enumerate(t) if not val == -1 ]
     else:
-	validinds = np.where(filterpts)[0]
-        localskeletoninds = list(set(sk.vertex_properties['mesh_index']) & set(validinds)) #intersection of validinds and sk.vertex_properties['mesh_index']
-	sk_inds = [i for i, val in enumerate(validinds) if val in localskeletoninds]
+      validinds = np.where(filterpts)[0]
+      localskeletoninds = list(set(sk.vertex_properties['mesh_index']) & set(validinds)) #intersection of validinds and sk.vertex_properties['mesh_index']
+      sk_inds = [i for i, val in enumerate(validinds) if val in localskeletoninds]
 
 
     if len(sk_inds) < 1:
