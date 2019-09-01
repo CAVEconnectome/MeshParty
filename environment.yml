@@ -1,0 +1,11 @@
+name: meshparty
+channels:
+  - anaconda
+  - conda-forge
+dependencies:
+  - pyembree
+  - pykdtree
+  - gevent
+  - scikit-build
+  - pip:
+    - dracopy
