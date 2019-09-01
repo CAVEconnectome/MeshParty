@@ -2,6 +2,7 @@ from meshparty import trimesh_io, mesh_filters, trimesh_vtk
 import numpy as np
 import os 
 import imageio
+import pytest
 
 def compare_img_to_test_file(fname, back_val = 255, close=15):
     img_test = imageio.imread(fname).astype(np.int16)
@@ -21,6 +22,21 @@ def test_filter_components_by_size(full_cell_mesh):
     assert(np.sum(only_big)==2260414)
     assert(np.sum(only_small)==67154)
 
+
+def test_filter_components_by_dist_From_pts(full_cell_mesh, full_cell_soma_pt):
+    pt_down = full_cell_soma_pt + np.array([0,50000,0])
+    pts = np.vstack([full_cell_soma_pt, pt_down])
+    
+    two_pt_mask = mesh_filters.filter_spatial_distance_from_points(full_cell_mesh, pts, 10000)
+
+    one_pt_mask = mesh_filters.filter_spatial_distance_from_points(full_cell_mesh, full_cell_soma_pt, 10000)
+
+    far_point = np.array([-100000, -1000000, -100000])
+
+    far_mask = mesh_filters.filter_spatial_distance_from_points(full_cell_mesh, far_point, 10000)
+    np.assert(np.sum(far_mask)==0)
+    with pytest.raises(trimesh_io.EmptyMaskException):
+        far_mesh = full_cell_mesh.apply_mask(far_mask)
 
 def test_filter_two_points(full_cell_mesh, full_cell_soma_pt, tmp_path):
 
