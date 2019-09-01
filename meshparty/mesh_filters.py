@@ -78,6 +78,11 @@ def filter_largest_component(mesh):
 
 
 def filter_spatial_distance_from_points(mesh, pts, d_max):
+    
+    if len(pts.shape)==1:
+        assert(len(pts)==3)
+        ds = np.linalg.norm(mesh.vertices-pts[:,np.newaxis], axis=1)
+        return ds<dmax
     close_enough = np.full((len(mesh.vertices), len(pts)), False)
     for ii, pt in enumerate(pts):
         ds = np.linalg.norm(mesh.vertices-pt, axis=1)
