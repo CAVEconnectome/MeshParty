@@ -34,7 +34,7 @@ def test_filter_components_by_dist_From_pts(full_cell_mesh, full_cell_soma_pt):
     far_point = np.array([-100000, -1000000, -100000])
 
     far_mask = mesh_filters.filter_spatial_distance_from_points(full_cell_mesh, far_point, 10000)
-    np.assert(np.sum(far_mask)==0)
+    assert(np.sum(far_mask)==0)
     with pytest.raises(trimesh_io.EmptyMaskException):
         far_mesh = full_cell_mesh.apply_mask(far_mask)
 
