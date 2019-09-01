@@ -7,8 +7,30 @@ import json
 from meshparty import skeleton_io
 
 class Skeleton:
+    """Class to manage skeleton data
+        
+    Parameters
+    ----------
+    vertices : np.array
+        a Nx3 list of xyz locations of skeleton nodes
+    edges : np.array
+        a Kx2 list of edges in the skeleton, going from away from root to root
+    mesh_to_skel_map : dict
+        a dictionary where the keys are indices into skeleton vertices
+        and the values are a list of indices in a mesh that map to it
+    vertex_properties: dict
+        a dictionary of keys with strings
+        where each value is a numpy.array of len(N) of properties of skeleton vertices
+    root : None
+        what vertex index should be root (default None will find a vertex far from others) 
+
+    """
+
     def __init__(self, vertices, edges, mesh_to_skel_map=None, vertex_properties={},
                  root=None):
+
+
+
         self._vertices = np.array(vertices)
         self._edges = np.vstack(edges).astype(int)
         self.vertex_properties = vertex_properties
@@ -36,18 +58,22 @@ class Skeleton:
 
     @property
     def vertices(self):
+        """ numpy.array : Nx3 set of xyz coordinates of skeletons"""
         return self._vertices
 
     @property
     def edges(self):
+        """ numpy.array : Mx2 set of edges as indices into vertices """
         return self._edges
 
     @property
     def mesh_to_skel_map(self):
+        """ dict : keys are vertices indices, and values are lists of mesh indices that map to that skeleton index"""
         return self._mesh_to_skel_map
     
     @property
     def segments(self):
+        """ numpy.array : """
         if self._segments is None:
             self._segments, self._segment_map = self._compute_segments()
         return self._segments
@@ -315,16 +341,24 @@ class Skeleton:
         Export a skeleton file to an swc file
         (see http://research.mssm.edu/cnic/swc.html for swc definition)
 
-        :param filename: Name of the file to save the swc to
-        :param node_labels: None (default) or an interable of ints co-indexed with vertices.
-                            Corresponds to the swc node categories. Defaults to setting all
-                            nodes to label 3, dendrite.
-        :param radius: None (default) or an iterable of floats. This should be co-indexed with vertices.
-                       Radius values are assumed to be in the same units as the node vertices.
-        :param header: Dict, default None. Each key value pair in the dict becomes
-                       a parameter line in the swc header.
-        :param xyz_scaling: Number, default 1000. Down-scales spatial units from the skeleton's units to
-                            whatever is desired by the swc. E.g. nm to microns has scaling=1000.
+        Parameters
+        ----------
+        filename : str
+            Name of the file to save the swc to
+        node_labels : np.array
+            None (default) or an interable of ints co-indexed with vertices.
+            Corresponds to the swc node categories. Defaults to setting all
+            odes to label 3, dendrite.
+        radius : iterable
+            None (default) or an iterable of floats. This should be co-indexed with vertices.
+            Radius values are assumed to be in the same units as the node vertices.
+        header : dict
+            default None. Each key value pair in the dict becomes
+            a parameter line in the swc header.
+        xyz_scaling : Number
+            default 1000. Down-scales spatial units from the skeleton's units to
+            whatever is desired by the swc. E.g. nm to microns has scaling=1000.
+            
         '''
 
         skeleton_io.export_to_swc(self, filename, node_labels=node_labels,
