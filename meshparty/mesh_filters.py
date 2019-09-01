@@ -93,7 +93,7 @@ def filter_largest_component(mesh):
 
 
 def filter_spatial_distance_from_points(mesh, pts, d_max):
-      """
+    """
     returns a boolean mask for vertices near a set of points
 
     Parameters
