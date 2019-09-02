@@ -470,8 +470,8 @@ def mesh_teasar(mesh, root=None, valid=None, root_ds=None, root_pred=None, soma_
 
 def smooth_graph(values, edges, mask=None, neighborhood=2, iterations=100, r=.1):
     """ smooths a spatial graph via iterative local averaging
-        calculates the average value of neighboring vertices
-        and relaxes the vertices toward that average
+        calculates the average value of neighboring values
+        and relaxes the values toward that average
 
         Parameters
         ----------

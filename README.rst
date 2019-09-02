@@ -1,6 +1,8 @@
 MeshParty
 #########
-docs https://meshparty.readthedocs.io/en/docs/index.html
+A package to work with meshes, designed around use cases for analyzing neuronal morphology. 
+
+documentation https://meshparty.readthedocs.io/
  
 ############
 

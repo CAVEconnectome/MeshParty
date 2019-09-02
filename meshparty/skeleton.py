@@ -460,16 +460,24 @@ class Skeleton:
         Export a skeleton file to an swc file
         (see http://research.mssm.edu/cnic/swc.html for swc definition)
 
-        :param filename: Name of the file to save the swc to
-        :param node_labels: None (default) or an interable of ints co-indexed with vertices.
-                            Corresponds to the swc node categories. Defaults to setting all
-                            nodes to label 3, dendrite.
-        :param radius: None (default) or an iterable of floats. This should be co-indexed with vertices.
-                       Radius values are assumed to be in the same units as the node vertices.
-        :param header: Dict, default None. Each key value pair in the dict becomes
-                       a parameter line in the swc header.
-        :param xyz_scaling: Number, default 1000. Down-scales spatial units from the skeleton's units to
-                            whatever is desired by the swc. E.g. nm to microns has scaling=1000.
+        Parameters
+        ----------
+        filename : str
+            Name of the file to save the swc to
+        node_labels : np.array
+            None (default) or an interable of ints co-indexed with vertices.
+            Corresponds to the swc node categories. Defaults to setting all
+            odes to label 3, dendrite.
+        radius : iterable
+            None (default) or an iterable of floats. This should be co-indexed with vertices.
+            Radius values are assumed to be in the same units as the node vertices.
+        header : dict
+            default None. Each key value pair in the dict becomes
+            a parameter line in the swc header.
+        xyz_scaling : Number
+            default 1000. Down-scales spatial units from the skeleton's units to
+            whatever is desired by the swc. E.g. nm to microns has scaling=1000.
+            
         '''
 
         skeleton_io.export_to_swc(self, filename, node_labels=node_labels,
