@@ -1,11 +1,11 @@
-import json
-from collections.abc import Iterable
+import numpy as np
+from meshparty import utils
+from scipy import spatial, sparse
+from pykdtree.kdtree import KDTree as pyKDTree
 from copy import copy
-
-from scipy import sparse, spatial
-
-from meshparty import skeleton_io, utils
-
+import json
+from meshparty import skeleton_io
+from collections.abc import Iterable
 
 class Skeleton:
     """Class to manage skeleton data
@@ -231,15 +231,15 @@ class Skeleton:
         -------
         Float or list of floats : The length of each path.
         """
-        if len(path) == 0:
+        if len(paths) == 0:
             return 0
         
-        if isinstance(path[0], Iterable):
+        if isinstance(paths[0], Iterable):
             Ls = []
             for path in paths:
                 Ls.append(self._single_path_length(path))
         else:
-            Ls = self._single_path_length(path)
+            Ls = self._single_path_length(paths)
         return Ls 
 
     def reroot(self, new_root):
