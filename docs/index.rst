@@ -16,6 +16,7 @@ Welcome to MeshParty's documentation!
    guide/filtering
    guide/skeletons
    guide/repair
+   guide/analysis
 
 API
 ---

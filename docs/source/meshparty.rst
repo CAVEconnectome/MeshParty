@@ -74,6 +74,15 @@ Utility functions used in other modules
    :undoc-members:
    :show-inheritance:
 
+mesh_skel_utils module
+----------------------
+Functions for mapping skeletons and meshes together
+
+.. automodule:: meshparty.mesh_skel_utils
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 meshlabserver module
 ------------------------------
 Facilities for interacting with meshlab
