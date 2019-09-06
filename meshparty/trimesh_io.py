@@ -206,7 +206,7 @@ def _download_meshes_thread(args):
 
     download_segids = [ 
         segid for segid in seg_ids \
-        if not overwrite and os.path.exists(
+        if overwrite or not os.path.exists(
             os.path.join(target_dir, f"{seg_id}.h5")
         )
     ]
