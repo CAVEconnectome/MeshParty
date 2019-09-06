@@ -212,7 +212,10 @@ def _download_meshes_thread(args):
     ]
 
     already_have = list(set(seg_ids).difference(set(download_segids)))
-    print("Already have: " + str(already_have))
+
+    if not overwrite:
+        print("Already Have: " + str(already_have))
+
     print("Downloading: " + str(download_segids))
 
     while len(download_segids):
