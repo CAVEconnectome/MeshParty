@@ -223,7 +223,7 @@ def _download_meshes_thread(args):
         download_segids = download_segids[ len(download_now): ]
 
         cv_meshes = cv.mesh.get(
-            download_segids, 
+            download_now, 
             remove_duplicate_vertices=remove_duplicate_vertices, 
             fuse=False
         )
