@@ -207,7 +207,7 @@ def _download_meshes_thread(args):
     download_segids = [ 
         segid for segid in seg_ids \
         if overwrite or not os.path.exists(
-            os.path.join(target_dir, f"{seg_id}.h5")
+            os.path.join(target_dir, f"{segid}.h5")
         )
     ]
 
@@ -236,13 +236,13 @@ def _download_meshes_thread(args):
                 mesh.merge_large_components()
 
             if fmt == "hdf5":
-                write_mesh_h5(f"{target_dir}/{seg_id}.h5",
+                write_mesh_h5(f"{target_dir}/{segid}.h5",
                               mesh.vertices,
                               mesh.faces.flatten(),
                               link_edges=mesh.link_edges,
                               overwrite=overwrite)            
             else:
-                mesh.write_to_file(f"{target_dir}/{seg_id}.{fmt}")
+                mesh.write_to_file(f"{target_dir}/{segid}.{fmt}")
 
 def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
                     n_threads=1, verbose=False,
