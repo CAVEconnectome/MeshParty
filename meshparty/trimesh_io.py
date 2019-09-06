@@ -197,12 +197,17 @@ def _download_meshes_thread(args):
             a private bucket and have ~/.cloudvolume/secrets setup properly
         remove_duplicate_vertices: bool
             whether to bluntly merge duplicate vertices (probably should be False)
-    
+        progress: bool
+            show progress bars
      """
     seg_ids, cv_path, target_dir, fmt, overwrite, \
-        merge_large_components, stitch_mesh_chunks, map_gs_to_https, remove_duplicate_vertices = args
+        merge_large_components, stitch_mesh_chunks, \
+        map_gs_to_https, remove_duplicate_vertices, progress = args
 
-    cv = cloudvolume.CloudVolume(cv_path, use_https=map_gs_to_https)
+    cv = cloudvolume.CloudVolume(
+        cv_path, use_https=map_gs_to_https,
+        progress=progress,
+    )
 
     download_segids = [ 
         segid for segid in seg_ids \
@@ -252,7 +257,8 @@ def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
                     stitch_mesh_chunks=True, 
                     merge_large_components=False, 
                     remove_duplicate_vertices=False,
-                    map_gs_to_https=True, fmt="hdf5"):
+                    map_gs_to_https=True, fmt="hdf5",
+                    progress=False):
     """ Downloads meshes in target directory (in parallel)
     will break up the seg_ids into n_threads*3 job blocks or fewer and download them all
 
@@ -281,6 +287,7 @@ def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
         a private bucket and have ~/.cloudvolume/secrets setup properly (default True)
     fmt: str
         'hdf5', 'obj', 'stl' or any format supported by :func:`meshparty.trimesh_io.Mesh.write_to_file` (default 'hdf5')
+    progress: bool
     """
 
     if n_threads > 1:
@@ -297,7 +304,7 @@ def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
     for seg_id_block in seg_id_blocks:
         multi_args.append([seg_id_block, cv_path, target_dir, fmt,
                            overwrite, merge_large_components, stitch_mesh_chunks,
-                            map_gs_to_https, remove_duplicate_vertices])
+                            map_gs_to_https, remove_duplicate_vertices, progress])
 
     if n_jobs == 1:
         mu.multiprocess_func(_download_meshes_thread,
