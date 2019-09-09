@@ -197,53 +197,68 @@ def _download_meshes_thread(args):
             a private bucket and have ~/.cloudvolume/secrets setup properly
         remove_duplicate_vertices: bool
             whether to bluntly merge duplicate vertices (probably should be False)
-    
+        progress: bool
+            show progress bars
      """
     seg_ids, cv_path, target_dir, fmt, overwrite, \
-        merge_large_components, stitch_mesh_chunks, map_gs_to_https, remove_duplicate_vertices = args
+        merge_large_components, stitch_mesh_chunks, \
+        map_gs_to_https, remove_duplicate_vertices, progress = args
 
-    cv = cloudvolume.CloudVolume(cv_path, use_https=map_gs_to_https)
+    cv = cloudvolume.CloudVolume(
+        cv_path, use_https=map_gs_to_https,
+        progress=progress,
+    )
 
-    for seg_id in seg_ids:
-        print('downloading {}'.format(seg_id))
-        target_file = os.path.join(target_dir, f"{seg_id}.h5")
-        if not overwrite and os.path.exists(target_file):
-            print('file exists {}'.format(target_file))
-            continue
-        print('file does not exist {}'.format(target_file))
+    download_segids = [ 
+        segid for segid in seg_ids \
+        if overwrite or not os.path.exists(
+            os.path.join(target_dir, f"{segid}.h5")
+        )
+    ]
 
-        try:
-            cv_mesh = cv.mesh.get(seg_id, remove_duplicate_vertices=remove_duplicate_vertices)
+    already_have = list(set(seg_ids).difference(set(download_segids)))
 
-            faces = np.array(cv_mesh["faces"])
-            if len(faces.shape) == 1:
-                faces = faces.reshape(-1, 3)
+    if not overwrite:
+        print("Already Have: " + str(already_have))
 
-            mesh = Mesh(vertices=cv_mesh["vertices"],
-                        faces=faces,
-                        process=False)
+    print("Downloading: " + str(download_segids))
+
+    while len(download_segids):
+        download_now = download_segids[:100]
+        download_segids = download_segids[ len(download_now): ]
+
+        cv_meshes = cv.mesh.get(
+            download_now, 
+            remove_duplicate_vertices=remove_duplicate_vertices, 
+            fuse=False
+        )
+
+        for segid, cv_mesh in cv_meshes.items():
+            mesh = Mesh(
+                vertices=cv_mesh.vertices,
+                faces=cv_mesh.faces,
+                process=False,
+            )
 
             if merge_large_components:
                 mesh.merge_large_components()
 
             if fmt == "hdf5":
-                write_mesh_h5(f"{target_dir}/{seg_id}.h5",
+                write_mesh_h5(f"{target_dir}/{segid}.h5",
                               mesh.vertices,
                               mesh.faces.flatten(),
                               link_edges=mesh.link_edges,
-                              overwrite=overwrite)
+                              overwrite=overwrite)            
             else:
-                mesh.write_to_file(f"{target_dir}/{seg_id}.{fmt}")
-        except Exception as e:
-            print(e)
-
+                mesh.write_to_file(f"{target_dir}/{segid}.{fmt}")
 
 def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
                     n_threads=1, verbose=False,
                     stitch_mesh_chunks=True, 
                     merge_large_components=False, 
                     remove_duplicate_vertices=False,
-                    map_gs_to_https=True, fmt="hdf5"):
+                    map_gs_to_https=True, fmt="hdf5",
+                    progress=False):
     """ Downloads meshes in target directory (in parallel)
     will break up the seg_ids into n_threads*3 job blocks or fewer and download them all
 
@@ -272,6 +287,7 @@ def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
         a private bucket and have ~/.cloudvolume/secrets setup properly (default True)
     fmt: str
         'hdf5', 'obj', 'stl' or any format supported by :func:`meshparty.trimesh_io.Mesh.write_to_file` (default 'hdf5')
+    progress: bool
     """
 
     if n_threads > 1:
@@ -288,7 +304,7 @@ def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
     for seg_id_block in seg_id_blocks:
         multi_args.append([seg_id_block, cv_path, target_dir, fmt,
                            overwrite, merge_large_components, stitch_mesh_chunks,
-                            map_gs_to_https, remove_duplicate_vertices])
+                            map_gs_to_https, remove_duplicate_vertices, progress])
 
     if n_jobs == 1:
         mu.multiprocess_func(_download_meshes_thread,
