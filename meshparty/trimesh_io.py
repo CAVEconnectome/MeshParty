@@ -215,11 +215,11 @@ def _download_meshes_thread(args):
         try:
             cv_mesh = cv.mesh.get(seg_id, remove_duplicate_vertices=remove_duplicate_vertices)
 
-            faces = np.array(cv_mesh["faces"])
+            faces = np.array(cv_mesh.faces)
             if len(faces.shape) == 1:
                 faces = faces.reshape(-1, 3)
 
-            mesh = Mesh(vertices=cv_mesh["vertices"],
+            mesh = Mesh(vertices=cv_mesh.vertices,
                         faces=faces,
                         process=False)
 
