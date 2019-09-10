@@ -511,7 +511,7 @@ class Mesh(trimesh.Trimesh):
         want to store in the mesh graph
     **kwargs:
         all the other keyword args you want to pass to :class:`trimesh.Trimesh`
-    
+
     """
 
     def __init__(self, *args, node_mask=None, unmasked_size=None, apply_mask=False, link_edges=None, **kwargs):
