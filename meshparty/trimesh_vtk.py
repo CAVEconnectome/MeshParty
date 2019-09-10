@@ -367,7 +367,7 @@ def camera_from_quat(pos_nm, orient_quat, camera_distance=10000, ngl_correct=Tru
     camera = vtk.vtkCamera()
     # define the quaternion in vtk, note the swapped order
     # w,x,y,z instead of x,y,z,w
-    quat_vtk=vtk.vtkQuaterniond(orient_quat[3],
+    quat_vtk=vtk.vtkQuate rniond(orient_quat[3],
                                 orient_quat[0],
                                 orient_quat[1],
                                 orient_quat[2])
@@ -791,3 +791,49 @@ def oriented_camera(center, up_vector=(0, -1, 0), backoff=500, backoff_vector=(0
     camera.SetViewUp(*vup)
     camera.SetPosition(*pt_backoff)
     return camera
+
+
+def scale_bar_actor(center, camera, length=10000, color=(0,0,0), linewidth=5, font_size=20):
+    """Creates a xyz 3d scale bar actor located at a specific location with a given size
+    
+    Parameters
+    ----------
+    center : iterable
+        a length 3 iterable of xyz position
+    camera : vtk.vtkCamera
+        the camera the scale bar should follow
+    length : int, optional
+        length of each of the xyz axis, by default 10000
+    color : tuple, optional
+        color of text and lines, by default (0,0,0)
+    linewidth : int, optional
+        width of line in pixels, by default 5
+    font_size : int, optional
+        font size of xyz labels, by default 20
+
+    Returns
+    -------
+    vtk.vktActor
+        scale bar actor to add to render_actors
+
+    """
+    axes_actor = vtk.vtkCubeAxesActor2D()
+    axes_actor.SetBounds(center[0], center[0]+length,
+                         center[1], center[1]+length,
+                         center[2], center[2]+length)
+    axes_actor.SetLabelFormat("")
+    axes_actor.SetCamera(camera)
+    axes_actor.SetNumberOfLabels(0)
+    axes_actor.SetFlyModeToNone()
+    axes_actor.SetFontFactor(1.0)
+    axes_actor.GetProperty().SetColor(*color)
+    axes_actor.GetProperty().SetLineWidth(linewidth)
+    tprop =vtk.vtkTextProperty()
+    tprop.SetColor(*color)
+    tprop.ShadowOff()
+    tprop.SetFontSize(font_size)
+    axes_actor.SetAxisTitleTextProperty(tprop)
+    axes_actor.SetAxisLabelTextProperty(tprop)
+
+    return axes_actor
+    
