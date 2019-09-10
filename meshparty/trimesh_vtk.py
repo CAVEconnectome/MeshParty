@@ -367,7 +367,7 @@ def camera_from_quat(pos_nm, orient_quat, camera_distance=10000, ngl_correct=Tru
     camera = vtk.vtkCamera()
     # define the quaternion in vtk, note the swapped order
     # w,x,y,z instead of x,y,z,w
-    quat_vtk=vtk.vtkQuate rniond(orient_quat[3],
+    quat_vtk=vtk.vtkQuaterniond(orient_quat[3],
                                 orient_quat[0],
                                 orient_quat[1],
                                 orient_quat[2])
@@ -836,4 +836,3 @@ def scale_bar_actor(center, camera, length=10000, color=(0,0,0), linewidth=5, fo
     axes_actor.SetAxisLabelTextProperty(tprop)
 
     return axes_actor
-    

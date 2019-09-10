@@ -125,6 +125,9 @@ def test_full_cell_camera(full_cell_mesh, full_cell_soma_pt, tmp_path):
     camera = trimesh_vtk.oriented_camera(full_cell_soma_pt, backoff=100)
     eval_actor_image([mesh_actor], 'full_cell_orient_camera.png', tmp_path, camera=camera, scale=1)
 
+    scale_bar_actor = trimesh_vtk.scale_bar_actor(full_cell_soma_pt-[15000,0,0], camera)
+    eval_actor_image([mesh_actor, scale_bar_actor], 'full_cell_scale_bar.png', tmp_path, camera=camera, scale=1)
+
 def test_vtk_errors():
     verts = np.random.rand(10,3)
     tris = np.random.randint(0,10,(5,3))
@@ -235,3 +238,5 @@ def test_point_cloud(full_cell_mesh, full_cell_synapses, full_cell_soma_pt, tmp_
         syn_actor = trimesh_vtk.point_cloud_actor(full_cell_synapses['positions'],
                                                   size=300,
                                                   color=np.random.rand(len(x),2))
+
+    
