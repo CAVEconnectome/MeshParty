@@ -259,7 +259,8 @@ def poly_to_mesh_components(poly):
 
 def render_actors(actors, camera=None, do_save=False, filename=None,
                   scale=4, back_color=(1, 1, 1),
-                  VIDEO_WIDTH=1080, VIDEO_HEIGHT=720):
+                  VIDEO_WIDTH=1080, VIDEO_HEIGHT=720,
+                  return_keyframes=False):
     """
     Visualize a set of actors in a 3d scene, optionally saving a snapshot. 
     Creates a window, renderer, interactor, add the actors and starts the visualization
@@ -279,12 +280,16 @@ def render_actors(actors, camera=None, do_save=False, filename=None,
         scale factor to use when saving images to disk (default 4) for higher res images
     back_color: Iterable
         rgb values (0,1) to determine for background color (default 1,1,1 = white)
+    return_keyframes : bool
+        whether to save a new camera as a keyframes when you press 'k' with window open
 
     Returns
     -------
     :obj:`vtk.vtkRenderer`
         renderer when code was finished
         (useful for retrieving user input camera position ren.GetActiveCamera())
+    (list[vtk.vtkCamera])
+        list of vtk cameras when user pressed 'k' (only if return_keyframes=True)
 
     """
     if do_save:
@@ -302,6 +307,17 @@ def render_actors(actors, camera=None, do_save=False, filename=None,
     else:
         ren.ResetCameraClippingRange()
         camera.ViewingRaysModified()
+    
+    if return_keyframes:
+        key_frame_cameras = []
+        def vtkKeyPress(obj, event):
+            key = obj.GetKeySym()
+            if key == 'k':
+                key_camera = vtk.vtkCamera()
+                key_camera.DeepCopy(ren.GetActiveCamera())
+                key_frame_cameras.append(key_camera)
+            return
+        iren.AddObserver("KeyPressEvent", vtkKeyPress)
     renWin.Render()
 
 
@@ -328,7 +344,10 @@ def render_actors(actors, camera=None, do_save=False, filename=None,
 
     renWin.Finalize()
 
-    return ren
+    if return_keyframes:
+        return ren, key_frame_cameras
+    else:
+        return ren
 
 
 def camera_from_quat(pos_nm, orient_quat, camera_distance=10000, ngl_correct=True):
