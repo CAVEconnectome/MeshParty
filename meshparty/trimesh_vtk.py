@@ -833,12 +833,12 @@ def render_actors_360(actors, directory, nframes, camera_start =None, start_fram
     """     
     if camera_start is None:
         frame_0_file = os.path.join(directory, "0000.png")
-        ren = trimesh_vtk.render_actors(actors,
-                                        do_save=True,
-                                        filename=frame_0_file,
-                                        VIDEO_WIDTH=video_width,
-                                        VIDEO_HEIGHT=video_height,
-                                        back_color=(1,1,1))
+        ren = render_actors(actors,
+                            do_save=True,
+                            filename=frame_0_file,
+                            VIDEO_WIDTH=video_width,
+                            VIDEO_HEIGHT=video_height,
+                            back_color=(1,1,1))
         camera_start = ren.GetActiveCamera()
     
     cameras =[]
