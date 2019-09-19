@@ -888,7 +888,7 @@ def _setup_renderer(video_width, video_height, back_color, camera=None):
     # ren.SetBackground( 1, 1, 1)
     if camera is not None:
         ren.SetActiveCamera(camera)
-    renWin.Render()
+
     # create a renderwindowinteractor
     iren = vtk.vtkRenderWindowInteractor()
     iren.SetRenderWindow(renWin)
