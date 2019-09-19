@@ -800,7 +800,7 @@ def oriented_camera(center, up_vector=(0, -1, 0), backoff=500, backoff_vector=(0
 
 
 def render_actors_360(actors, directory, nframes, camera_start =None, start_frame=0,
-            video_width=1280, video_height=720, scale=4, do_save=True):
+            video_width=1280, video_height=720, scale=4, do_save=True, back_color=(1,1,1)):
     """
     Function to create a series of png frames which rotates around
     the Azimuth angle of a starting camera
@@ -832,6 +832,8 @@ def render_actors_360(actors, directory, nframes, camera_start =None, start_fram
         how much to expand the image
     do_save : bool
         whether to save the images to disk or just play interactively
+    back_color : iterable
+        a len(3) iterable with the background color [0,1]rgb
     Returns
     -------
     vtkRenderer
@@ -857,7 +859,7 @@ def render_actors_360(actors, directory, nframes, camera_start =None, start_fram
                             filename=frame_0_file,
                             VIDEO_WIDTH=video_width,
                             VIDEO_HEIGHT=video_height,
-                            back_color=(1,1,1))
+                            back_color=back_color)
         camera_start = ren.GetActiveCamera()
     
     cameras =[]
@@ -876,7 +878,8 @@ def render_actors_360(actors, directory, nframes, camera_start =None, start_fram
                      video_width=video_width,
                      scale=scale,
                      do_save=do_save,
-                     start_frame=start_frame)
+                     start_frame=start_frame, 
+                     back_color=back_color)
 
 def _setup_renderer(video_width, video_height, back_color, camera=None):
     ren = vtk.vtkRenderer()

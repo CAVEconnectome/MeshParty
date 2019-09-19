@@ -38,6 +38,28 @@ def eval_actor_image(actors, fname, tmp_path, camera=None, scale=2, make_image=F
     else:
         return compare_img_to_test_file(filepath)    
 
+def eval_actor_360(actors, fdir, tmp_path, camera=None, scale=2, nframes=30, make_image=False):
+    filepath = os.path.join(tmp_path, fdir)
+
+    if make_image:
+        fpath = os.path.dirname(os.path.abspath(__file__))
+    else:
+        fpath = filepath
+    trimesh_vtk.render_actors_360(actors, fpath,
+                                  nframes=nframes,
+                                  do_save =True,
+                                  camera_start=camera,
+                                  scale=scale,
+                                  back_color=(1,1,1))
+    if make_image:
+        return True
+    else:
+        is_good=np.zeros(nframes, np.bool)
+        for i in range(nframes):
+            img_file = os.path.join(fpath, f'%04d'%i)
+            is_good[i]=compare_img_to_test_file(img_file)    
+        return np.all(is_good)
+
 @contextlib.contextmanager
 def build_basic_mesh():
     verts = np.array([[-0.5, -0.5, -0.5],
@@ -124,6 +146,11 @@ def test_full_cell_camera(full_cell_mesh, full_cell_soma_pt, tmp_path):
     mesh_actor = trimesh_vtk.mesh_actor(full_cell_mesh)
     camera = trimesh_vtk.oriented_camera(full_cell_soma_pt, backoff=100)
     eval_actor_image([mesh_actor], 'full_cell_orient_camera.png', tmp_path, camera=camera, scale=1)
+
+def test_full_cell_movie(full_cell_mesh, full_cell_soma_pt, tmp_path):
+    mesh_actor = trimesh_vtk.mesh_actor(full_cell_mesh)
+    camera = trimesh_vtk.oriented_camera(full_cell_soma_pt, backoff=100)
+    eval_actor_360([mesh_actor], 'full_cell_movie', tmp_path, camera=camera, scale=1)
 
 def test_vtk_errors():
     verts = np.random.rand(10,3)
