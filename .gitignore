@@ -12,3 +12,5 @@ test-reports/
 .DS_Store
 .pytest_cache/
 .coverage.*
+**_build/
+*.bak

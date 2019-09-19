@@ -10,9 +10,14 @@ def write_skeleton_h5(sk, filename, overwrite=False):
     '''
     Write a skeleton and its properties to an hdf5 file.
 
-    :param sk: Skeletonnew_mesh_filt
-    :param filename: String. Filename of skeleton file.
-    :param overwrite: Boolean, (default False). Allows overwriting.
+    Parameters
+    ----------
+    sk : :obj:`meshparty.skeleton.Skeleton`
+        new_mesh_filt
+    filename : str
+        Filename of skeleton file.
+    overwrite : bool
+         Allows overwriting.(default False).
     '''
     write_skeleton_h5_by_part(filename,
                               vertices=sk.vertices,
@@ -29,6 +34,29 @@ def write_skeleton_h5_by_part(filename, vertices, edges, mesh_to_skel_map=None,
                               overwrite=False):
     '''
     Helper function for writing all parts of a skeleton file to an h5.
+
+    Parameters
+    ----------
+    filename : str
+        path to write
+    vertices : np.array
+        Nx3 numpy array of vertex locations
+    edges : np.array
+        Kx2 numpy array of vertex indices for edges
+    mesh_to_skel_map : np.array
+        M long numpy array.  M is the number of vertices in a mesh that this
+        is associated with.  The entries are indices into the N skeleton vertices
+    vertex_properties : dict
+        a dictionary of np.arrays, were keys are descriptive labels
+        and the values are arrays that quantify that label at each vertex
+        examples..
+        mesh_index) the mesh index of this vertex
+        rs) the sdf (local caliber/thickness) of the mesh at each index
+    root : int
+        which vertex index is root
+    overwrite : bool
+        whether to overwrite file
+
     '''
 
     if os.path.isfile(filename):
@@ -57,6 +85,34 @@ def _write_dict_to_group(f, group_name, data_dict):
 def read_skeleton_h5_by_part(filename):
     '''
     Helper function for extracting all parts of a skeleton file from an h5.
+
+    Parameters
+    ----------
+    filename : str
+        path to a h5 file with skeletons
+
+    Returns
+    -------
+    str
+        filename, path to write
+    np.array
+        vertices, Nx3 numpy array of vertex locations
+    np.array
+        edges , Kx2 numpy array of vertex indices for edges
+    np.array
+        mesh_to_skel_map , M long numpy array.  M is the number of vertices in a mesh that this
+        is associated with.  The entries are indices into the N skeleton vertices
+    dict
+        vertex_properties, a dictionary of np.arrays, were keys are descriptive labels
+        and the values are arrays that quantify that label at each vertex
+        examples..
+        mesh_index) the mesh index of this vertex
+        rs) the sdf (local caliber/thickness) of the mesh at each index
+    int
+        root, which vertex index is root
+    bool
+        overwrite, whether to overwrite file
+
     '''
     assert os.path.isfile(filename)
 
@@ -87,7 +143,16 @@ def read_skeleton_h5(filename):
     '''
     Reads a skeleton and its properties from an hdf5 file.
 
-    :param filename: String. Filename of skeleton file.
+    Parameters
+    ----------
+    filename: str
+        path to skeleton file
+
+    Returns
+    -------
+    :obj:`meshparty.skeleton.Skeleton`
+        skeleton object loaded from the h5 file
+    
     '''
     vertices, edges, mesh_to_skel_map, vertex_properties, root = read_skeleton_h5_by_part(filename)
     return skeleton.Skeleton(vertices=vertices,
@@ -102,15 +167,20 @@ def export_to_swc(skel, filename, node_labels=None, radius=None, header=None, xy
     Export a skeleton file to an swc file
     (see http://research.mssm.edu/cnic/swc.html for swc definition)
 
-    :param filename: Name of the file to save the swc to
-    :param node_labels: None (default) or an interable of ints co-indexed with vertices.
-                        Corresponds to the swc node categories. Defaults to setting all
-                        nodes to label 3, dendrite.
-    :param radius: None (default) or an iterable of floats. This should be co-indexed with vertices.
-                   Radius values are assumed to be in the same units as the node vertices.
-    :param header: Dict, default None. Each key value pair in the dict becomes
+    Parameters
+    ----------
+    filename : str
+        path to the file to save the swc to
+    node_labels : iterable
+        None (default) or an interable of ints co-indexed with vertices.
+        Corresponds to the swc node categories. Defaults to setting all
+        nodes to label 3, dendrite.
+    radius : iterable
+        None (default) or an iterable of floats. This should be co-indexed with vertices.
+        Radius values are assumed to be in the same units as the node vertices.
+    header : dict, default None. Each key value pair in the dict becomes
                    a parameter line in the swc header.
-    :param xyz_scaling: Number, default 1000. Down-scales spatial units from the skeleton's units to
+    xyz_scaling: Number, default 1000. Down-scales spatial units from the skeleton's units to
                         whatever is desired by the swc. E.g. nm to microns has scaling=1000.
     '''
 
