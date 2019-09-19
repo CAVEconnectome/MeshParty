@@ -7,6 +7,7 @@ import os
 import networkx as nx
 import requests
 import time
+import re
 from collections import defaultdict
 import warnings
 
@@ -173,8 +174,73 @@ def read_mesh(filename):
         raise Exception("Unknown filetype")
     return vertices, faces, normals, link_edges, node_mask
 
+def _download_meshes_thread_graphene(args):
+    """ Helper to Download meshes into target directory from graphene sources.
+    Parameters
+    ----------
+    args : tuple
+        seg_ids : iterator of ids
+            the seg ids (with filenames = f"{seg_id}.h5") in the target_dir
+        cv_path: str
+            the cloudvolume path passed to cloudvolume.CloudVolume
+        target_dir: str
+            a path to the diretory to save the meshes
+        fmt: str
+            'hdf5', 'obj', 'stl' or any format supported by 'func':`write_to_file`
+        overwrite: bool
+            whether to overwrite the meshes if they already exist.
+            will do no work if those don't exist
+        merge_large_components: bool
+            whether to merge all the large components using 'func':trimesh_io.Mesh.merge_large_components
+            with default parameters (probably should be False)
+        stitch_mesh_chunks: bool
+            whether to stitch mesh chunks across meshes after downloading fragments (probably should be True)
+        map_gs_to_https: bool
+            whether to trigger cloudvolume.CloudVolume use_https option. Probably should be true unless you have
+            a private bucket and have ~/.cloudvolume/secrets setup properly
+        remove_duplicate_vertices: bool
+            whether to bluntly merge duplicate vertices (probably should be False)
+    
+     """
+    seg_ids, cv_path, target_dir, fmt, overwrite, \
+        merge_large_components, stitch_mesh_chunks, map_gs_to_https, remove_duplicate_vertices = args
 
-def _download_meshes_thread(args):
+    cv = cloudvolume.CloudVolume(cv_path, use_https=map_gs_to_https)
+
+    for seg_id in seg_ids:
+        print('downloading {}'.format(seg_id))
+        target_file = os.path.join(target_dir, f"{seg_id}.h5")
+        if not overwrite and os.path.exists(target_file):
+            print('file exists {}'.format(target_file))
+            continue
+        print('file does not exist {}'.format(target_file))
+
+        try:
+            cv_mesh = cv.mesh.get(seg_id, remove_duplicate_vertices=remove_duplicate_vertices)
+
+            faces = np.array(cv_mesh.faces)
+            if len(faces.shape) == 1:
+                faces = faces.reshape(-1, 3)
+
+            mesh = Mesh(vertices=cv_mesh.vertices,
+                        faces=faces,
+                        process=False)
+
+            if merge_large_components:
+                mesh.merge_large_components()
+
+            if fmt == "hdf5":
+                write_mesh_h5(f"{target_dir}/{seg_id}.h5",
+                              mesh.vertices,
+                              mesh.faces.flatten(),
+                              link_edges=mesh.link_edges,
+                              overwrite=overwrite)
+            else:
+                mesh.write_to_file(f"{target_dir}/{seg_id}.{fmt}")
+        except Exception as e:
+            print(e)
+
+def _download_meshes_thread_precomputed(args):
     """ Helper to Download meshes into target directory
 
     Parameters
@@ -301,6 +367,12 @@ def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
 
     if len(seg_ids) < n_jobs:
         n_jobs = len(seg_ids)
+
+    # Use the cv path to establish if the source is graphene or not.
+    if re.search('^graphene://', cv_path) is not None:
+        _download_meshes_thread = _download_meshes_thread_graphene
+    else:
+        _download_meshes_thread = _download_meshes_thread_precomputed
 
     seg_id_blocks = np.array_split(seg_ids, n_jobs)
 
@@ -468,7 +540,7 @@ class MeshMeta(object):
                 if (len(faces.shape) == 1):
                     faces = faces.reshape(-1, 3)
 
-                mesh = Mesh(vertices=cv_mesh["vertices"],
+                mesh = Mesh(vertices=cv_mesh.vertices,
                             faces=faces)
 
                 if cache_mesh and len(self._mesh_cache) < self.cache_size:

@@ -1000,3 +1000,54 @@ def render_movie(actors, directory, times, cameras,start_frame=0,
     
     renWin.Finalize()
     return renWin,i+start_frame
+def scale_bar_actor(center, camera, length=10000, color=(0,0,0), linewidth=5, font_size=20):
+    """Creates a xyz 3d scale bar actor located at a specific location with a given size
+    
+    Parameters
+    ----------
+    center : iterable
+        a length 3 iterable of xyz position
+    camera : vtk.vtkCamera
+        the camera the scale bar should follow
+    length : int, optional
+        length of each of the xyz axis, by default 10000
+    color : tuple, optional
+        color of text and lines, by default (0,0,0)
+    linewidth : int, optional
+        width of line in pixels, by default 5
+    font_size : int, optional
+        font size of xyz labels, by default 20
+
+    Returns
+    -------
+    vtk.vktActor
+        scale bar actor to add to render_actors
+
+    """
+    axes_actor = vtk.vtkCubeAxesActor2D()
+    axes_actor.SetBounds(center[0], center[0]+length,
+                         center[1], center[1]+length,
+                         center[2], center[2]+length)
+    # this means no real labels
+    axes_actor.SetLabelFormat("")
+    axes_actor.SetCamera(camera)
+    # this turns off the tick marks and labelled numbers
+    axes_actor.SetNumberOfLabels(0)
+    # this affects whether the corner of the 3 axis
+    # changes as you rotate the view
+    # this option makes it stay constant
+    axes_actor.SetFlyModeToNone()
+    axes_actor.SetFontFactor(1.0)
+    axes_actor.GetProperty().SetColor(*color)
+    axes_actor.GetProperty().SetLineWidth(linewidth)
+    # this controls the color of text
+    tprop =vtk.vtkTextProperty()
+    tprop.SetColor(*color)
+    # no shadows on text
+    tprop.ShadowOff()
+    tprop.SetFontSize(font_size)
+    # makes the xyz and labels the same
+    axes_actor.SetAxisTitleTextProperty(tprop)
+    axes_actor.SetAxisLabelTextProperty(tprop)
+
+    return axes_actor
