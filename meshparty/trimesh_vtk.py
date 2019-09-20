@@ -463,7 +463,7 @@ def process_colors(color,xyz):
         # then we have one explicit color
         assert(np.max(color)<=1.0)
         assert(np.min(color)>=0)
-        car = np.array(color, dtype=np.uint8)*255 
+        car = np.array(color*255, dtype=np.uint8)
         color = np.repeat(car[np.newaxis,:],len(xyz),axis=0)
     else:
         raise ValueError('color must have shapse Nx3 if explicitly setting, or (N,) if mapping, or (3,)')
@@ -698,6 +698,7 @@ def point_cloud_actor(xyz,
     
     actor = vtk.vtkActor()
     actor.SetMapper(mapper)
+    actor.GetProperty().SetOpacity(opacity)
     return actor
 
 
