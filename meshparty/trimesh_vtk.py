@@ -3,6 +3,7 @@ from vtk.util.numpy_support import numpy_to_vtk, numpy_to_vtkIdTypeArray, vtk_to
 import numpy as np
 import os
 
+
 def numpy_to_vtk_cells(mat):
     """function to convert a numpy array of integers to a vtkCellArray
 
@@ -10,14 +11,13 @@ def numpy_to_vtk_cells(mat):
     ----------
     mat : np.array
         MxN array to be converted
-    
+
     Returns
     -------
     vtk.vtkCellArray
         representing the numpy array, has the same shaped cell (N) at each of the M indices
 
     """
-
 
     cells = vtk.vtkCellArray()
 
@@ -62,7 +62,7 @@ def numpy_rep_to_vtk(vertices, shapes, edges=None):
 
     cells = numpy_to_vtk_cells(shapes)
     if edges is not None:
-        if len(edges)>0:
+        if len(edges) > 0:
             edges = numpy_to_vtk_cells(edges)
         else:
             edges = None
@@ -208,7 +208,7 @@ def remove_unused_verts(verts, faces):
     faces : np.array
         MxK numpy array of connected shapes (i.e. edges or tris)
         (entries are indices into verts)
-    
+
     Returns
     -------
     np.array
@@ -232,7 +232,7 @@ def poly_to_mesh_components(poly):
     ----------
     poly : vtk.vtkPolyData
         a polydate object to convert to numpy components
-    
+
     Returns
     -------
     np.array
@@ -246,9 +246,9 @@ def poly_to_mesh_components(poly):
     points = vtk_to_numpy(poly.GetPoints().GetData())
     ntris = poly.GetNumberOfPolys()
     if ntris > 0:
-       tris = vtk_cellarray_to_shape(poly.GetPolys().GetData(), ntris)
+        tris = vtk_cellarray_to_shape(poly.GetPolys().GetData(), ntris)
     else:
-        tris = None     
+        tris = None
     nedges = poly.GetNumberOfLines()
     if nedges > 0:
         edges = vtk_cellarray_to_shape(poly.GetLines().GetData(), nedges)
@@ -295,8 +295,9 @@ def render_actors(actors, camera=None, do_save=False, filename=None,
     if do_save:
         assert(filename is not None)
     # create a rendering window and renderer
-    ren, renWin, iren = _setup_renderer(VIDEO_WIDTH, VIDEO_HEIGHT, back_color, camera=camera)
-    
+    ren, renWin, iren = _setup_renderer(
+        VIDEO_WIDTH, VIDEO_HEIGHT, back_color, camera=camera)
+
     for a in actors:
         # assign actor to the renderer
         ren.AddActor(a)
@@ -307,9 +308,10 @@ def render_actors(actors, camera=None, do_save=False, filename=None,
     else:
         ren.ResetCameraClippingRange()
         camera.ViewingRaysModified()
-    
+
     if return_keyframes:
         key_frame_cameras = []
+
         def vtkKeyPress(obj, event):
             key = obj.GetKeySym()
             if key == 'k':
@@ -320,7 +322,6 @@ def render_actors(actors, camera=None, do_save=False, filename=None,
         iren.AddObserver("KeyPressEvent", vtkKeyPress)
     renWin.Render()
 
-
     if do_save is False:
         trackCamera = vtk.vtkInteractorStyleTrackballCamera()
         iren.SetInteractorStyle(trackCamera)
@@ -328,7 +329,6 @@ def render_actors(actors, camera=None, do_save=False, filename=None,
         iren.Initialize()
         iren.Render()
         iren.Start()
-
 
     if do_save is True:
         renWin.OffScreenRenderingOn()
@@ -372,23 +372,23 @@ def camera_from_quat(pos_nm, orient_quat, camera_distance=10000, ngl_correct=Tru
     camera = vtk.vtkCamera()
     # define the quaternion in vtk, note the swapped order
     # w,x,y,z instead of x,y,z,w
-    quat_vtk=vtk.vtkQuaterniond(orient_quat[3],
-                                orient_quat[0],
-                                orient_quat[1],
-                                orient_quat[2])
+    quat_vtk = vtk.vtkQuaterniond(orient_quat[3],
+                                  orient_quat[0],
+                                  orient_quat[1],
+                                  orient_quat[2])
     # use this to define a rotation matrix in x,y,z
     # right handed units
     M = np.zeros((3, 3), dtype=np.float32)
     quat_vtk.ToMatrix3x3(M)
     # the default camera orientation is y up
     up = [0, 1, 0]
-    # calculate default camera position is backed off in positive z 
+    # calculate default camera position is backed off in positive z
     pos = [0, 0, camera_distance]
-    
+
     # set the camera rototation by applying the rotation matrix
-    camera.SetViewUp(*np.dot(M,up))
+    camera.SetViewUp(*np.dot(M, up))
     # set the camera position by applying the rotation matrix
-    camera.SetPosition(*np.dot(M,pos))
+    camera.SetPosition(*np.dot(M, pos))
     if ngl_correct:
         # neuroglancer has positive y going down
         # so apply these azimuth and roll corrections
@@ -398,15 +398,16 @@ def camera_from_quat(pos_nm, orient_quat, camera_distance=10000, ngl_correct=Tru
 
     # shift the camera posiiton and focal position
     # to be centered on the desired location
-    p=camera.GetPosition()
+    p = camera.GetPosition()
     p_new = np.array(p)+pos_nm
     camera.SetPosition(*p_new)
     camera.SetFocalPoint(*pos_nm)
     return camera
 
+
 def camera_from_ngl_state(state_d, zoom_factor=300.0):
     """define a vtk camera from a neuroglancer state dictionary
-    
+
     Parameters
     ----------
     state_d: dict
@@ -422,16 +423,17 @@ def camera_from_ngl_state(state_d, zoom_factor=300.0):
 
     """
 
-    orient = state_d.get('perspectiveOrientation', [0.0,0.0,0.0,1.0])
+    orient = state_d.get('perspectiveOrientation', [0.0, 0.0, 0.0, 1.0])
     zoom = state_d.get('perspectiveZoom', 10.0)
     position = state_d['navigation']['pose']['position']
     pos_nm = np.array(position['voxelCoordinates'])*position['voxelSize']
-    camera = camera_from_quat(pos_nm, orient, zoom*zoom_factor, ngl_correct=True)
-    
+    camera = camera_from_quat(pos_nm, orient, zoom *
+                              zoom_factor, ngl_correct=True)
+
     return camera
 
 
-def process_colors(color,xyz):
+def process_colors(color, xyz):
     """ utility function to normalize colors on an set of things
 
     Parameters
@@ -441,7 +443,7 @@ def process_colors(color,xyz):
         color or colors  you want to label xyz with
     xyz: np.array
         a NxD matrix you wish to 'color'
-    
+
     Returns
     -------
     np.array
@@ -454,25 +456,27 @@ def process_colors(color,xyz):
     map_colors = False
     if not isinstance(color, np.ndarray):
         color = np.array(color)
-    if color.shape == (len(xyz),3):
+    if color.shape == (len(xyz), 3):
         # then we have explicit colors
         if color.dtype != np.uint8:
             # if not passing uint8 assume 0-1 mapping
-            assert(np.max(color)<=1.0)
-            assert(np.min(color)>=0)
+            assert(np.max(color) <= 1.0)
+            assert(np.min(color) >= 0)
             color = np.uint8(color*255)
-    elif color.shape ==(len(xyz),):
+    elif color.shape == (len(xyz),):
         # then we want to map colors
-        map_colors = True     
+        map_colors = True
     elif color.shape == (3,):
         # then we have one explicit color
-        assert(np.max(color)<=1.0)
-        assert(np.min(color)>=0)
-        car = np.array(color, dtype=np.uint8)*255 
-        color = np.repeat(car[np.newaxis,:],len(xyz),axis=0)
+        assert(np.max(color) <= 1.0)
+        assert(np.min(color) >= 0)
+        car = np.array(color, dtype=np.uint8)*255
+        color = np.repeat(car[np.newaxis, :], len(xyz), axis=0)
     else:
-        raise ValueError('color must have shapse Nx3 if explicitly setting, or (N,) if mapping, or (3,)')
+        raise ValueError(
+            'color must have shapse Nx3 if explicitly setting, or (N,) if mapping, or (3,)')
     return color, map_colors
+
 
 def mesh_actor(mesh,
                color=(0, 1, 0),
@@ -527,11 +531,12 @@ def mesh_actor(mesh,
     else:
         mesh_poly = trimesh_to_vtk(mesh.vertices, mesh.faces, None)
     if vertex_colors is not None:
-        vertex_color, map_vertex_color =  process_colors(vertex_colors, mesh.vertices)
+        vertex_color, map_vertex_color = process_colors(
+            vertex_colors, mesh.vertices)
         vtk_vert_colors = numpy_to_vtk(vertex_color)
         vtk_vert_colors.SetName('colors')
         mesh_poly.GetPointData().SetScalars(vtk_vert_colors)
-    
+
     if face_colors is not None:
         face_color, map_face_colors = process_colors(face_colors, mesh.faces)
         vtk_face_colors = numpy_to_vtk(face_color)
@@ -641,10 +646,11 @@ def skeleton_actor(sk,
     actor.GetProperty().SetColor(color)
     return actor
 
+
 def point_cloud_actor(xyz,
-                     size=100,
-                     color=(0,0,0),
-                     opacity=0.5):
+                      size=100,
+                      color=(0, 0, 0),
+                      opacity=0.5):
     """function to make a vtk.vtkActor from a set of xyz points that renders them as spheres
 
     Parameters
@@ -658,7 +664,7 @@ def point_cloud_actor(xyz,
         or a Nx3 list of explicit colors [0,1] range
     opacity: float
         the [0,1] opacity of mesh
-    
+
     Returns
     -------
     vtk.vtkActor
@@ -668,7 +674,7 @@ def point_cloud_actor(xyz,
     points = vtk.vtkPoints()
     points.SetData(numpy_to_vtk(xyz, deep=True))
 
-    pc = vtk.vtkPolyData() 
+    pc = vtk.vtkPolyData()
     pc.SetPoints(points)
 
     color, map_colors = process_colors(color, xyz)
@@ -679,7 +685,8 @@ def point_cloud_actor(xyz,
     if np.isscalar(size):
         size = np.full(len(xyz), size)
     elif len(size) != len(xyz):
-        raise ValueError('Size must be either a scalar or an len(xyz) x 1 array')
+        raise ValueError(
+            'Size must be either a scalar or an len(xyz) x 1 array')
     pc.GetPointData().SetScalars(numpy_to_vtk(size))
     pc.GetPointData().AddArray(vtk_colors)
 
@@ -700,7 +707,7 @@ def point_cloud_actor(xyz,
     if map_colors:
         mapper.SetScalarRange(np.min(color), np.max(color))
         mapper.SelectColorArray('colors')
-    
+
     actor = vtk.vtkActor()
     actor.SetMapper(mapper)
     return actor
@@ -727,7 +734,7 @@ def linked_point_actor(vertices_a, vertices_b,
         a len(3) iterator (tuple, list, np.array) with the color [0,1] to use
     opacity: float
          a [0,1] opacity to render the lines
-        
+
     Returns
     -------
     vtk.vtkActor
@@ -759,7 +766,7 @@ def linked_point_actor(vertices_a, vertices_b,
     return link_actor
 
 
-def oriented_camera(center, up_vector=(0, -1, 0), backoff=500, backoff_vector=(0,0,1)):
+def oriented_camera(center, up_vector=(0, -1, 0), backoff=500, backoff_vector=(0, 0, 1)):
     '''
     Generate a camera pointed at a specific location, oriented with a given up
     direction, set to a backoff of the center a fixed distance with a particular direction
@@ -775,7 +782,7 @@ def oriented_camera(center, up_vector=(0, -1, 0), backoff=500, backoff_vector=(0
         distance in global space for the camera to be moved backward from the center point (default 500)
     backoff_vector: iterator
         a len 3 iterator (tuple, list, np.array) with the dx,dy,dz direction to back camera off of the focus point
-    
+
     Returns
     -------
     vtk.vtkCamera
@@ -786,8 +793,8 @@ def oriented_camera(center, up_vector=(0, -1, 0), backoff=500, backoff_vector=(0
 
     pt_center = center
 
-    vup=np.array(up_vector)
-    vup=vup/np.linalg.norm(vup)
+    vup = np.array(up_vector)
+    vup = vup/np.linalg.norm(vup)
 
     bv = np.array(backoff_vector)
     pt_backoff = pt_center - backoff * 1000 * bv
@@ -798,9 +805,8 @@ def oriented_camera(center, up_vector=(0, -1, 0), backoff=500, backoff_vector=(0
     return camera
 
 
-
-def render_actors_360(actors, directory, nframes, camera_start =None, start_frame=0,
-            video_width=1280, video_height=720, scale=4, do_save=True, back_color=(1,1,1)):
+def render_actors_360(actors, directory, nframes, camera_start=None, start_frame=0,
+                      video_width=1280, video_height=720, scale=4, do_save=True, back_color=(1, 1, 1)):
     """
     Function to create a series of png frames which rotates around
     the Azimuth angle of a starting camera
@@ -810,7 +816,7 @@ def render_actors_360(actors, directory, nframes, camera_start =None, start_fram
     completing a 360 degree rotation in that many frames.
     Keep in mind that typical movies are encoded at 15-30
     frames per second and nframes is units of frames.
-    
+
     Parameters
     ----------
     actors :  list of vtkActor's
@@ -849,9 +855,9 @@ def render_actors_360(actors, directory, nframes, camera_start =None, start_fram
         mesh_actor = trimesh_vtk.mesh_actor(mesh)
         mesh_center = np.mean(mesh.vertices, axis=0)
         camera_start = trimesh_vtk.oriented_camera(mesh_center)
-        
+
         render_actors_360([mesh_actor], 'movie', 360, camera_start=camera_start)
-    """     
+    """
     if camera_start is None:
         frame_0_file = os.path.join(directory, "0000.png")
         ren = render_actors(actors,
@@ -861,25 +867,26 @@ def render_actors_360(actors, directory, nframes, camera_start =None, start_fram
                             VIDEO_HEIGHT=video_height,
                             back_color=back_color)
         camera_start = ren.GetActiveCamera()
-    
-    cameras =[]
+
+    cameras = []
     times = []
-    for k,angle in enumerate(np.linspace(0,360,nframes)):
+    for k, angle in enumerate(np.linspace(0, 360, nframes)):
         angle_cam = vtk.vtkCamera()
         angle_cam.ShallowCopy(camera_start)
         angle_cam.Azimuth(angle)
         cameras.append(angle_cam)
         times.append(k)
-        
+
     return render_movie(actors, directory,
-                     times = times,
-                     cameras=cameras,
-                     video_height=video_height,
-                     video_width=video_width,
-                     scale=scale,
-                     do_save=do_save,
-                     start_frame=start_frame, 
-                     back_color=back_color)
+                        times=times,
+                        cameras=cameras,
+                        video_height=video_height,
+                        video_width=video_width,
+                        scale=scale,
+                        do_save=do_save,
+                        start_frame=start_frame,
+                        back_color=back_color)
+
 
 def _setup_renderer(video_width, video_height, back_color, camera=None):
     ren = vtk.vtkRenderer()
@@ -898,9 +905,10 @@ def _setup_renderer(video_width, video_height, back_color, camera=None):
 
     return ren, renWin, iren
 
-def render_movie(actors, directory, times, cameras,start_frame=0,
+
+def render_movie(actors, directory, times, cameras, start_frame=0,
                  video_width=1280, video_height=720, scale=4,
-                 do_save=True, back_color=(1,1,1)):
+                 do_save=True, back_color=(1, 1, 1)):
     """
     Function to create a series of png frames based upon a defining 
     a set of cameras at a set of times.
@@ -910,7 +918,7 @@ def render_movie(actors, directory, times, cameras,start_frame=0,
     Reccomend to make times start at 0 and the length of the movie
     you want.  Keep in mind that typical movies are encoded at 15-30
     frames per second and times is units of frames.
-    
+
     Parameters
     ----------
     actors :  list of vtkActor's
@@ -947,7 +955,7 @@ def render_movie(actors, directory, times, cameras,start_frame=0,
         mesh = mm.mesh(filename='mymesh.obj')
         mesh_actor = trimesh_vtk.mesh_actor(mesh)
         mesh_center = np.mean(mesh.vertices, axis=0)
-        
+
         camera_start = trimesh_vtk.oriented_camera(mesh_center, backoff = 10000, backoff_vector=(0, 0, 1))
         camera_180 = trimesh_vtk.oriented_camera(mesh_center, backoff = 10000, backoff_vector=(0, 0, -1))
         times = np.array([0, 90, 180])
@@ -956,20 +964,21 @@ def render_movie(actors, directory, times, cameras,start_frame=0,
                 'movie',
                 times,
                 cameras)
-    """     
+    """
 
-    camera_interp=vtk.vtkCameraInterpolator()
-    assert(len(times)==len(cameras))
-    for t,cam in zip(times,cameras):
-        camera_interp.AddCamera(t,cam)
+    camera_interp = vtk.vtkCameraInterpolator()
+    assert(len(times) == len(cameras))
+    for t, cam in zip(times, cameras):
+        camera_interp.AddCamera(t, cam)
 
     camera = vtk.vtkCamera()
     # create a rendering window and renderer
-    ren, renWin, iren = _setup_renderer(video_width, video_height, back_color, camera=camera)
-  
+    ren, renWin, iren = _setup_renderer(
+        video_width, video_height, back_color, camera=camera)
+
     for a in actors:
         # assign actor to the renderer
-        ren.AddActor(a )
+        ren.AddActor(a)
 
     imageFilter = vtk.vtkWindowToImageFilter()
     imageFilter.SetInput(renWin)
@@ -978,31 +987,33 @@ def render_movie(actors, directory, times, cameras,start_frame=0,
     imageFilter.ReadFrontBufferOff()
     imageFilter.Update()
 
-    #Setup movie writer
+    # Setup movie writer
     if do_save:
         moviewriter = vtk.vtkPNGWriter()
         moviewriter.SetInputConnection(imageFilter.GetOutputPort())
         renWin.OffScreenRenderingOn()
-    
-    for i in np.arange(0,np.max(times)+1):
-        camera_interp.InterpolateCamera(i,camera)
+
+    for i in np.arange(0, np.max(times)+1):
+        camera_interp.InterpolateCamera(i, camera)
         ren.ResetCameraClippingRange()
         camera.ViewingRaysModified()
         renWin.Render()
 
         if do_save:
-            filename = os.path.join(directory,"%04d.png"%(i+start_frame))     
+            filename = os.path.join(directory, "%04d.png" % (i+start_frame))
             moviewriter.SetFileName(filename)
-            #Export a current frame   
+            # Export a current frame
             imageFilter.Update()
             imageFilter.Modified()
             moviewriter.Write()
-    
+
     renWin.Finalize()
-    return renWin,i+start_frame
-def scale_bar_actor(center, camera, length=10000, color=(0,0,0), linewidth=5, font_size=20):
+    return renWin, i+start_frame
+
+
+def scale_bar_actor(center, camera, length=10000, color=(0, 0, 0), linewidth=5, font_size=20):
     """Creates a xyz 3d scale bar actor located at a specific location with a given size
-    
+
     Parameters
     ----------
     center : iterable
@@ -1041,7 +1052,7 @@ def scale_bar_actor(center, camera, length=10000, color=(0,0,0), linewidth=5, fo
     axes_actor.GetProperty().SetColor(*color)
     axes_actor.GetProperty().SetLineWidth(linewidth)
     # this controls the color of text
-    tprop =vtk.vtkTextProperty()
+    tprop = vtk.vtkTextProperty()
     tprop.SetColor(*color)
     # no shadows on text
     tprop.ShadowOff()
