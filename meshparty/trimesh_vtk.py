@@ -468,10 +468,10 @@ def process_colors(color, xyz):
         map_colors = True
     elif color.shape == (3,):
         # then we have one explicit color
-        assert(np.max(color) <= 1.0)
-        assert(np.min(color) >= 0)
-        car = np.array(color, dtype=np.uint8)*255
-        color = np.repeat(car[np.newaxis, :], len(xyz), axis=0)
+        assert(np.max(color)<=1.0)
+        assert(np.min(color)>=0)
+        car = np.array(color*255, dtype=np.uint8)
+        color = np.repeat(car[np.newaxis,:],len(xyz),axis=0)
     else:
         raise ValueError(
             'color must have shapse Nx3 if explicitly setting, or (N,) if mapping, or (3,)')
@@ -649,8 +649,8 @@ def skeleton_actor(sk,
 
 def point_cloud_actor(xyz,
                       size=100,
-                      color=(0, 0, 0),
-                      opacity=0.5):
+                      color=(0,0,0),
+                      opacity=1):
     """function to make a vtk.vtkActor from a set of xyz points that renders them as spheres
 
     Parameters
@@ -710,6 +710,7 @@ def point_cloud_actor(xyz,
 
     actor = vtk.vtkActor()
     actor.SetMapper(mapper)
+    actor.GetProperty().SetOpacity(opacity)
     return actor
 
 
