@@ -950,7 +950,7 @@ def render_movie(actors, directory, times, cameras, start_frame=0,
     Example
     -------
     ::
-    
+
         from meshparty import trimesh_io, trimesh_vtk
         mm = trimesh_io.MeshMeta(disk_cache_path = 'meshes')
         mesh = mm.mesh(filename='mymesh.obj')
@@ -961,7 +961,7 @@ def render_movie(actors, directory, times, cameras, start_frame=0,
         camera_180 = trimesh_vtk.oriented_camera(mesh_center, backoff = 10000, backoff_vector=(0, 0, -1))
         times = np.array([0, 90, 180])
         cameras = [camera_start, camera_180, camera_start]
-        vtk_movie([mesh_actor],
+        render_movie([mesh_actor],
                 'movie',
                 times,
                 cameras)
