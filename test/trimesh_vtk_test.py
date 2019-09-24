@@ -6,9 +6,11 @@ import os
 import imageio
 import json 
 
-def compare_img_to_test_file(fname, back_val = 255, close=15):
+def compare_img_to_test_file(fname, back_val = 255, close=15, pre_path=None):
     img_test = imageio.imread(fname)
-    tmpl_path = os.path.join('test/test_files/', os.path.split(fname)[1])
+    if pre_path is None:
+        pre_path = 'test/test_files/'
+    tmpl_path = os.path.join(pre_path, os.path.split(fname)[1])
     img_tmpl = imageio.imread(tmpl_path)
     assert(img_test.shape == img_tmpl.shape)
 
@@ -37,6 +39,29 @@ def eval_actor_image(actors, fname, tmp_path, camera=None, scale=2, make_image=F
         return True
     else:
         return compare_img_to_test_file(filepath)    
+
+def eval_actor_360(actors, dir_name, tmp_path, camera=None, scale=2, nframes=30, make_image=False):
+
+    if make_image:
+        fpath = os.path.dirname(os.path.abspath(__file__))
+    else:
+        fpath = os.path.join(tmp_path, dir_name)
+        if not os.path.isdir(fpath):
+            os.makedirs(fpath)
+    trimesh_vtk.render_actors_360(actors, fpath,
+                                  nframes=nframes,
+                                  do_save =True,
+                                  camera_start=camera,
+                                  scale=scale,
+                                  back_color=(1,1,1))
+    if make_image:
+        return True
+    else:
+        is_good=np.zeros(nframes, np.bool)
+        for i in range(nframes):
+            img_file = os.path.join(fpath, f'%04d.png'%i)
+            is_good[i]=compare_img_to_test_file(img_file, pre_path='test/test_files/full_cell_movie')    
+        return np.all(is_good)
 
 @contextlib.contextmanager
 def build_basic_mesh():
@@ -124,9 +149,15 @@ def test_full_cell_camera(full_cell_mesh, full_cell_soma_pt, tmp_path):
     mesh_actor = trimesh_vtk.mesh_actor(full_cell_mesh)
     camera = trimesh_vtk.oriented_camera(full_cell_soma_pt, backoff=100)
     eval_actor_image([mesh_actor], 'full_cell_orient_camera.png', tmp_path, camera=camera, scale=1)
-
     scale_bar_actor = trimesh_vtk.scale_bar_actor(full_cell_soma_pt-[15000,0,0], camera)
     eval_actor_image([mesh_actor, scale_bar_actor], 'full_cell_scale_bar.png', tmp_path, camera=camera, scale=1)
+
+
+def test_full_cell_movie(full_cell_mesh, full_cell_soma_pt, tmp_path):
+    mesh_actor = trimesh_vtk.mesh_actor(full_cell_mesh)
+    camera = trimesh_vtk.oriented_camera(full_cell_soma_pt, backoff=100)
+    eval_actor_360([mesh_actor], 'full_cell_movie', tmp_path, camera=camera, scale=1)
+
 
 def test_vtk_errors():
     verts = np.random.rand(10,3)
