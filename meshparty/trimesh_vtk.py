@@ -639,7 +639,7 @@ def skeleton_actor(sk,
 def point_cloud_actor(xyz,
                      size=100,
                      color=(0,0,0),
-                     opacity=0.5):
+                     opacity=1):
     """function to make a vtk.vtkActor from a set of xyz points that renders them as spheres
 
     Parameters
