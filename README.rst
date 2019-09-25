@@ -3,7 +3,9 @@
     :alt: Documentation Status
 .. image:: https://travis-ci.com/sdorkenw/MeshParty.svg?branch=master
     :target: https://travis-ci.com/sdorkenw/MeshParty
-    
+.. image:: https://codecov.io/gh/sdorkenw/MeshParty/branch/master/graph/badge.svg
+   :target: https://codecov.io/gh/sdorkenw/MeshParty
+   
 MeshParty
 #########
 A package to work with meshes, designed around use cases for analyzing neuronal morphology. 
