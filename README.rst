@@ -1,6 +1,6 @@
 .. image:: https://readthedocs.org/projects/meshparty/badge/?version=latest
-:target: https://meshparty.readthedocs.io/en/latest/?badge=latest
-:alt: Documentation Status
+    :target: https://meshparty.readthedocs.io/en/latest/?badge=latest
+    :alt: Documentation Status
       
 MeshParty
 #########
