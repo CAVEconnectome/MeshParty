@@ -1,3 +1,7 @@
+.. image:: https://readthedocs.org/projects/meshparty/badge/?version=latest
+:target: https://meshparty.readthedocs.io/en/latest/?badge=latest
+:alt: Documentation Status
+      
 MeshParty
 #########
 A package to work with meshes, designed around use cases for analyzing neuronal morphology. 
