@@ -38,7 +38,7 @@ def tolerance_filter(data, upper_thresh, lower_thresh, initial=False):
     lo_or_hi = (data <= lower_thresh) | hi
     ind = np.nonzero(lo_or_hi)[0]
     if not ind.size: # prevent index error if ind is empty
-        return np.zeros_like(x, dtype=bool) | initial
+        return np.zeros_like(data, dtype=bool) | initial
     cnt = np.cumsum(lo_or_hi) # from 0 to len(x)
     return np.where(cnt, hi[ind[cnt-1]], initial)
 
@@ -190,7 +190,7 @@ def segment_boutons(mesh, sk, sk_metric,
         seg_baseline=baseline_als(sk_metric[seg], lamb, p=p, n_iter=n_iter)
         seg_metric = sk_metric[seg]
         sk_metric_baseline[seg]=seg_baseline
-        corrected_metric =seg_metric - sk_metric_baseline
+        corrected_metric =seg_metric - seg_baseline
         scaled_metric = corrected_metric/metric_var
         is_bouton_seg = tolerance_filter_sym( scaled_metric, high_thresh, low_thresh)
         bouton_sk_inds = seg[is_bouton_seg]
@@ -200,7 +200,7 @@ def segment_boutons(mesh, sk, sk_metric,
     return is_bouton_sk_mask, sk_metric_baseline
 
 def make_cross_sec_plot(mesh, sk, cross_sec, is_bouton_sk_mask, cross_sec_baseline,
-                         ut=1.5, lt=.5, image_path=None):
+                         ut=1.5, lt=.5, image_path=None, scale=1000):
     
     f, ax = plt.subplots(len(sk.segments),1, figsize = (12, 5*len(sk.segments)))
 
@@ -210,12 +210,13 @@ def make_cross_sec_plot(mesh, sk, cross_sec, is_bouton_sk_mask, cross_sec_baseli
         else:
             pa = ax
         bl = cross_sec_baseline[seg]
-        pa.plot(sk.distance_to_root[seg], cross_sec[seg], label='corr_sc_crosssec')
+        pa.plot(sk.distance_to_root[seg]/scale, cross_sec[seg]/scale, label='corr_sc_crosssec')
         #pa.plot(sk.distance_to_root[seg], bl, label='baseline')
         #pa.plot(sk.distance_to_root[seg], bl + ut*np.std(cross_sec))
         #pa.plot(sk.distance_to_root[seg], bl + lt*np.std(cross_sec))
         is_b_t = is_bouton_sk_mask[seg]*(bl + ut*np.std(cross_sec))
         is_b_t = np.max(np.vstack([is_b_t,~is_bouton_sk_mask[seg]*bl]),axis=0)
-        pa.plot(sk.distance_to_root[seg], is_b_t)
+        pa.plot(sk.distance_to_root[seg]/scale, is_b_t/scale)
     if image_path is not None:
         f.savefig(image_path)
+        plt.close(f)
