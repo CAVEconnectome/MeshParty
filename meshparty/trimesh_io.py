@@ -200,10 +200,12 @@ def _download_meshes_thread_graphene(args):
             a private bucket and have ~/.cloudvolume/secrets setup properly
         remove_duplicate_vertices: bool
             whether to bluntly merge duplicate vertices (probably should be False)
+        progress: bool
+            show progress bars
     
      """
     seg_ids, cv_path, target_dir, fmt, overwrite, \
-        merge_large_components, stitch_mesh_chunks, map_gs_to_https, remove_duplicate_vertices = args
+        merge_large_components, stitch_mesh_chunks, map_gs_to_https, remove_duplicate_vertices, progress = args
 
     cv = cloudvolume.CloudVolume(cv_path, use_https=map_gs_to_https)
 
@@ -216,7 +218,7 @@ def _download_meshes_thread_graphene(args):
         print('file does not exist {}'.format(target_file))
 
         try:
-            cv_mesh = cv.mesh.get(seg_id, remove_duplicate_vertices=remove_duplicate_vertices)
+            cv_mesh = cv.mesh.get(seg_id, remove_duplicate_vertices=remove_duplicate_vertices)[seg_id]
 
             faces = np.array(cv_mesh.faces)
             if len(faces.shape) == 1:
