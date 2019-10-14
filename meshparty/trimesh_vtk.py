@@ -1067,7 +1067,7 @@ def scale_bar_actor(center, camera, length=10000, color=(0, 0, 0), linewidth=5, 
     return axes_actor
 
 
-def get_cmap(values, cmap, vmin=0.0, vmax=1.0):
+def values_to_colors(values, cmap, vmin=0.0, vmax=1.0):
     """
     Function to map a set of values through a colormap
     to get RGB values in order to facilitate coloring of meshes.
