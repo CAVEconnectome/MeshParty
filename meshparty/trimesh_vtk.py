@@ -1099,7 +1099,7 @@ def values_to_colors(values, cmap, vmin=None, vmax=None):
         import seaborn as sns
 
         cmap = np.array(sns.color_palette('viridis', 1000))
-        clrs = get_cmap(values, cmap)
+        clrs = trimesh_vtk.values_to_colors(values, cmap)
         mesh_actor = trimesh_io.mesh_actor(mesh, vertex_colors = clrs, opacity=1.0)
         trimesh_vtk.render_actors([mesh_actor])
 
