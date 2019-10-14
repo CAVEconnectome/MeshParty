@@ -1081,8 +1081,8 @@ def values_to_colors(values, cmap, vmin=None, vmax=None):
     vmin : float 
         (optional) value that should receive minimum of colormap.
         default to minimum of values
-    vmax : float (option)
-        values that should receive maximum of colormap
+    vmax : float 
+        (optional) values that should receive maximum of colormap
         default to maximum of values
 
     Output
