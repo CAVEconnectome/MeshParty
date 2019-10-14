@@ -681,7 +681,7 @@ def point_cloud_actor(xyz,
 
     vtk_colors = numpy_to_vtk(color)
     vtk_colors.SetName('colors')
-
+   
     if np.isscalar(size):
         size = np.full(len(xyz), size)
     elif len(size) != len(xyz):
@@ -1067,7 +1067,7 @@ def scale_bar_actor(center, camera, length=10000, color=(0, 0, 0), linewidth=5, 
     return axes_actor
 
 
-def values_to_colors(values, cmap, vmin=0.0, vmax=1.0):
+def values_to_colors(values, cmap, vmin=None, vmax=None):
     """
     Function to map a set of values through a colormap
     to get RGB values in order to facilitate coloring of meshes.
@@ -1078,10 +1078,12 @@ def values_to_colors(values, cmap, vmin=0.0, vmax=1.0):
         values to pass through colormap
     cmap: array-like, (n_colors, 3)
         colormap describing the RGB values from vmin to vmax
-    vmin : float
-        value that should receive minimum of colormap 
-    vmax : float
+    vmin : float 
+        (optional) value that should receive minimum of colormap.
+        default to minimum of values
+    vmax : float (option)
         values that should receive maximum of colormap
+        default to maximum of values
 
     Output
     ------
@@ -1103,6 +1105,10 @@ def values_to_colors(values, cmap, vmin=0.0, vmax=1.0):
 
     """
     n_colors = cmap.shape[0]
+    if vmin is None:
+        vmin = np.nanmin(values)
+    if vmax is None:
+        vmax = np.nanmax(values)
     values = np.clip(values, vmin, vmax)
     r = np.interp(x=values, xp=np.linspace(vmin, vmax, n_colors), fp=cmap[:, 0])
     g = np.interp(x=values, xp=np.linspace(vmin, vmax, n_colors), fp=cmap[:, 1])
