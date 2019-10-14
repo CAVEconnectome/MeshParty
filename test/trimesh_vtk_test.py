@@ -214,6 +214,10 @@ def test_vertex_colors(full_cell_mesh, tmp_path):
     clr_mesh_actor = trimesh_vtk.mesh_actor(full_cell_mesh, vertex_colors=vclrs, opacity=1.0)
     eval_actor_image([clr_mesh_actor], 'full_cell_colors.png', tmp_path)
 
+    vclrs = trimesh_vtk.values_to_colors(d, cmap)
+    clr_mesh_actor = trimesh_vtk.mesh_actor(full_cell_mesh, vertex_colors=vclrs, opacity=1.0)
+    eval_actor_image([clr_mesh_actor], 'full_cell_auto_colors.png', tmp_path)
+
 
 def test_ngl_state(full_cell_mesh, tmp_path):
     with open('test/test_files/view_state.json', 'r') as fp:
