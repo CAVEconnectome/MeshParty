@@ -14,3 +14,4 @@ test-reports/
 .coverage.*
 **_build/
 *.bak
+.ipynb_checkpoints/

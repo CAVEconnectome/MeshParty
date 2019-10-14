@@ -681,7 +681,7 @@ def point_cloud_actor(xyz,
 
     vtk_colors = numpy_to_vtk(color)
     vtk_colors.SetName('colors')
-
+   
     if np.isscalar(size):
         size = np.full(len(xyz), size)
     elif len(size) != len(xyz):
@@ -850,6 +850,7 @@ def render_actors_360(actors, directory, nframes, camera_start=None, start_frame
     Example
     -------
     ::
+
         from meshparty import trimesh_io, trimesh_vtk
         mm = trimesh_io.MeshMeta(disk_cache_path = 'meshes')
         mesh = mm.mesh(filename='mymesh.obj')
@@ -1064,3 +1065,54 @@ def scale_bar_actor(center, camera, length=10000, color=(0, 0, 0), linewidth=5, 
     axes_actor.SetAxisLabelTextProperty(tprop)
 
     return axes_actor
+
+
+def values_to_colors(values, cmap, vmin=None, vmax=None):
+    """
+    Function to map a set of values through a colormap
+    to get RGB values in order to facilitate coloring of meshes.
+
+    Parameters
+    ----------
+    values: array-like, (n_vertices, )
+        values to pass through colormap
+    cmap: array-like, (n_colors, 3)
+        colormap describing the RGB values from vmin to vmax
+    vmin : float 
+        (optional) value that should receive minimum of colormap.
+        default to minimum of values
+    vmax : float 
+        (optional) values that should receive maximum of colormap
+        default to maximum of values
+
+    Output
+    ------
+    colors: array-like,  (n_vertices, 3)
+        RGB values for each entry in values (as np.uint8 [0-255])
+
+    Example
+    -------
+
+    Assuming mesh object and 'values' have been calculated already 
+    ::
+
+        import seaborn as sns
+
+        cmap = np.array(sns.color_palette('viridis', 1000))
+        clrs = get_cmap(values, cmap)
+        mesh_actor = trimesh_io.mesh_actor(mesh, vertex_colors = clrs, opacity=1.0)
+        trimesh_vtk.render_actors([mesh_actor])
+
+    """
+    n_colors = cmap.shape[0]
+    if vmin is None:
+        vmin = np.nanmin(values)
+    if vmax is None:
+        vmax = np.nanmax(values)
+    values = np.clip(values, vmin, vmax)
+    r = np.interp(x=values, xp=np.linspace(vmin, vmax, n_colors), fp=cmap[:, 0])
+    g = np.interp(x=values, xp=np.linspace(vmin, vmax, n_colors), fp=cmap[:, 1])
+    b = np.interp(x=values, xp=np.linspace(vmin, vmax, n_colors), fp=cmap[:, 2])
+    colors = np.vstack([r, g, b]).T
+    colors = (colors * 255).astype(np.uint8)
+    return colors

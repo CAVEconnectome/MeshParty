@@ -5,6 +5,7 @@ import pytest
 import os
 import imageio
 import json 
+import matplotlib.cm as cm
 
 def compare_img_to_test_file(fname, back_val = 255, close=15, pre_path=None):
     img_test = imageio.imread(fname)
@@ -206,6 +207,16 @@ def test_full_cell_with_links(full_cell_mesh, full_cell_merge_log, tmp_path, mon
     eval_actor_image([mesh_actor], 'full_cell_show_links.png', tmp_path, camera=camera)
               
 
+def test_vertex_colors(full_cell_mesh, tmp_path):
+    d = np.linalg.norm(full_cell_mesh.vertices - full_cell_mesh.centroid, axis=1)
+    cmap = np.array(cm.viridis.colors)
+    vclrs = trimesh_vtk.values_to_colors(d, cmap, 0, 80000)
+    clr_mesh_actor = trimesh_vtk.mesh_actor(full_cell_mesh, vertex_colors=vclrs, opacity=1.0)
+    eval_actor_image([clr_mesh_actor], 'full_cell_colors.png', tmp_path)
+
+    vclrs = trimesh_vtk.values_to_colors(d, cmap)
+    clr_mesh_actor = trimesh_vtk.mesh_actor(full_cell_mesh, vertex_colors=vclrs, opacity=1.0)
+    eval_actor_image([clr_mesh_actor], 'full_cell_auto_colors.png', tmp_path)
 
 
 def test_ngl_state(full_cell_mesh, tmp_path):
