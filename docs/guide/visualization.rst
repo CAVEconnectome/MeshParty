@@ -61,7 +61,15 @@ Advanced coloring
 -----------------
 
 One common visualization need is to color the visualized objects according to some data,
-the actor creation functions provide some facilities to assist with this, again assuming its numpy arrays.
+the actor creation functions provide some facilities to assist with this, again assuming 
+the coloring data is in the form of numpy arrays.
+
+vertex_colors will accept floating point values, in which case it will pass it through vtk's default colormap.
+Often you want to have more explicit control over the colors of vertices, and so it will also accept a numpy array 
+of Nx3 uint8 RGB values so that you can color the mesh precisely as you'd like to.
+
+In order to help you create these colors, a colormapping function exists :func:`meshparty.trimesh_vtk.values_to_colors`.
+You can use matplotlib or seaborn colormaps to help you create the coloring scheme you would like.
 
 Here's an example which colors the mesh according to the distance from the first vertex of the mesh
 
@@ -69,6 +77,7 @@ Here's an example which colors the mesh according to the distance from the first
 
     from meshparty import trimesh_vtk
     from scipy import sparse
+    import seaborn as sns
 
     # measure the distance from the first vertex to all others
     # using dijkstra.
@@ -78,10 +87,13 @@ Here's an example which colors the mesh according to the distance from the first
                                  
     # normalize values between 0 and 1
     color_data = ds/np.nanmax(ds)
+    cmap = np.array(sns.color_palette('viridis', 1000))
+    clrs = trimesh_vtk.values_to_colors(color_data, cmap)
 
     # make a mesh actor that is colored by this distance
     mesh_actor = trimesh_vtk.mesh_actor(mesh,
-                                        vertex_colors=color_data,
+                                        vertex_colors=clrs,
                                         opacity=0.5)
 
     trimesh_vtk.render_actors([mesh_actor])
+
