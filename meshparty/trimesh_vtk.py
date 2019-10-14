@@ -850,6 +850,7 @@ def render_actors_360(actors, directory, nframes, camera_start=None, start_frame
     Example
     -------
     ::
+    
         from meshparty import trimesh_io, trimesh_vtk
         mm = trimesh_io.MeshMeta(disk_cache_path = 'meshes')
         mesh = mm.mesh(filename='mymesh.obj')
