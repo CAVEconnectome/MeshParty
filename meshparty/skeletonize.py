@@ -11,7 +11,7 @@ from collections import defaultdict
 from pykdtree.kdtree import KDTree as pyKDTree
 import trimesh.ray
 from trimesh.ray import ray_pyembree
-
+import logging
 
 def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True,
                      invalidation_d=12000, smooth_vertices=False, compute_radius=True,
