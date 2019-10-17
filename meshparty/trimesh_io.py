@@ -537,7 +537,11 @@ class MeshMeta(object):
                     return mesh
             assert (seg_id is not None and self.cv is not None)
             if seg_id not in self._mesh_cache or force_download is True:
-                cv_mesh = self.cv.mesh.get(seg_id, fuse=False, remove_duplicate_vertices=remove_duplicate_vertices)[seg_id]
+                cv_mesh_d = self.cv.mesh.get(seg_id,  remove_duplicate_vertices=remove_duplicate_vertices)
+                if type(cv_mesh_d)==dict:
+                    cv_mesh = cv_mesh_d[seg_id]
+                else:
+                    cv_mesh = cv_mesh_d
                 faces = np.array(cv_mesh.faces)
                 if (len(faces.shape) == 1):
                     faces = faces.reshape(-1, 3)
