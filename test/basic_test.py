@@ -29,12 +29,12 @@ def basic_mesh():
         yield m
 
 
-@contextlib.contextmanager
-def build_full_cell_mesh():
-    filepath = 'test/test_files/648518346349499581.h5'
-    vertices, faces, normals, link_edges, node_mask = trimesh_io.read_mesh_h5(filepath)
-    mesh = trimesh_io.Mesh(vertices, faces)
-    yield mesh
+# @contextlib.contextmanager
+# def build_full_cell_mesh():
+#     filepath = 'test/test_files/648518346349499581.h5'
+#     vertices, faces, normals, link_edges, node_mask = trimesh_io.read_mesh_h5(filepath)
+#     mesh = trimesh_io.Mesh(vertices, faces)
+#     yield mesh
 
 @contextlib.contextmanager
 def build_full_cell_merge_log():
