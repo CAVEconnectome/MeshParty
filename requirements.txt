@@ -5,7 +5,7 @@ scipy>=1.3.0
 sklearn
 networkx
 multiwrapper
-cloud-volume==0.62
+cloud-volume==0.62.2
 trimesh>=3.0.14
 pymeshfix>=0.12.3
 pykdtree
