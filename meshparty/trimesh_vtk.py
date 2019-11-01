@@ -456,7 +456,7 @@ def process_colors(color, xyz):
     map_colors = False
     if not isinstance(color, np.ndarray):
         color = np.array(color)
-    if color.shape == (len(xyz), 3):
+    if ((color.shape == (len(xyz), 3)) | (color.shape == (len(xyz), 4))):
         # then we have explicit colors
         if color.dtype != np.uint8:
             # if not passing uint8 assume 0-1 mapping
