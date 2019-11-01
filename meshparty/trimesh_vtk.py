@@ -968,7 +968,8 @@ def render_movie(actors, directory, times, cameras, start_frame=0,
                 times,
                 cameras)
     """
-
+    if not os.path.isdir(directory):
+        os.makedirs(directory)
     camera_interp = vtk.vtkCameraInterpolator()
     assert(len(times) == len(cameras))
     for t, cam in zip(times, cameras):
