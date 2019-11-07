@@ -977,7 +977,7 @@ def render_movie(actors, directory, times, cameras, start_frame=0,
     def interpolate_camera(actors, camera, t):
         camera_interp.InterpolateCamera(t, camera)
     
-    rewWin, end_frame = render_movie_flexible(actors, directory, times,
+    renWin, end_frame = render_movie_flexible(actors, directory, times,
                                           interpolate_camera,
                                           start_frame=start_frame,
                                           video_width=video_width,
