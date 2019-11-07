@@ -229,11 +229,7 @@ far away it is from one point on the mesh.
 
 The result is a movie that should look like this, although of course it will depend on your mesh.
 
-.. raw:: html
-
-    <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%; height: auto;">
-        <iframe src="https://youtu.be/a7IpaSNFbxU" frameborder="0" allowfullscreen style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></iframe>
-    </div>
+.. youtube:: a7IpaSNFbxU
 
 Hopefully this demonstrates how you could arbitrarily alter the coloring
 of a mesh over time.  You can also use vtk's transformation capabilities to move actors over time.
