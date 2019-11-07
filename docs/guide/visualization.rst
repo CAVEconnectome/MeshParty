@@ -252,5 +252,5 @@ Below is a simple example for encoding a movie as an mp4 after installing moviep
     clip = mpe.ImageSequenceClip('reveal_axon_movie',fps=30)
     clip.write_videofile('reveal_axon_movie.mp4')
 
-`moviepy <https://zulko.github.io/moviepy/>` has some great documentation that tells you how you can add text, 
+moviepy <https://zulko.github.io/moviepy/> has some great documentation that tells you how you can add text, 
 stitch clips together, perform fancy cross fade effects, and all sorts of fun things. 
