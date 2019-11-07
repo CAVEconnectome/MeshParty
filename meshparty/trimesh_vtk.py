@@ -1064,7 +1064,7 @@ def render_movie_flexible(actors, directory, times, frame_change_function, start
     if camera is None:
         camera = vtk.vtkCamera()
     # create a rendering window and renderer
-    ren, renWin, iren = trimesh_vtk._setup_renderer(
+    ren, renWin, iren = _setup_renderer(
         video_width, video_height, back_color, camera=camera)
 
     for a in actors:
