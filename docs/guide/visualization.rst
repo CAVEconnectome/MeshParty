@@ -150,6 +150,11 @@ Here's an example that simply uses two cameras with different zooms to create a 
                              [camera_1, camera_2],
                              do_save=True)
 
+One feature to mention of :func:'meshparty.trimesh_vk.render_actors' is the return_keyframes parameter. If set to true, 
+every time you press 'k' it will save the current camera parameters and return all the cameras in a list when you quit 
+the interactive vtk window with the 'q' button.  This allows you to quickly and interactively setup camera keyframes,
+to use in rendering video paths.
+
 Finally, if you really want to dive into altering the visualization at each timepoint, there is 
 :func:`meshparty.trimesh_vtk.render_movie_flexible`.  Rather than specifying a set of times and cameras,
 this function allows you to pass a function (frame_change_function), which will be passed the actors, the camera, 
@@ -217,15 +222,15 @@ far away it is from one point on the mesh.
         camera_interp.InterpolateCamera(t, camera)
 
     # use render_movie_flexible to call this function and render a movie
-    render_movie_flex([mesh_actor],
-                    'reveal_axon_movie',
-                    np.arange(0,max_frame),
-                    reveal_axon,
-                    camera=camera_start,
-                    video_height=1080,
-                    video_width=1920,
-                    scale=1,
-                    do_save=True)
+    trimesh_vtk.render_movie_flexible([mesh_actor],
+                                      'reveal_axon_movie',
+                                      np.arange(0,max_frame),
+                                      reveal_axon,
+                                      camera=camera_start,
+                                      video_height=1080,
+                                      video_width=1920,
+                                      scale=1,
+                                      do_save=True)
 
 The result is a movie that should look like this, although of course it will depend on your mesh.
 
@@ -236,7 +241,8 @@ of a mesh over time.  You can also use vtk's transformation capabilities to move
 
 Encoding movies
 ---------------
-trimesh_vtk does not have capacities for encoding png images into compressed movies.  However, we would reccomend using moviepy for this task.
+trimesh_vtk does not have capacities for encoding png images into compressed movies.  
+However, we would reccomend using moviepy for this task.
 
 Below is a simple example for encoding a movie as an mp4 after installing moviepy. 
 
@@ -245,3 +251,6 @@ Below is a simple example for encoding a movie as an mp4 after installing moviep
     import moviepy.editor as mpe
     clip = mpe.ImageSequenceClip('reveal_axon_movie',fps=30)
     clip.write_videofile('reveal_axon_movie.mp4')
+
+`moviepy <https://zulko.github.io/moviepy/>` has some great documentation that tells you how you can add text, 
+stitch clips together, perform fancy cross fade effects, and all sorts of fun things. 
