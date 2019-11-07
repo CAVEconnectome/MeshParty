@@ -988,7 +988,7 @@ def render_movie(actors, directory, times, cameras, start_frame=0,
     return renWin, end_frame
 
     
-def render_movie_flex(actors, directory, times, frame_change_function, start_frame=0,
+def render_movie_flexible(actors, directory, times, frame_change_function, start_frame=0,
                  video_width=1280, video_height=720, scale=4, camera=None,
                  do_save=True, back_color=(1, 1, 1)):
     """

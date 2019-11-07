@@ -29,6 +29,10 @@ or numpy arrays of points :func:`meshparty.trimesh_vtk.point_cloud_actor`,
 :func:`meshparty.trimesh_vtk.linked_point_actor` 
 If you would prefer to save an image to disk you can pass a filename and do_save.
 
+The scale parameter is by default set to 4, for low resolution monitors this can help make higher resolution images, 
+but will result in images that are larger than the specified width and height.  You'll have to experiment with your
+computer to find what gives you the best rendering results. 
+
 ::
 
     trimesh_vtk.render_actors([mesh_actor],
@@ -89,7 +93,12 @@ Here's an example which colors the mesh according to the distance from the first
     color_data = ds/np.nanmax(ds)
     cmap = np.array(sns.color_palette('viridis', 1000))
     clrs = trimesh_vtk.values_to_colors(color_data, cmap)
-
+        camera = trimesh_vtk.oriented_camera(
+        [0,0,0], # focus point
+        backoff=1000, # put camera 1000 units back from focus
+        backoff_vector=[0, 0, -1], # back off in negative z
+        up_vector = [0, -1, 0] # make up negative y
+    )
     # make a mesh actor that is colored by this distance
     mesh_actor = trimesh_vtk.mesh_actor(mesh,
                                         vertex_colors=clrs,
@@ -97,3 +106,146 @@ Here's an example which colors the mesh according to the distance from the first
 
     trimesh_vtk.render_actors([mesh_actor])
 
+Movie making
+------------
+There are a number of functions in :mod:`meshparty.trimesh_vtk` that are designed to help you make movies,
+as series of png images on disk.  
+
+We'll review them from the simpliest to the most complex.  The first is :func:`meshparty.trimesh_vtk.render_actors_360`.
+This function simply takes a list of actors and spins them around 360 degrees over a certain number of frames,
+saving each view to disk.  Optionally it can take an initial camera, and it will always rotate the camera around 
+whatever direction is up with respect to that camera.  You can use do_save=False, in order to see the movie render
+without saving to disk.  Typically this happens faster than the saving to disk, and so you shouldn't trust the speed 
+that the movie plays on your screen.  On a recent macbook pro, it plays about 3 times faster.
+
+Here's an example, that assumes you already have a mesh_actor and a camera defined..
+
+::
+
+    from meshparty import trimesh_vtk
+
+    trimesh_vtk.render_actors_360([mesh_actor],
+                                  'movie_360',
+                                  270,
+                                  camera_start=camera,
+                                  do_save=True)
+
+If you want to move the camera in a more flexible fashion, then :func:`meshparty.trimesh_vtk.render_movie` is the
+next most complex function to use.  This takes a list of integer keyframe times and a corresponding list of camera positions,
+it will then render a movie for each frame, interpolating the camera between these keyframes.
+You might notice that render_movie_360 is implemented by using render_movie.
+
+Here's an example that simply uses two cameras with different zooms to create a zoom in effect.
+
+::
+
+    from meshparty import trimesh_vtk
+
+    camera_1 = trimesh_vtk.oriented_camera(mesh.centroid, backoff=500)
+    camera_2 = trimesh_vtk.oriented_camera(mesh.centroid, backoff=100)
+
+    trimesh_vtk.render_movie([mesh_actor],
+                             'movie_zoom',
+                             [0,300],
+                             [camera_1, camera_2],
+                             do_save=True)
+
+Finally, if you really want to dive into altering the visualization at each timepoint, there is 
+:func:`meshparty.trimesh_vtk.render_movie_flexible`.  Rather than specifying a set of times and cameras,
+this function allows you to pass a function (frame_change_function), which will be passed the actors, the camera, 
+and the timepoint at each time point.  That function can modify the actors and/or the camera, and the resulting 
+changes will be rendered.  You need to know some more detail about how to manipulate vtk objects to use this function 
+effectively, but if you do it allows you to quickly prototype some powerful visualizations.  
+
+As an example, here's how you might create a movie that slowly reveals an neuron over time as a function of how 
+far away it is from one point on the mesh.
+
+::
+
+    from meshparty import trimesh_vtk
+    from scipy import sparse
+    import vtk
+    ds = sparse.csgraph.dijkstra(mesh.csgraph,
+                                    directed=False,
+                                    indices=0)
+        
+
+    mesh_actor = trimesh_vtk.mesh_actor(mesh, color=(0,1,0), opacity=1.0)
+
+    # set up one camera that is aimed at the starting vertex
+    camera_start = trimesh_vtk.oriented_camera(mesh.vertices[0,:], backoff=20)
+
+    # set up another that is aimed at the farthest vertex, but more zoomed out
+    max_ind = np.argmax(ds * (~np.isinf(ds)))
+    camera_end = trimesh_vtk.oriented_camera(mesh.vertices[max_ind,:], backoff=200)
+
+    # make a camera interpolator with these two cameras
+    camera_interp = vtk.vtkCameraInterpolator()
+    camera_interp.AddCamera(0, camera_start)
+    max_frame = ds[max_ind]/(15000/30)
+    camera_interp.AddCamera(max_frame, camera_end)
+
+
+    def reveal_axon(actors, camera, t,
+                    framerate=30, nm_per_sec=15000):
+
+        nm_per_frame = nm_per_sec/framerate
+        actor = actors[0]
+
+        # set the opacity according to whether the vertex is close enough
+        # given the time and the speed calculated
+        opacity=(255*((ds/nm_per_frame)<t)).astype(np.uint8)
+
+        # set the color to be green everywhere
+        color = np.array([0,255,0], dtype=np.uint8)
+        clr=color*np.ones((opacity.shape[0], 3), dtype=np.uint8)
+
+        # concatenate these together to form one RGBA array
+        c = np.hstack([clr, opacity[:,np.newaxis]])
+
+        # convert that to vtk
+        vtk_vert_colors = trimesh_vtk.numpy_to_vtk(c)
+        vtk_vert_colors.SetName('colors')
+
+        # set the actor to use this new coloring
+        actor.GetMapper().GetInput().GetPointData().SetScalars(vtk_vert_colors)
+
+        # tell vtk that you have updated this actor so it gets rendered.
+        actor.GetMapper().GetInput().GetPointData().Modified()
+
+        # use your interpolated camera to set the camera for this time point
+        camera_interp.InterpolateCamera(t, camera)
+
+    # use render_movie_flexible to call this function and render a movie
+    render_movie_flex([mesh_actor],
+                    'reveal_axon_movie',
+                    np.arange(0,max_frame),
+                    reveal_axon,
+                    camera=camera_start,
+                    video_height=1080,
+                    video_width=1920,
+                    scale=1,
+                    do_save=True)
+
+The result is a movie that should look like this, although of course it will depend on your mesh.
+
+.. raw:: html
+
+    <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%; height: auto;">
+        <iframe src="https://youtu.be/a7IpaSNFbxU" frameborder="0" allowfullscreen style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></iframe>
+    </div>
+
+Hopefully this demonstrates how you could arbitrarily alter the coloring
+of a mesh over time.  You can also use vtk's transformation capabilities to move actors over time.
+
+Encoding movies
+---------------
+trimesh_vtk does not have capacities for encoding png images into compressed movies.  However, we would reccomend using moviepy for this task.
+
+Below is a simple example for encoding a movie as an mp4 after installing moviepy. 
+
+::
+
+    import moviepy.editor as mpe
+    clip = mpe.ImageSequenceClip('reveal_axon_movie',fps=30)
+    clip.write_videofile('reveal_axon_movie.mp4')
