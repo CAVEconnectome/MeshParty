@@ -9,3 +9,4 @@ dependencies:
   - scikit-build
   - pip:
     - dracopy
+    - python-dateutil==2.8.0
