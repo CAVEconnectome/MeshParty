@@ -2,7 +2,7 @@ import vtk
 from vtk.util.numpy_support import numpy_to_vtk, numpy_to_vtkIdTypeArray, vtk_to_numpy
 import numpy as np
 import os
-
+import logging
 
 def numpy_to_vtk_cells(mat):
     """function to convert a numpy array of integers to a vtkCellArray
@@ -259,7 +259,8 @@ def poly_to_mesh_components(poly):
 
 def render_actors(actors, camera=None, do_save=False, filename=None,
                   scale=4, back_color=(1, 1, 1),
-                  VIDEO_WIDTH=1080, VIDEO_HEIGHT=720,
+                  VIDEO_WIDTH=None, VIDEO_HEIGHT=None,
+                  video_width=1080, video_height=720,
                   return_keyframes=False):
     """
     Visualize a set of actors in a 3d scene, optionally saving a snapshot. 
@@ -294,9 +295,16 @@ def render_actors(actors, camera=None, do_save=False, filename=None,
     """
     if do_save:
         assert(filename is not None)
+    if VIDEO_HEIGHT is not None:
+        logging.warning('VIDEO_HEIGHT deprecated, please use video_height')
+        video_height=VIDEO_HEIGHT
+    if VIDEO_WIDTH is not None:
+        logging.warning('VIDEO_WIDTH is deprecated, please use VIDEO_WIDTH')
+        video_width=VIDEO_WIDTH
+        
     # create a rendering window and renderer
     ren, renWin, iren = _setup_renderer(
-        VIDEO_WIDTH, VIDEO_HEIGHT, back_color, camera=camera)
+        video_width, video_height, back_color, camera=camera)
 
     for a in actors:
         # assign actor to the renderer
