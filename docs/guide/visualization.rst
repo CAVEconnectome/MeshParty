@@ -70,7 +70,7 @@ the coloring data is in the form of numpy arrays.
 
 vertex_colors will accept floating point values, in which case it will pass it through vtk's default colormap.
 Often you want to have more explicit control over the colors of vertices, and so it will also accept a numpy array 
-of Nx3 uint8 RGB values so that you can color the mesh precisely as you'd like to.
+of Nx3 uint8 RGB or Nx4 RGBA values (0-255) so that you can color the mesh precisely as you'd like to.
 
 In order to help you create these colors, a colormapping function exists :func:`meshparty.trimesh_vtk.values_to_colors`.
 You can use matplotlib or seaborn colormaps to help you create the coloring scheme you would like.
