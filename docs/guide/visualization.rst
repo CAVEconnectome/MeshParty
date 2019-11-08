@@ -38,8 +38,8 @@ computer to find what gives you the best rendering results.
     trimesh_vtk.render_actors([mesh_actor],
                               filename='my_image.png'
                               do_save=True,
-                              VIDEO_WIDTH=1600,
-                              VIDEO_HEIGHT=1200)
+                              video_width=1600,
+                              video_height=1200)
 
 Camera Control
 --------------
