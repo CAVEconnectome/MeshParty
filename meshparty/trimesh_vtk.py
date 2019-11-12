@@ -915,6 +915,12 @@ def _setup_renderer(video_width, video_height, back_color, camera=None):
 
     return ren, renWin, iren
 
+def make_camera_interpolator(times, cameras):
+    assert(len(times) == len(cameras))
+    camera_interp = vtk.vtkCameraInterpolator()
+    for t, cam in zip(times, cameras):
+        camera_interp.AddCamera(t, cam)
+    return camera_interp
 
 def render_movie(actors, directory, times, cameras, start_frame=0,
                  video_width=1280, video_height=720, scale=4,
@@ -976,11 +982,7 @@ def render_movie(actors, directory, times, cameras, start_frame=0,
                 times,
                 cameras)
     """
-    
-    camera_interp = vtk.vtkCameraInterpolator()
-    assert(len(times) == len(cameras))
-    for t, cam in zip(times, cameras):
-        camera_interp.AddCamera(t, cam)
+    camera_interp=make_camera_interpolator(times, cameras)
 
     def interpolate_camera(actors, camera, t):
         camera_interp.InterpolateCamera(t, camera)
