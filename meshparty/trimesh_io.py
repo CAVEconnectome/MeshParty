@@ -26,9 +26,33 @@ from tqdm import trange
 
 from meshparty import utils, trimesh_repair
 
+try:
+    from annotationframeworkclient import infoservice
+    allow_framework_client = True
+except ImportError:
+    logging.warning("Need to pip install annotationframeworkclient to use dataset_name parameters")
+    allow_framework_client = False
+
 class EmptyMaskException(Exception):
     """Raised when applying a mask that has all zeros"""
     pass
+
+def _get_cv_path_from_info(dataset_name, server_address=None, segmentation_type='graphene'):
+    """Get the cloudvolume path from a dataset name. Segmentation type should be
+       either `graphene` or `flat`.
+    """
+    if allow_framework_client is False:
+        logging.warning("Need to pip install annotationframeworkclient to use dataset_name parameters")
+        return None
+    
+    info = infoservice.InfoServiceClient(dataset_name=dataset_name, server_address=server_address)
+    if segmentation_type == 'graphene':
+        cv_path = info.graphene_source(format_for='cloudvolume')
+    elif segmentation_type == 'flat':
+        cv_path = info.flat_segmentation_source(format_for='cloudvolume')
+    else:
+        cv_path = None
+    return cv_path
 
 def read_mesh_h5(filename):
     """Reads a mesh's vertices, faces and normals from an hdf5 file
@@ -404,22 +428,32 @@ class MeshMeta(object):
             set to zero to use less memory but read from disk cache
         cv_path: str
             path to pass to cloudvolume.CloudVolume
+        dataset_name: str
+            Dataset name to use to get cloudvolume path via infoservice
+        server_address: str
+            Server address for the infoservice. Uses a default value if None.
+        segmentation_type: 'graphene' or 'flat'
+            Selects which type of segmentation to use. Graphene is for proofreadable segmentations, flat is for static segmentations.
         disk_cache_path: str
             meshes are dumped to this directory => should be equal to target_dir
             in download_meshes (default None will not cache meshes)
         map_gs_to_https: bool
             whether to change gs paths to https paths, via cloudvolume's use_https option
+        voxel_scaling: 3x1 numeric
+            Allows a post-facto multiplicative scaling of vertex locations. These values are NOT saved, just used for analysis and visualization.
         """
-
-    def __init__(self, cache_size=400, cv_path=None, disk_cache_path=None,
-                 map_gs_to_https=True):
+    def __init__(self, cache_size=400, cv_path=None, dataset_name=None, server_address=None, segmentation_type='graphene',
+                 disk_cache_path=None, map_gs_to_https=True, voxel_scaling=None):
 
         self._mesh_cache = {}
         self._cache_size = cache_size
+        if cv_path is None and dataset_name is not None:
+            cv_path = _get_cv_path_from_info(dataset_name=dataset_name, server_address=server_address, segmentation_type=segmentation_type)
         self._cv_path = cv_path
         self._cv = None
         self._map_gs_to_https = map_gs_to_https
         self._disk_cache_path = disk_cache_path
+        self._voxel_scaling = voxel_scaling
 
         if self.disk_cache_path is not None:
             if not os.path.exists(self.disk_cache_path):
@@ -449,6 +483,10 @@ class MeshMeta(object):
 
         return self._cv
 
+    @property
+    def voxel_scaling(self):
+        return self._voxel_scaling
+
     def _filename(self, seg_id):
         """ a method to define what path this seg_id will or is saved to
         
@@ -467,7 +505,8 @@ class MeshMeta(object):
              stitch_mesh_chunks=True,
              overwrite_merge_large_components=False,
              remove_duplicate_vertices=False,
-             force_download=False):
+             force_download=False,
+             voxel_scaling=None):
         """ Loads mesh either from cache, disk or google storage
 
         Note, if the mesh is in a cache (memory or disk)
@@ -497,6 +536,8 @@ class MeshMeta(object):
             whether to bluntly removed duplicate vertices (default False)
         force_download: bool
             whether to force the mesh to be redownloaded from cloudvolume
+        voxel_scaling: 3x1 numeric
+            Allows a post-facto multiplicative scaling of vertex locations. These values are NOT saved, just used for analysis and visualization.
 
         Returns
         -------
@@ -515,12 +556,13 @@ class MeshMeta(object):
                 mesh_data = read_mesh(filename)
                 vertices, faces, normals, link_edges, node_mask = mesh_data
                 mesh = Mesh(vertices=vertices, faces=faces, normals=normals,
-                                        link_edges=link_edges, node_mask=node_mask)
+                            link_edges=link_edges, node_mask=node_mask, voxel_scaling=voxel_scaling)
 
                 if cache_mesh and len(self._mesh_cache) < self.cache_size:
                     self._mesh_cache[filename] = mesh
             else:
                 mesh = self._mesh_cache[filename]
+                mesh._voxel_scaling = voxel_scaling
 
             if self.disk_cache_path is not None and \
                     overwrite_merge_large_components:
@@ -533,7 +575,8 @@ class MeshMeta(object):
                     mesh = self.mesh(filename=self._filename(seg_id),
                                      cache_mesh=cache_mesh,
                                      merge_large_components=merge_large_components,
-                                     overwrite_merge_large_components=overwrite_merge_large_components)
+                                     overwrite_merge_large_components=overwrite_merge_large_components,
+                                     voxel_scaling=voxel_scaling)
                     return mesh
             assert (seg_id is not None and self.cv is not None)
             if seg_id not in self._mesh_cache or force_download is True:
@@ -547,7 +590,8 @@ class MeshMeta(object):
                     faces = faces.reshape(-1, 3)
 
                 mesh = Mesh(vertices=cv_mesh.vertices,
-                            faces=faces)
+                            faces=faces,
+                            voxel_scaling=voxel_scaling)
 
                 if cache_mesh and len(self._mesh_cache) < self.cache_size:
                     self._mesh_cache[seg_id] = mesh
@@ -559,7 +603,8 @@ class MeshMeta(object):
                                   overwrite=force_download)
             else:
                 mesh = self._mesh_cache[seg_id]
-    
+                mesh._voxel_scaling = voxel_scaling
+
         if (merge_large_components and (len(mesh.link_edges)==0)) or \
                         overwrite_merge_large_components:
                     mesh.merge_large_components()
@@ -591,8 +636,7 @@ class Mesh(trimesh.Trimesh):
         all the other keyword args you want to pass to :class:`trimesh.Trimesh`
 
     """
-
-    def __init__(self, *args, node_mask=None, unmasked_size=None, apply_mask=False, link_edges=None, **kwargs):
+    def __init__(self, *args, node_mask=None, unmasked_size=None, apply_mask=False, link_edges=None, voxel_scaling=None, **kwargs):
         if 'vertices' in kwargs:
             vertices_all = kwargs.pop('vertices')
         else:
@@ -603,6 +647,11 @@ class Mesh(trimesh.Trimesh):
         else:
             # If faces are in args, vertices must also have been in args
             faces_all = args[1]
+
+        self._voxel_scaling = voxel_scaling
+        if self._voxel_scaling is not None:
+            vertices_all = vertices_all * self._voxel_scaling
+            self._inverse_voxel_scaling = 1/self._voxel_scaling
 
         if unmasked_size is None:
             if node_mask is not None:
@@ -656,7 +705,19 @@ class Mesh(trimesh.Trimesh):
             self.link_edges = link_edges
 
         self._index_map = None
-        
+
+    # Helper class for handling scaling issues
+    class ScalingManagement(object):
+        @classmethod
+        def original_scaling(_, func):
+            def wrapper(*args, **kwargs):
+                if self._voxel_scaling is not None:
+                    self.vertices = self.vertices * self._inverse_voxel_scaling
+                func(*args, **kwargs)
+                if self._voxel_scaling is not None:
+                    self.vertices = self.vertices * self._voxel_scaling
+            return wrapper
+
     @property
     def link_edges(self):
         """numpy.array : a Kx2 set of textra edges you want to store in the mesh graph,
@@ -995,7 +1056,7 @@ class Mesh(trimesh.Trimesh):
 
         return utils.filter_shapes(node_ids, self.graph_edges)
 
-
+    @ScalingManagement.original_scaling
     def add_link_edges(self, seg_id, dataset_name, close_map_distance=300,
                         server_address="https://www.dynamicannotationframework.com"):
         """ add a set of link edges to this mesh from a PyChunkedGraph endpoint
@@ -1017,8 +1078,8 @@ class Mesh(trimesh.Trimesh):
         link_edges = trimesh_repair.get_link_edges(self, seg_id, dataset_name,
                                                    close_map_distance = close_map_distance,
                                                    server_address=server_address)
-        self.link_edges = np.vstack([self.link_edges, link_edges])
 
+        self.link_edges = np.vstack([self.link_edges, link_edges])
 
                         
     def get_local_meshes(self, n_points, max_dist=np.inf, center_node_ids=None,
@@ -1319,6 +1380,7 @@ class Mesh(trimesh.Trimesh):
 
         return new_shape[keep_rows]
 
+    @ScalingManagement.original_scaling
     def write_to_file(self, filename):
         """ Exports the mesh to any format supported by trimesh
 
@@ -1351,6 +1413,7 @@ class Mesh(trimesh.Trimesh):
             for ii, index in enumerate(self.indices_unmasked):
                 self._index_map[index] = ii
         return self._index_map
+
 
 class MaskedMesh(Mesh):
     def __init__(self, *args,  **kwargs):
