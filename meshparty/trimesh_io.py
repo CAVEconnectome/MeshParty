@@ -743,7 +743,7 @@ class Mesh(trimesh.Trimesh):
             Sets the new xyz scale relative to the resolution from the mesh source
         """
         if self._voxel_scaling is not None:
-            vertices_all = vertices_all * self.inverse_voxel_scaling
+            self.vertices = self.vertices * self.inverse_voxel_scaling
         
         if new_scaling is not None:
             self._voxel_scaling = np.array(new_scaling).reshape(3)
