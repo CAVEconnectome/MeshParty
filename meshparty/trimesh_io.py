@@ -1315,7 +1315,7 @@ class Mesh(trimesh.Trimesh):
         else:
             raise ValueError('Incompatible shape. Must be either original length or current length of vertices.')
 
-        new_mesh = Mesh(self.vertices,
+        new_mesh = Mesh(self.vertices * self.inverse_voxel_scaling,
                         self.faces,
                         node_mask=joint_mask,
                         unmasked_size=self.unmasked_size,
