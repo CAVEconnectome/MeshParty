@@ -564,7 +564,7 @@ class MeshMeta(object):
                     self._mesh_cache[filename] = mesh
             else:
                 mesh = self._mesh_cache[filename]
-                mesh.update_voxel_scale(voxel_scaling)
+                mesh.voxel_scaling = voxel_scaling
 
             if self.disk_cache_path is not None and \
                     overwrite_merge_large_components:
@@ -597,7 +597,7 @@ class MeshMeta(object):
 
                 if cache_mesh and len(self._mesh_cache) < self.cache_size:
                     self._mesh_cache[seg_id] = mesh
-                    mesh.update_voxel_scale(voxel_scaling)
+                    mesh.voxel_scaling = voxel_scaling
 
                 if self.disk_cache_path is not None:
                     write_mesh_h5(self._filename(seg_id), mesh.vertices,
@@ -606,7 +606,7 @@ class MeshMeta(object):
                                   overwrite=force_download)
             else:
                 mesh = self._mesh_cache[seg_id]
-                mesh.update_voxel_scale(voxel_scaling)
+                mesh.voxel_scaling = voxel_scaling
 
         if (merge_large_components and (len(mesh.link_edges)==0)) or \
                         overwrite_merge_large_components:
@@ -687,7 +687,10 @@ class Mesh(trimesh.Trimesh):
         if kwargs.get('process', False):
             print('No silent changing of the mesh is allowed')
         kwargs['process'] = False
-        
+               
+               
+        self._voxel_scaling = None
+ 
         super(Mesh, self).__init__(*new_args, **kwargs)
         if apply_mask:
             if link_edges is not None:
@@ -702,23 +705,36 @@ class Mesh(trimesh.Trimesh):
 
         self._index_map = None
 
-        self._voxel_scaling = None
-        self.update_voxel_scaling(voxel_scaling)
+        self.voxel_scaling = voxel_scaling
 
 
     # Helper class for handling scaling issues
     class ScalingManagement(object):
-        @classmethod
-        def original_scaling(self, func):
-            def wrapper(*args, **kwargs):
-                if self._voxel_scaling is not None:
-                    self.vertices = self.vertices * self._inverse_voxel_scaling
-                func(*args, **kwargs)
-                if self._voxel_scaling is not None:
-                    self.vertices = self.vertices * self._voxel_scaling
+        @staticmethod
+        def original_scaling(func):
+            def wrapper(self, *args, **kwargs):
+                original_scaling = self.voxel_scaling
+                self.vertex_scaling = None
+                func(self, *args, **kwargs)
+                self.vertex_scaling = original_scaling
             return wrapper
 
-    def update_voxel_scaling(self, new_scaling):
+    @property
+    def voxel_scaling(self):
+        return self._voxel_scaling
+    
+    @voxel_scaling.setter
+    def voxel_scaling(self, new_scaling):
+        self._update_voxel_scaling(new_scaling)
+
+    @property
+    def inverse_voxel_scaling(self):
+        if self.voxel_scaling is not None:
+            return 1/self.voxel_scaling
+        else:
+            return None
+
+    def _update_voxel_scaling(self, new_scaling):
         """Update the scale of the mesh
         
         Parameters
@@ -727,14 +743,23 @@ class Mesh(trimesh.Trimesh):
             Sets the new xyz scale relative to the resolution from the mesh source
         """
         if self._voxel_scaling is not None:
-            vertices_all = vertices_all * self._inverse_voxel_scaling
-        self._voxel_scaling = np.array(new_scaling).reshape(3)
-        self._inverse_voxel_scaling = 1/self._voxel_scaling
-        self.vertices = self.vertices * new_scaling
+            vertices_all = vertices_all * self.inverse_voxel_scaling
+        
+        if new_scaling is not None:
+            self._voxel_scaling = np.array(new_scaling).reshape(3)
+            self.vertices = self.vertices * self._voxel_scaling
+        else:
+            self._voxel_scaling = None
+            
+        self._clear_extra_cached_vertex_keys()
+
+    def _clear_extra_cached_vertex_keys(self, keys=['nxgraph', 'csgraph', 'pykdtree', 'kdtree']):
+        for k in keys:
+            self._cache.delete(k)
 
     @property
     def link_edges(self):
-        """numpy.array : a Kx2 set of textra edges you want to store in the mesh graph,
+        """numpy.array : a Kx2 set of extra edges you want to store in the mesh graph,
         :func:`edges` will return this plus :func:`face_edges`"""
         return self._data['link_edges']
 
@@ -1294,6 +1319,7 @@ class Mesh(trimesh.Trimesh):
                         self.faces,
                         node_mask=joint_mask,
                         unmasked_size=self.unmasked_size,
+                        voxel_scaling=self.voxel_scaling,
                         **kwargs)
         link_edge_unmask = self.map_indices_to_unmasked(self.link_edges)        
         new_mesh._apply_new_mask_in_place(new_mask, link_edge_unmask)
