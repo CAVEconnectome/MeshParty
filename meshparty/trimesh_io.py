@@ -536,7 +536,7 @@ class MeshMeta(object):
             whether to bluntly removed duplicate vertices (default False)
         force_download: bool
             whether to force the mesh to be redownloaded from cloudvolume
-        voxel_scaling: 3x1 numeric
+        voxel_scaling: 3 element numeric
             Allows a post-facto multiplicative scaling of vertex locations. These values are NOT saved, just used for analysis and visualization.
 
         Returns
@@ -550,6 +550,8 @@ class MeshMeta(object):
             if filename is not None, and seg_id and cv_path are not both set
             then it doesn't know how to get your mesh
         """
+        if voxel_scaling is None:
+            voxel_scaling = self.voxel_scaling
 
         if filename is not None:
             if filename not in self._mesh_cache:
@@ -562,7 +564,7 @@ class MeshMeta(object):
                     self._mesh_cache[filename] = mesh
             else:
                 mesh = self._mesh_cache[filename]
-                mesh._voxel_scaling = voxel_scaling
+                mesh.update_voxel_scale(voxel_scaling)
 
             if self.disk_cache_path is not None and \
                     overwrite_merge_large_components:
@@ -595,6 +597,7 @@ class MeshMeta(object):
 
                 if cache_mesh and len(self._mesh_cache) < self.cache_size:
                     self._mesh_cache[seg_id] = mesh
+                    mesh.update_voxel_scale(voxel_scaling)
 
                 if self.disk_cache_path is not None:
                     write_mesh_h5(self._filename(seg_id), mesh.vertices,
@@ -603,7 +606,7 @@ class MeshMeta(object):
                                   overwrite=force_download)
             else:
                 mesh = self._mesh_cache[seg_id]
-                mesh._voxel_scaling = voxel_scaling
+                mesh.update_voxel_scale(voxel_scaling)
 
         if (merge_large_components and (len(mesh.link_edges)==0)) or \
                         overwrite_merge_large_components:
@@ -648,11 +651,6 @@ class Mesh(trimesh.Trimesh):
             # If faces are in args, vertices must also have been in args
             faces_all = args[1]
 
-        self._voxel_scaling = voxel_scaling
-        if self._voxel_scaling is not None:
-            vertices_all = vertices_all * self._voxel_scaling
-            self._inverse_voxel_scaling = 1/self._voxel_scaling
-
         if unmasked_size is None:
             if node_mask is not None:
                 unmasked_size = len(node_mask)
@@ -683,8 +681,6 @@ class Mesh(trimesh.Trimesh):
         else:
             nodes_f, faces_f = vertices_all, faces_all
 
-
-
         new_args = (nodes_f, faces_f)
         if len(args) > 2:
             new_args += args[2:]
@@ -706,10 +702,14 @@ class Mesh(trimesh.Trimesh):
 
         self._index_map = None
 
+        self._voxel_scaling = None
+        self.update_voxel_scaling(voxel_scaling)
+
+
     # Helper class for handling scaling issues
     class ScalingManagement(object):
         @classmethod
-        def original_scaling(_, func):
+        def original_scaling(self, func):
             def wrapper(*args, **kwargs):
                 if self._voxel_scaling is not None:
                     self.vertices = self.vertices * self._inverse_voxel_scaling
@@ -717,6 +717,20 @@ class Mesh(trimesh.Trimesh):
                 if self._voxel_scaling is not None:
                     self.vertices = self.vertices * self._voxel_scaling
             return wrapper
+
+    def update_voxel_scaling(self, new_scaling):
+        """Update the scale of the mesh
+        
+        Parameters
+        ----------
+        new_scale : 3-element vector 
+            Sets the new xyz scale relative to the resolution from the mesh source
+        """
+        if self._voxel_scaling is not None:
+            vertices_all = vertices_all * self._inverse_voxel_scaling
+        self._voxel_scaling = np.array(new_scaling).reshape(3)
+        self._inverse_voxel_scaling = 1/self._voxel_scaling
+        self.vertices = self.vertices * new_scaling
 
     @property
     def link_edges(self):
