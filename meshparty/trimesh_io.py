@@ -558,13 +558,12 @@ class MeshMeta(object):
                 mesh_data = read_mesh(filename)
                 vertices, faces, normals, link_edges, node_mask = mesh_data
                 mesh = Mesh(vertices=vertices, faces=faces, normals=normals,
-                            link_edges=link_edges, node_mask=node_mask, voxel_scaling=voxel_scaling)
+                            link_edges=link_edges, node_mask=node_mask)
 
                 if cache_mesh and len(self._mesh_cache) < self.cache_size:
                     self._mesh_cache[filename] = mesh
             else:
                 mesh = self._mesh_cache[filename]
-                mesh.voxel_scaling = voxel_scaling
 
             if self.disk_cache_path is not None and \
                     overwrite_merge_large_components:
@@ -592,12 +591,10 @@ class MeshMeta(object):
                     faces = faces.reshape(-1, 3)
 
                 mesh = Mesh(vertices=cv_mesh.vertices,
-                            faces=faces,
-                            voxel_scaling=voxel_scaling)
+                            faces=faces)
 
                 if cache_mesh and len(self._mesh_cache) < self.cache_size:
                     self._mesh_cache[seg_id] = mesh
-                    mesh.voxel_scaling = voxel_scaling
 
                 if self.disk_cache_path is not None:
                     write_mesh_h5(self._filename(seg_id), mesh.vertices,
@@ -606,8 +603,9 @@ class MeshMeta(object):
                                   overwrite=force_download)
             else:
                 mesh = self._mesh_cache[seg_id]
-                mesh.voxel_scaling = voxel_scaling
 
+        mesh.voxel_scaling = voxel_scaling
+        
         if (merge_large_components and (len(mesh.link_edges)==0)) or \
                         overwrite_merge_large_components:
                     mesh.merge_large_components()
