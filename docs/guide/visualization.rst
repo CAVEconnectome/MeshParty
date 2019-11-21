@@ -186,7 +186,7 @@ far away it is from one point on the mesh.
 
     # make a camera interpolator with these two cameras
     max_frame = ds[max_ind]/(15000/30)
-    camera_interp = trimesh_vtk.make_camera_interpolator([0, maxframe],
+    camera_interp = trimesh_vtk.make_camera_interpolator([0, max_frame],
                                                          [camera_start, camera_end])
 
     def reveal_axon(actors, camera, t,
