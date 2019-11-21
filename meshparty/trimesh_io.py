@@ -567,9 +567,7 @@ class MeshMeta(object):
 
             if self.disk_cache_path is not None and \
                     overwrite_merge_large_components:
-                write_mesh_h5(filename, mesh.vertices,
-                              mesh.faces.flatten(),
-                              link_edges=mesh.link_edges)
+                mesh.write_to_file(self._filename(seg_id))
         else:
             if self.disk_cache_path is not None and force_download is False:
                 if os.path.exists(self._filename(seg_id)):
@@ -597,15 +595,11 @@ class MeshMeta(object):
                     self._mesh_cache[seg_id] = mesh
 
                 if self.disk_cache_path is not None:
-                    write_mesh_h5(self._filename(seg_id), mesh.vertices,
-                                  mesh.faces,
-                                  link_edges=mesh.link_edges,
-                                  overwrite=force_download)
-            else:
+                    mesh.write_to_file(self._filename(seg_id), overwrite=force_download)
                 mesh = self._mesh_cache[seg_id]
 
         mesh.voxel_scaling = voxel_scaling
-        
+
         if (merge_large_components and (len(mesh.link_edges)==0)) or \
                         overwrite_merge_large_components:
                     mesh.merge_large_components()
@@ -712,9 +706,9 @@ class Mesh(trimesh.Trimesh):
         def original_scaling(func):
             def wrapper(self, *args, **kwargs):
                 original_scaling = self.voxel_scaling
-                self.vertex_scaling = None
+                self.voxel_scaling = None
                 func(self, *args, **kwargs)
-                self.vertex_scaling = original_scaling
+                self.voxel_scaling = original_scaling
             return wrapper
 
     @property
@@ -740,7 +734,7 @@ class Mesh(trimesh.Trimesh):
         new_scale : 3-element vector 
             Sets the new xyz scale relative to the resolution from the mesh source
         """
-        if self._voxel_scaling is not None:
+        if self.voxel_scaling is not None:
             self.vertices = self.vertices * self.inverse_voxel_scaling
         
         if new_scaling is not None:
@@ -1419,7 +1413,7 @@ class Mesh(trimesh.Trimesh):
         return new_shape[keep_rows]
 
     @ScalingManagement.original_scaling
-    def write_to_file(self, filename):
+    def write_to_file(self, filename, overwrite=True):
         """ Exports the mesh to any format supported by trimesh
 
         Parameters
@@ -1437,7 +1431,7 @@ class Mesh(trimesh.Trimesh):
                           normals=self.face_normals,
                           link_edges=self.link_edges,
                           node_mask=self.node_mask,
-                          overwrite=True)
+                          overwrite=overwrite)
         else:
             exchange.export.export_mesh(self, filename)
 
