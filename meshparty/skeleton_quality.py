@@ -121,12 +121,12 @@ def compute_path_pairs(sk, mesh, skind_to_mind_map=None, return_indices=True):
             
         sk_path = sk.vertices[sk.path_to_root(sk_ep)[:-1]]   #Don't include root, since the mesh path won't have it
         ms_path = mesh.vertices[ms_path_inds]   #Don't include root, since the mesh path won't have it
-
-        sk_paths.append(sk_path)
-        ms_paths.append(ms_path)
-        if return_indices:
-            sk_path_indices.append(np.array(sk.path_to_root(sk_ep)[:-1]))
-            ms_path_indices.append(np.array(ms_path_inds))
+        if len(sk_path)>0:
+            sk_paths.append(sk_path)
+            ms_paths.append(ms_path)
+            if return_indices:
+                sk_path_indices.append(np.array(sk.path_to_root(sk_ep)[:-1]))
+                ms_path_indices.append(np.array(ms_path_inds))
     if return_indices:
         return sk_paths, ms_paths, sk_path_indices, ms_path_indices
     else:
