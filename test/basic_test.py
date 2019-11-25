@@ -71,6 +71,11 @@ def full_cell_mesh():
     with build_full_cell_mesh() as m:
         yield m
 
+@pytest.fixture(scope='session')
+def mesh_link_edges():
+    filepath = 'test/test_files/link_edges_for_mesh.npy'
+    link_edges = np.load(filepath)
+    yield link_edges
 
 @contextlib.contextmanager
 def build_basic_cube_mesh():
@@ -133,8 +138,8 @@ def cv(cv_path):
         chunk_size=[512, 512, 16],
         volume_size=[512, 512, 512]
     )
-    cv = cloudvolume.CloudVolumeFactory(cloudurl=cv_path,
-                                        info=info)
+    cv = cloudvolume.CloudVolume(cloudpath=cv_path,
+                                 info=info)
     cv.commit_info()
 
     yield cv
@@ -254,6 +259,7 @@ def test_masked_mesh(cv_path, full_cell_mesh_id, full_cell_soma_pt, tmpdir):
     double_soma_read = mm.mesh(filename=fname)
 
 
+
 def test_link_edges(full_cell_mesh, full_cell_merge_log, full_cell_soma_pt, monkeypatch):
 
     class MyChunkedGraph(object):
@@ -274,7 +280,7 @@ def test_link_edges(full_cell_mesh, full_cell_merge_log, full_cell_soma_pt, monk
     skel = skeletonize.skeletonize_mesh(mesh_filter,
                                         invalidation_d=10000,
                                         soma_pt=full_cell_soma_pt)
-    assert(skel.n_branch_points == 83)
+    assert(skel.n_branch_points == 52)
 
 def test_local_mesh(full_cell_mesh):
     vertex = 30000

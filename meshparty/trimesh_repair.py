@@ -1,10 +1,16 @@
-from annotationframeworkclient import chunkedgraph
+
 from scipy import spatial, sparse
 from meshparty import utils
 import pykdtree
 import time
 import numpy as np
 from meshparty import trimesh_io
+import logging
+try:
+    from annotationframeworkclient import chunkedgraph
+except ImportError:
+    logging.warning("Need to pip install annotationframework client to repair mesh with pychunkedgraph")
+
 
 def np_shared_rows(A,B):
     A_flat = np.ascontiguousarray(np.sort(A, axis=1)).view(dtype=('i8,i8'))
@@ -215,7 +221,8 @@ def merge_points_to_merge_indices(mesh, merge_event_points, close_map_distance =
     return close_inds.reshape((Nmerge,2))[is_join_merge,:]
 
 def get_link_edges(mesh, seg_id, dataset_name, close_map_distance = 300,
-                   server_address="https://www.dynamicannotationframework.com", verbose=False):
+                   server_address="https://www.dynamicannotationframework.com",
+                   verbose=False):
     # initialize a chunkedgraph client
     cg_client = chunkedgraph.ChunkedGraphClient(server_address=server_address,
                                                 dataset_name=dataset_name)

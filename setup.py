@@ -52,6 +52,10 @@ setup(
     packages=['meshparty'],
     include_package_data=True,
     install_requires=required,
+    extras_require = {
+        'SDF':['pyembree'],
+        'REPAIR':['annotationframeworkclient>=0.2.0']
+    },
     setup_requires=['pytest-runner', 'setuptools_scm'],
     dependency_links=dependency_links,
     tests_require=test_required,

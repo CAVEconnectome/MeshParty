@@ -82,10 +82,10 @@ def read_mesh(filename):
 
     if filename.endswith(".obj"):
         with open(filename,'r') as fp:
-            mesh_d = exchange.wavefront.load_wavefront(fp)
-        vertices = mesh_d[0]['vertices']
-        faces =  mesh_d[0]['faces']
-        normals = mesh_d[0].get('normals', None)
+            mesh_d = exchange.obj.load_obj(fp)
+        vertices = mesh_d['vertices']
+        faces =  mesh_d['faces']
+        normals = mesh_d.get('normals', None)
         link_edges = None
         node_mask = None
     elif filename.endswith(".h5"):
@@ -101,7 +101,7 @@ def _download_meshes_thread(args):
     seg_ids, cv_path, target_dir, fmt, overwrite, \
         merge_large_components, stitch_mesh_chunks, map_gs_to_https = args
 
-    cv = cloudvolume.CloudVolumeFactory(cv_path, map_gs_to_https=map_gs_to_https)
+    cv = cloudvolume.CloudVolume(cv_path, use_https=map_gs_to_https)
 
     for seg_id in seg_ids:
         print('downloading {}'.format(seg_id))
@@ -114,11 +114,11 @@ def _download_meshes_thread(args):
         try:
             cv_mesh = cv.mesh.get(seg_id, remove_duplicate_vertices=False)
 
-            faces = np.array(cv_mesh["faces"])
+            faces = np.array(cv_mesh.faces)
             if len(faces.shape) == 1:
                 faces = faces.reshape(-1, 3)
 
-            mesh = Mesh(vertices=cv_mesh["vertices"],
+            mesh = Mesh(vertices=cv_mesh.vertices,
                         faces=faces,
                         process=False)
 
@@ -219,8 +219,8 @@ class MeshMeta(object):
     @property
     def cv(self):
         if self._cv is None and self.cv_path is not None:
-            self._cv = cloudvolume.CloudVolumeFactory(self.cv_path, parallel=10,
-                                        map_gs_to_https=self._map_gs_to_https)
+            self._cv = cloudvolume.CloudVolume(self.cv_path, parallel=10,
+                                               use_https=self._map_gs_to_https)
 
         return self._cv
 
@@ -283,11 +283,11 @@ class MeshMeta(object):
 
             if seg_id not in self._mesh_cache or force_download is True:
                 cv_mesh = self.cv.mesh.get(seg_id, remove_duplicate_vertices=False)
-                faces = np.array(cv_mesh["faces"])
+                faces = np.array(cv_mesh.faces)
                 if (len(faces.shape) == 1):
                     faces = faces.reshape(-1, 3)
 
-                mesh = Mesh(vertices=cv_mesh["vertices"],
+                mesh = Mesh(vertices=cv_mesh.vertices,
                             faces=faces)
 
                 if cache_mesh and len(self._mesh_cache) < self.cache_size:
@@ -433,7 +433,13 @@ class Mesh(trimesh.Trimesh):
 
     @caching.cache_decorator
     def graph_edges(self):
-        return np.vstack([self.edges, self.link_edges])
+        # mesh.edges has bidirectional edges, so we need to pass bidirectional link_edges.
+        if len(self.link_edges)>0:
+            link_edges_sym = np.vstack((self.link_edges, self.link_edges[:,[1,0]]))
+            link_edges_sym_unique = np.unique(link_edges_sym, axis=1)
+        else:
+            link_edges_sym_unique = self.link_edges
+        return np.vstack([self.edges, link_edges_sym_unique])
 
     def fix_mesh(self, wiggle_vertices=False, verbose=False):
         """ Executes rudimentary fixing function from pymeshfix
@@ -543,6 +549,7 @@ class Mesh(trimesh.Trimesh):
 
         dists, node_ids = self.kdtree.query(center_coords, sample_n_points,
                                             distance_upper_bound=max_dist)
+
         if n_points is not None:
             if sample_n_points > n_points:
                 if fisheye:
@@ -606,6 +613,8 @@ class Mesh(trimesh.Trimesh):
 
     def get_local_view(self, n_points=None, max_dist=np.inf,
                        sample_n_points=None,
+                       adapt_unit_sphere_norm=False,
+                       fisheye=False,
                        pc_align=False, center_node_id=None,
                        center_coord=None, method="kdtree", verbose=False,
                        return_node_ids=False, svd_solver="auto",
@@ -626,6 +635,8 @@ class Mesh(trimesh.Trimesh):
                                     pc_align=pc_align,
                                     center_node_ids=[center_node_id],
                                     center_coords=[center_coord],
+                                    adapt_unit_sphere_norm=adapt_unit_sphere_norm,
+                                    fisheye=fisheye,
                                     verbose=verbose,
                                     return_node_ids=return_node_ids,
                                     svd_solver=svd_solver,
@@ -781,7 +792,8 @@ class Mesh(trimesh.Trimesh):
     def _create_csgraph(self):
         """ Computes csgraph """
         return utils.create_csgraph(self.vertices, self.graph_edges, euclidean_weight=True,
-                                    directed=False)
+                                    directed=True)
+
     @property
     def node_mask(self):
         '''

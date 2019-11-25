@@ -253,9 +253,9 @@ class Skeleton:
                                     directed=directed)
 
     def _create_branch_and_end_points(self):
-        n_children = np.sum(self.csgraph_binary > 0, axis=0).squeeze()
-        self._branch_points = np.flatnonzero(n_children > 1)
-        self._end_points = np.flatnonzero(n_children == 0)
+        n_partners = np.asarray(np.sum(self.csgraph_binary_undirected, axis=1)).ravel() 
+        self._branch_points = np.flatnonzero(n_partners > 2)
+        self._end_points = np.flatnonzero(n_partners == 1)
 
     def _single_path_length(self, path):
         xs = self.vertices[path[:-1]]
@@ -286,6 +286,8 @@ class Skeleton:
 
         while len(path_queue)>0:
             ind = path_queue.pop()
+            if ind == self.root:
+                continue
             segment = [ind]
             ptr = self.path_to_root(ind)
             if len(ptr)>1:
