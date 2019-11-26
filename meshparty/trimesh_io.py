@@ -30,7 +30,7 @@ def read_mesh_h5(filename):
     assert os.path.isfile(filename)
 
     with h5py.File(filename, "r") as f:
-        if draco in f.keys():
+        if "draco" in f.keys():
             mesh_object = DracoPy.decode_buffer_to_mesh(f["draco"][()])
             vertices = np.array(mesh_object.points).astype(np.float32)
             faces = np.array(mesh_object.faces).astype(np.uint32)
