@@ -22,7 +22,7 @@ except ImportError:
 
 from pymeshfix import _meshfix
 from tqdm import trange
-
+import DracoPy
 from meshparty import utils, trimesh_repair
 
 def read_mesh_h5(filename):
@@ -30,8 +30,13 @@ def read_mesh_h5(filename):
     assert os.path.isfile(filename)
 
     with h5py.File(filename, "r") as f:
-        vertices = f["vertices"][()]
-        faces = f["faces"][()]
+        if draco in f.keys():
+            mesh_object = DracoPy.decode_buffer_to_mesh(f["draco"][()]
+            vertices = np.array(mesh_object.points).astype(np.float32)
+            faces = np.array(mesh_object.faces).astype(np.uint32)
+        else:
+            vertices = f["vertices"][()]
+            faces = f["faces"][()]
 
         if len(faces.shape) == 1:
             faces = faces.reshape(-1, 3)
@@ -54,7 +59,8 @@ def read_mesh_h5(filename):
 
 
 def write_mesh_h5(filename, vertices, faces,
-                  normals=None, link_edges=None, node_mask=None, overwrite=False):
+                  normals=None, link_edges=None, node_mask=None,
+                  draco=False, overwrite=False):
     """Writes a mesh's vertices, faces (and normals) to an hdf5 file"""
 
     if os.path.isfile(filename):
@@ -64,8 +70,14 @@ def write_mesh_h5(filename, vertices, faces,
             return
 
     with h5py.File(filename, "w") as f:
-        f.create_dataset("vertices", data=vertices, compression="gzip")
-        f.create_dataset("faces", data=faces, compression="gzip")
+        if draco:
+
+            buf = DracoPy.encode_mesh_to_buffer(mesh.vertices.flatten('C'),
+                                                mesh.faces.flatten('C'))
+            f.create_dataset("draco", data=buf)                        
+        else:
+            f.create_dataset("vertices", data=vertices, compression="gzip")
+            f.create_dataset("faces", data=faces, compression="gzip")
 
         if normals is not None:
             f.create_dataset("normals", data=normals, compression="gzip")
@@ -886,7 +898,7 @@ class Mesh(trimesh.Trimesh):
 
         return new_shape[keep_rows]
 
-    def write_to_file(self, filename):
+    def write_to_file(self, filename, draco=False):
         """ Exports the mesh to any format supported by trimesh
 
         :param filename: str
@@ -898,6 +910,7 @@ class Mesh(trimesh.Trimesh):
                           normals=self.face_normals,
                           link_edges=self.link_edges,
                           node_mask=self.node_mask,
+                          draco=draco,
                           overwrite=True)
         else:
             exchange.export.export_mesh(self, filename)
