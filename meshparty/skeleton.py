@@ -28,7 +28,7 @@ class Skeleton:
     """
 
     def __init__(self, vertices, edges, mesh_to_skel_map=None, vertex_properties={},
-                 root=None):
+                 root=None, voxel_scaling=None):
 
         self._vertices = np.array(vertices)
         self._edges = np.vstack(edges).astype(int)
@@ -48,6 +48,9 @@ class Skeleton:
         self._csgraph_binary = None
         self._branch_points = None
         self._end_points = None
+
+        self._voxel_scaling = None
+        self.voxel_scaling = voxel_scaling
 
         self._reset_derived_objects()
         if root is None:
@@ -177,6 +180,33 @@ class Skeleton:
         if self._end_points is None:
             self._create_branch_and_end_points()
         return len(self._end_points)
+
+    @property
+    def voxel_scaling(self):
+        return self._voxel_scaling
+
+    @voxel_scaling.setter
+    def voxel_scaling(self, new_scaling):
+        self._update_voxel_scaling(new_scaling)
+    
+    @property
+    def inverse_voxel_scaling(self):
+        if self.voxel_scaling is None:
+            return None
+        else:
+            return 1/self.voxel_scaling
+
+    def _update_voxel_scaling(self, new_scaling):
+        if self.voxel_scaling is not None:
+            self._vertices = self._vertices * self.inverse_voxel_scaling
+        
+        if new_scaling is not None:
+            self._voxel_scaling = np.array(new_scaling).reshape(3)
+            self._vertices = self._vertices * self._voxel_scaling
+        else:
+            self._voxel_scaling = None
+
+        self._reset_derived_objects()
 
     @property
     def cover_paths(self):
@@ -399,6 +429,12 @@ class Skeleton:
         n_children = np.sum(self.csgraph_binary > 0, axis=0).squeeze()
         self._branch_points = np.flatnonzero(n_children > 1)
         self._end_points = np.flatnonzero(n_children == 0)
+
+    @property
+    def end_points_flat(self):
+        """End points without skeleton orientation, including root and disconnected components.
+        """
+        return np.flatnonzero(np.sum(self.csgraph_binary_undirected, axis=0) == 1)
 
     def _single_path_length(self, path):
         """Compute the length of a single path

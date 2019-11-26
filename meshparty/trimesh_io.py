@@ -485,6 +485,7 @@ class MeshMeta(object):
 
     @property
     def voxel_scaling(self):
+        """np.array : 3 element vector to rescale mesh vertices"""
         return self._voxel_scaling
 
     def _filename(self, seg_id):
@@ -506,13 +507,13 @@ class MeshMeta(object):
              overwrite_merge_large_components=False,
              remove_duplicate_vertices=False,
              force_download=False,
-             voxel_scaling=None):
+             voxel_scaling='default'):
         """ Loads mesh either from cache, disk or google storage
 
         Note, if the mesh is in a cache (memory or disk)
         you will get exactly what was in the cache
         irrespective of the other options you specified
-        unless force_download is set
+        unless force_download is set, except voxel_scaling which is always applied post-facto.
 
         Parameters
         ----------
@@ -536,8 +537,9 @@ class MeshMeta(object):
             whether to bluntly removed duplicate vertices (default False)
         force_download: bool
             whether to force the mesh to be redownloaded from cloudvolume
-        voxel_scaling: 3 element numeric
+        voxel_scaling: 3 element numeric or None
             Allows a post-facto multiplicative scaling of vertex locations. These values are NOT saved, just used for analysis and visualization.
+            By default, pulls from the value in the meshmeta. 
 
         Returns
         -------
@@ -550,7 +552,7 @@ class MeshMeta(object):
             if filename is not None, and seg_id and cv_path are not both set
             then it doesn't know how to get your mesh
         """
-        if voxel_scaling is None:
+        if voxel_scaling == 'default':
             voxel_scaling = self.voxel_scaling
 
         if filename is not None:
@@ -596,7 +598,6 @@ class MeshMeta(object):
 
                 if self.disk_cache_path is not None:
                     mesh.write_to_file(self._filename(seg_id), overwrite=force_download)
-                mesh = self._mesh_cache[seg_id]
 
         mesh.voxel_scaling = voxel_scaling
 
@@ -1306,8 +1307,12 @@ class Mesh(trimesh.Trimesh):
             joint_mask = self.node_mask & self.map_boolean_to_unmasked(new_mask)
         else:
             raise ValueError('Incompatible shape. Must be either original length or current length of vertices.')
-
-        new_mesh = Mesh(self.vertices * self.inverse_voxel_scaling,
+        
+        if self.voxel_scaling is None:
+            new_vertices = self.vertices
+        else:
+            new_vertices = self.vertices * self.inverse_voxel_scaling
+        new_mesh = Mesh(new_vertices,
                         self.faces,
                         node_mask=joint_mask,
                         unmasked_size=self.unmasked_size,
