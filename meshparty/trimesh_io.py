@@ -72,8 +72,8 @@ def write_mesh_h5(filename, vertices, faces,
     with h5py.File(filename, "w") as f:
         if draco:
 
-            buf = DracoPy.encode_mesh_to_buffer(mesh.vertices.flatten('C'),
-                                                mesh.faces.flatten('C'))
+            buf = DracoPy.encode_mesh_to_buffer(vertices.flatten('C'),
+                                                faces.flatten('C'))
             f.create_dataset("draco", data=buf)                        
         else:
             f.create_dataset("vertices", data=vertices, compression="gzip")
