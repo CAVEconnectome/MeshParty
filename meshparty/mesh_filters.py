@@ -177,4 +177,24 @@ def filter_two_point_distance(mesh, pts_foci, d_pad, indices=None, power=1):
         is_in_ellipse = np.sum(d_foci_to_all, axis=0) < dmax
 
     return is_in_ellipse
+
+
+def filter_graph_distance_from_points(mesh, indices, max_dist):
+    """Returns a boolean vector of mesh vertices closer than max_dist to a given list of vertex indices
+        on the mesh graph.
     
+    Parameters
+    ----------
+    mesh : meshparty.trimesh_io.Mesh
+            A Trimesh-like mesh with N vertices
+
+    indices: list-like
+        List of mesh vertex indices to measure distance from.
+
+    max_dist: float
+        Max distance to keep 
+    """
+
+    ds = sparse.csgraph.dijkstra(mesh.csgraph, indices=indices, limit=max_dist)
+    is_close = np.any( ds<=max_dist, axis=0)
+    return is_close
