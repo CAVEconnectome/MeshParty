@@ -51,7 +51,7 @@ html_theme = 'alabaster'
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
 extensions = ['sphinx.ext.autodoc', 'sphinx.ext.coverage', 'sphinx.ext.napoleon', 'sphinx.ext.viewcode',
-    'sphinx.ext.githubpages', 'sphinx.ext.intersphinx']
+    'sphinx.ext.githubpages', 'sphinx.ext.intersphinx','sphinxcontrib.yt']
 autodoc_inherit_docstrings = False
 
 intersphinx_mapping = {'trimesh':('https://trimsh.org/', None),

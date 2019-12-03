@@ -47,8 +47,7 @@ def eval_actor_360(actors, dir_name, tmp_path, camera=None, scale=2, nframes=30,
         fpath = os.path.dirname(os.path.abspath(__file__))
     else:
         fpath = os.path.join(tmp_path, dir_name)
-        if not os.path.isdir(fpath):
-            os.makedirs(fpath)
+
     trimesh_vtk.render_actors_360(actors, fpath,
                                   nframes=nframes,
                                   do_save =True,

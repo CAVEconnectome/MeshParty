@@ -2,7 +2,7 @@ import vtk
 from vtk.util.numpy_support import numpy_to_vtk, numpy_to_vtkIdTypeArray, vtk_to_numpy
 import numpy as np
 import os
-
+import logging
 
 def numpy_to_vtk_cells(mat):
     """function to convert a numpy array of integers to a vtkCellArray
@@ -259,7 +259,8 @@ def poly_to_mesh_components(poly):
 
 def render_actors(actors, camera=None, do_save=False, filename=None,
                   scale=4, back_color=(1, 1, 1),
-                  VIDEO_WIDTH=1080, VIDEO_HEIGHT=720,
+                  VIDEO_WIDTH=None, VIDEO_HEIGHT=None,
+                  video_width=1080, video_height=720,
                   return_keyframes=False):
     """
     Visualize a set of actors in a 3d scene, optionally saving a snapshot. 
@@ -294,9 +295,16 @@ def render_actors(actors, camera=None, do_save=False, filename=None,
     """
     if do_save:
         assert(filename is not None)
+    if VIDEO_HEIGHT is not None:
+        logging.warning('VIDEO_HEIGHT deprecated, please use video_height')
+        video_height=VIDEO_HEIGHT
+    if VIDEO_WIDTH is not None:
+        logging.warning('VIDEO_WIDTH is deprecated, please use VIDEO_WIDTH')
+        video_width=VIDEO_WIDTH
+        
     # create a rendering window and renderer
     ren, renWin, iren = _setup_renderer(
-        VIDEO_WIDTH, VIDEO_HEIGHT, back_color, camera=camera)
+        video_width, video_height, back_color, camera=camera)
 
     for a in actors:
         # assign actor to the renderer
@@ -456,7 +464,7 @@ def process_colors(color, xyz):
     map_colors = False
     if not isinstance(color, np.ndarray):
         color = np.array(color)
-    if color.shape == (len(xyz), 3):
+    if ((color.shape == (len(xyz), 3)) | (color.shape == (len(xyz), 4))):
         # then we have explicit colors
         if color.dtype != np.uint8:
             # if not passing uint8 assume 0-1 mapping
@@ -907,6 +915,12 @@ def _setup_renderer(video_width, video_height, back_color, camera=None):
 
     return ren, renWin, iren
 
+def make_camera_interpolator(times, cameras):
+    assert(len(times) == len(cameras))
+    camera_interp = vtk.vtkCameraInterpolator()
+    for t, cam in zip(times, cameras):
+        camera_interp.AddCamera(t, cam)
+    return camera_interp
 
 def render_movie(actors, directory, times, cameras, start_frame=0,
                  video_width=1280, video_height=720, scale=4,
@@ -968,13 +982,97 @@ def render_movie(actors, directory, times, cameras, start_frame=0,
                 times,
                 cameras)
     """
+    camera_interp=make_camera_interpolator(times, cameras)
 
-    camera_interp = vtk.vtkCameraInterpolator()
-    assert(len(times) == len(cameras))
-    for t, cam in zip(times, cameras):
-        camera_interp.AddCamera(t, cam)
+    def interpolate_camera(actors, camera, t):
+        camera_interp.InterpolateCamera(t, camera)
+    
+    renWin, end_frame = render_movie_flexible(actors, directory, times,
+                                          interpolate_camera,
+                                          start_frame=start_frame,
+                                          video_width=video_width,
+                                          video_height=video_height,
+                                          scale=scale,
+                                          do_save=do_save,
+                                          back_color=back_color)
+    return renWin, end_frame
 
-    camera = vtk.vtkCamera()
+    
+def render_movie_flexible(actors, directory, times, frame_change_function, start_frame=0,
+                 video_width=1280, video_height=720, scale=4, camera=None,
+                 do_save=True, back_color=(1, 1, 1)):
+    """
+    Function to create a series of png frames based upon a defining 
+    a frame change function that will alter actors and camera at
+    each time point
+    This will save images as a series of png images in the directory
+    specified.
+    The movie will start at time 0 and will go to frame np.max(times)
+    Reccomend to make times start at 0 and the length of the movie
+    you want.  Keep in mind that typical movies are encoded at 15-30
+    frames per second and times is units of frames.
+
+    This is the most general of the movie making functions,
+    and can be used to custom change coloring of actors or their positions
+    over time using tranformations. 
+
+    Parameters
+    ----------
+    actors :  list of vtkActor's
+        list of vtkActors to render
+    directory : str
+        folder to save images into
+    times : np.array
+        array of K frame times to set the camera to
+    frame_change_function : func
+        a function that takes (actors, camera, t) as arguments.
+        where actors are the list of actors passed here,
+        camera is the camera for the rendering,
+        and t is the current frame number.
+        This function may alter the actors and camera as a function
+        of time in some user defined manner.
+    start_frame : int
+        number to save the first frame number as... (default 0)
+        i.e. frames will start_frame = 5, first file would be 005.png
+    video_width : int
+        size of video in pixels
+    video_height : int
+        size of the video in pixels
+    scale : int
+        how much to expand the image
+    do_save : bool
+        whether to save the images to disk or just play interactively
+    Returns
+    -------
+    vtkRenderer
+        the renderer used to render
+    endframe
+        the last frame written
+    Example
+    -------
+    ::
+
+        from meshparty import trimesh_io, trimesh_vtk
+        mm = trimesh_io.MeshMeta(disk_cache_path = 'meshes')
+        mesh = mm.mesh(filename='mymesh.obj')
+        mesh_actor = trimesh_vtk.mesh_actor(mesh)
+        mesh_center = np.mean(mesh.vertices, axis=0)
+
+        camera_start = trimesh_vtk.oriented_camera(mesh_center, backoff = 10000, backoff_vector=(0, 0, 1))
+        camera_180 = trimesh_vtk.oriented_camera(mesh_center, backoff = 10000, backoff_vector=(0, 0, -1))
+        times = np.array([0, 90, 180])
+        cameras = [camera_start, camera_180, camera_start]
+        render_movie([mesh_actor],
+                'movie',
+                times,
+                cameras)
+    """
+    if not os.path.isdir(directory):
+        os.makedirs(directory)
+
+
+    if camera is None:
+        camera = vtk.vtkCamera()
     # create a rendering window and renderer
     ren, renWin, iren = _setup_renderer(
         video_width, video_height, back_color, camera=camera)
@@ -997,7 +1095,7 @@ def render_movie(actors, directory, times, cameras, start_frame=0,
         renWin.OffScreenRenderingOn()
 
     for i in np.arange(0, np.max(times)+1):
-        camera_interp.InterpolateCamera(i, camera)
+        frame_change_function(actors, camera, i)  
         ren.ResetCameraClippingRange()
         camera.ViewingRaysModified()
         renWin.Render()
@@ -1009,10 +1107,9 @@ def render_movie(actors, directory, times, cameras, start_frame=0,
             imageFilter.Update()
             imageFilter.Modified()
             moviewriter.Write()
-
+    
     renWin.Finalize()
     return renWin, i+start_frame
-
 
 def scale_bar_actor(center, camera, length=10000, color=(0, 0, 0), linewidth=5, font_size=20):
     """Creates a xyz 3d scale bar actor located at a specific location with a given size
