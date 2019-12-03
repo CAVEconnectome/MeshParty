@@ -287,3 +287,23 @@ def test_local_mesh(full_cell_mesh):
     assert(len(local_mesh.vertices)==500)
     local_view = full_cell_mesh.get_local_view(n_points=500, max_dist=5000, center_node_id=vertex)
     assert(len(local_view[0][0])==500)
+
+
+def test_mesh_rescale(full_cell_mesh):
+    original_area = full_cell_mesh.area
+
+    full_cell_mesh.voxel_scaling = [2,2,1]
+    new_area = full_cell_mesh.area
+    assert np.isclose(51309567968.120735, new_area, atol=1)
+
+    full_cell_mesh.voxel_scaling = None
+    restored_area = full_cell_mesh.area
+    assert original_area == restored_area
+
+def test_mesh_meta_rescale(cv_path, full_cell_mesh_id, tmpdir):
+    mm = trimesh_io.MeshMeta(cv_path=cv_path,
+                            cache_size=0,
+                            disk_cache_path=os.path.join(tmpdir,'mesh_cache'),
+                            voxel_scaling=[2,2,1])
+    mmesh = mm.mesh(seg_id=full_cell_mesh_id)
+    assert np.isclose(51309567968.120735, mmesh.area, atol=1) 

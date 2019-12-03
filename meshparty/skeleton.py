@@ -414,6 +414,7 @@ class Skeleton:
         self._segments = None
         self._segment_map = None
 
+
     def _create_csgraph(self,
                         directed=True,
                         euclidean_weight=True):
@@ -490,6 +491,22 @@ class Skeleton:
                 segment_map[segment] = seg_ind
                 seg_ind += 1
         return segments, segment_map.astype(int)
+
+    def write_to_h5(self, filename, overwrite=True):
+        """Write the skeleton to an HDF5 file. Note that this is done in the original dimensons, not the scaled dimensions.
+        
+        Parameters
+        ----------
+        filename : str 
+            Filename to save file
+        overwrite : bool, optional
+            Flag to specify whether to overwrite existing files, by default True
+        """
+        existing_voxel_scaling = self.voxel_scaling
+        self.voxel_scaling = None
+        skeleton_io.write_skeleton_h5(self, filename, overwrite=overwrite)
+        self.voxel_scaling = existing_voxel_scaling
+
 
     def export_to_swc(self, filename, node_labels=None, radius=None, header=None, xyz_scaling=1000):
         '''

@@ -101,3 +101,17 @@ def test_skeleton_h5_read(full_cell_skeleton):
     print(full_cell_skeleton.root)
     assert type(full_cell_skeleton) is skeleton.Skeleton
     assert full_cell_skeleton.root == 42591
+
+
+def test_skeleton_rescale(full_cell_skeleton):
+    end_points = full_cell_skeleton.end_points
+    orig_dist = full_cell_skeleton.distance_to_root[end_points[10]]
+
+    full_cell_skeleton.voxel_scaling = [2,2,1]
+    new_dist = full_cell_skeleton.distance_to_root[end_points[10]]
+    assert not np.isclose(new_dist, orig_dist)
+    assert np.isclose(new_dist, 251222.009984970, atol=0.001)
+
+    full_cell_skeleton.voxel_scaling = None 
+    reset_dist = full_cell_skeleton.distance_to_root[end_points[10]]
+    assert np.isclose(orig_dist, reset_dist)

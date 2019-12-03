@@ -598,6 +598,8 @@ class MeshMeta(object):
 
                 if self.disk_cache_path is not None:
                     mesh.write_to_file(self._filename(seg_id), overwrite=force_download)
+            else:
+                mesh = self._mesh_cache[seg_id]
 
         mesh.voxel_scaling = voxel_scaling
 
