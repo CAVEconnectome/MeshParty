@@ -271,8 +271,10 @@ def test_link_edges(full_cell_mesh, full_cell_merge_log, full_cell_soma_pt, monk
     monkeypatch.setattr(trimesh_io.trimesh_repair.chunkedgraph,
                         'ChunkedGraphClient',
                         MyChunkedGraph)
-
+    
+    full_cell_mesh.voxel_scaling = [10, 10, 10]
     full_cell_mesh.add_link_edges('test', 5)
+    full_cell_mesh.voxel_scaling = None
 
     out=mesh_filters.filter_largest_component(full_cell_mesh)
     mesh_filter = full_cell_mesh.apply_mask(out)
