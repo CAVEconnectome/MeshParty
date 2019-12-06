@@ -31,7 +31,7 @@ def read_mesh_h5(filename):
 
     with h5py.File(filename, "r") as f:
         if "draco" in f.keys():
-            mesh_object = DracoPy.decode_buffer_to_mesh(f["draco"][()])
+            mesh_object = DracoPy.decode_buffer_to_mesh(f["draco"][()].tostring())
             vertices = np.array(mesh_object.points).astype(np.float32)
             faces = np.array(mesh_object.faces).astype(np.uint32)
         else:
@@ -74,7 +74,7 @@ def write_mesh_h5(filename, vertices, faces,
 
             buf = DracoPy.encode_mesh_to_buffer(vertices.flatten('C'),
                                                 faces.flatten('C'))
-            f.create_dataset("draco", data=buf)                        
+            f.create_dataset("draco", data=np.void(buf), compression="gzip")                        
         else:
             f.create_dataset("vertices", data=vertices, compression="gzip")
             f.create_dataset("faces", data=faces, compression="gzip")
