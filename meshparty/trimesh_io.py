@@ -205,7 +205,8 @@ def _download_meshes_thread_graphene(args):
     
      """
     seg_ids, cv_path, target_dir, fmt, overwrite, \
-        merge_large_components, stitch_mesh_chunks, map_gs_to_https, remove_duplicate_vertices, progress = args
+        merge_large_components, stitch_mesh_chunks, map_gs_to_https, \
+            remove_duplicate_vertices, progress, chunk_size = args
 
     cv = cloudvolume.CloudVolume(cv_path, use_https=map_gs_to_https)
 
@@ -274,7 +275,8 @@ def _download_meshes_thread_precomputed(args):
      """
     seg_ids, cv_path, target_dir, fmt, overwrite, \
         merge_large_components, stitch_mesh_chunks, \
-        map_gs_to_https, remove_duplicate_vertices, progress = args
+        map_gs_to_https, remove_duplicate_vertices, \
+        progress, chunk_size = args
 
     cv = cloudvolume.CloudVolume(
         cv_path, use_https=map_gs_to_https,
@@ -302,7 +304,8 @@ def _download_meshes_thread_precomputed(args):
         cv_meshes = cv.mesh.get(
             download_now, 
             remove_duplicate_vertices=remove_duplicate_vertices, 
-            fuse=False
+            fuse=False,
+            chunk_size=chunk_size
         )
 
         for segid, cv_mesh in cv_meshes.items():
@@ -330,6 +333,7 @@ def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
                     merge_large_components=False, 
                     remove_duplicate_vertices=False,
                     map_gs_to_https=True, fmt="hdf5",
+                    chunk_size=None,
                     progress=False):
     """ Downloads meshes in target directory (in parallel)
     will break up the seg_ids into n_threads*3 job blocks or fewer and download them all
@@ -357,6 +361,8 @@ def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
     map_gs_to_https: bool
         whether to trigger cloudvolume.CloudVolume use_https option. Probably should be true unless you have
         a private bucket and have ~/.cloudvolume/secrets setup properly (default True)
+    chunk_size: np.array
+        chunk size in nm to use in deduplification (default None)
     fmt: str
         'hdf5', 'obj', 'stl' or any format supported by :func:`meshparty.trimesh_io.Mesh.write_to_file` (default 'hdf5')
     progress: bool
@@ -382,7 +388,7 @@ def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
     for seg_id_block in seg_id_blocks:
         multi_args.append([seg_id_block, cv_path, target_dir, fmt,
                            overwrite, merge_large_components, stitch_mesh_chunks,
-                            map_gs_to_https, remove_duplicate_vertices, progress])
+                            map_gs_to_https, remove_duplicate_vertices, progress, chunk_size])
 
     if n_jobs == 1:
         mu.multiprocess_func(_download_meshes_thread,
@@ -467,6 +473,7 @@ class MeshMeta(object):
              stitch_mesh_chunks=True,
              overwrite_merge_large_components=False,
              remove_duplicate_vertices=False,
+             chunk_size=None,
              force_download=False):
         """ Loads mesh either from cache, disk or google storage
 
@@ -533,11 +540,14 @@ class MeshMeta(object):
                     mesh = self.mesh(filename=self._filename(seg_id),
                                      cache_mesh=cache_mesh,
                                      merge_large_components=merge_large_components,
-                                     overwrite_merge_large_components=overwrite_merge_large_components)
+                                     overwrite_merge_large_components=overwrite_merge_large_components,
+                                     chunk_size=chunk_size)
                     return mesh
             assert (seg_id is not None and self.cv is not None)
             if seg_id not in self._mesh_cache or force_download is True:
-                cv_mesh_d = self.cv.mesh.get(seg_id,  remove_duplicate_vertices=remove_duplicate_vertices)
+                cv_mesh_d = self.cv.mesh.get(seg_id,
+                    remove_duplicate_vertices=remove_duplicate_vertices,
+                    chunk_size=chunk_size)
                 if type(cv_mesh_d)==dict:
                     cv_mesh = cv_mesh_d[seg_id]
                 else:
