@@ -185,6 +185,11 @@ def full_cell_mesh_id(cv, cv_folder, full_cell_mesh):
     write_mesh_to_cv(cv, cv_folder, full_cell_mesh, mesh_id)
     yield mesh_id
 
+def test_get_mesh(cv_path, basic_mesh_id, tmpdir):
+    mm = trimesh_io.MeshMeta(cv_path = cv_path, disk_cache_path=tmpdir)
+    basic_mesh = mm.mesh(seg_id = basic_mesh_id)
+    assert(basic_mesh.n_vertices == 5)
+
 def test_download_meshes(cv_path, basic_mesh_id, full_cell_mesh_id, tmpdir):
     meshes=trimesh_io.download_meshes([basic_mesh_id, full_cell_mesh_id],
                                       tmpdir,

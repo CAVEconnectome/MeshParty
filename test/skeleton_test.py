@@ -82,7 +82,7 @@ def test_branch_and_endpoints(full_cell_skeleton):
     assert sk.n_branch_points == 66
 
     path = sk.path_to_root(sk.end_points[1])
-    assert np.isclose(sk.path_length([path]), 156869.06, atol=0.01)
+    assert np.isclose(sk.path_length(path), 156245.865, atol=0.01)
 
 def test_cover_paths(full_cell_skeleton):
     sk = full_cell_skeleton

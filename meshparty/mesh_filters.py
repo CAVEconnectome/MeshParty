@@ -8,12 +8,23 @@ def filter_close_to_line(mesh, line_end_pts, line_dist_th, axis=1, endcap_buffer
     a plane defined by a normal axis (e.g. the y axis defines distances in the
     xy plane)
 
-    :param mesh: Trimesh-like mesh with N vertices
-    :param line_end_pts: 2x3 numpy array defining the two end points
-    :param line_dist_th: numeric, distance threshold
-    :param axis: integer 0-2. Defines which axis is normal to the plane in
-                 which distances is computed. optional, default 1 (y-axis).
-    :returns:  N-length boolean array
+    Parameters
+    ----------
+    mesh : meshparty.trimesh_io.Mesh
+        Trimesh-like mesh with N vertices
+    line_end_pts: numpy.array
+        2x3 numpy array defining the two end points
+    line_dist_th: numeric
+        numeric, distance threshold
+    axis: int
+        integer 0-2. Defines which axis is normal to the plane in
+        which distances is computed. optional, default 1 (y-axis).
+    
+    Returns
+    -------
+    numpy.array
+        N-length boolean array
+
     '''
     line_pt_ord = np.argsort(line_end_pts[:,axis])
     ds = _dist_from_line( mesh.vertices, line_end_pts, axis)
@@ -38,12 +49,43 @@ def _dist_from_line(pts, line_end_pts, axis):
 
 
 def filter_components_by_size(mesh, min_size=0, max_size=np.inf):
+    """
+    returns a boolean mask for vertices that are part of components in a size range
+
+    Parameters
+    ----------
+    mesh : meshparty.trimesh_io.Mesh
+        A Trimesh-like mesh with N vertices
+    min_size : int
+        the minimum number of vertices in compoment (default 0)
+    max_size : int
+        the maximum number of vertices in compoment (default infinity)
+
+    Returns
+    -------
+    np.array
+        N-length boolean array
+
+    """
     cc, labels = sparse.csgraph.connected_components(mesh.csgraph, directed=False)
     uids, counts = np.unique(labels, return_counts=True)
     good_labels = uids[(counts>min_size)&(counts<=max_size)]
     return np.in1d(labels, good_labels)
 
 def filter_largest_component(mesh):
+    """ returns a boolean mask for vertices that are part of the largest component
+
+    Parameters
+    ----------
+    mesh : meshparty.trimesh_io.Mesh
+        A Trimesh-like mesh with N vertices
+
+    Returns
+    -------
+    np.array
+        N-length boolean array
+
+    """
     cc, labels = sparse.csgraph.connected_components(mesh.csgraph)
     uids, counts = np.unique(labels, return_counts=True)
     max_label = np.argmax(counts)
@@ -51,6 +93,30 @@ def filter_largest_component(mesh):
 
 
 def filter_spatial_distance_from_points(mesh, pts, d_max):
+    """
+    returns a boolean mask for vertices near a set of points
+
+    Parameters
+    ----------
+    mesh : meshparty.trimesh_io.Mesh
+        A Trimesh-like mesh with N vertices
+    pts : numpy.array
+        a Kx3 set of points
+    d_max : float
+        the maximum distance to points to include (same units as mesh.vertices)
+
+    Returns
+    -------
+    np.array
+        N-length boolean array
+
+    """
+    if type(pts)==list:
+        pts=np.array(pts)
+    if len(pts.shape)==1:
+        assert(len(pts)==3)
+        ds = np.linalg.norm(mesh.vertices-pts[np.newaxis,:], axis=1)
+        return ds<d_max
     close_enough = np.full((len(mesh.vertices), len(pts)), False)
     for ii, pt in enumerate(pts):
         ds = np.linalg.norm(mesh.vertices-pt, axis=1)
@@ -65,10 +131,26 @@ def filter_two_point_distance(mesh, pts_foci, d_pad, indices=None, power=1):
     the distance between the two foci plus a user-specified padding. Optionally, use
     other Minkowski-like metrics (i.e. x^n + y^n < d^n where x and y are the distances
     to the foci.)
-    :param mesh: Trimesh-like mesh with N vertices
-    :param pts_foci: 2x3 np array with the two foci in 3d space.
-    :param d_pad: Extra padding of the threhold distance beyond the distance between foci.
-    :returns: N-length boolean array
+
+    Parameters
+    ----------
+    mesh : meshparty.trimesh_io.Mesh
+        A Trimesh-like mesh with N vertices
+    pts_foci: numpy.array
+        2x3 array with the two foci in 3d space.
+    d_pad: float
+        Extra padding of the threhold distance beyond the distance between foci.
+    indices : iterator
+        Instead of pts_foci, one can specify a len(2) list of two indices into the mesh.vertices 
+        default None. Will override pts_foci.
+    power : int
+        what power to use in Minkowski-like metrics for distance metric.
+
+    Returns
+    -------
+    np.array
+        N-length boolean array
+
     '''
     if indices is None:
         _, minds_foci = mesh.kdtree.query(pts_foci)

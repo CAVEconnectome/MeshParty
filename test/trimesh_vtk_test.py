@@ -5,10 +5,13 @@ import pytest
 import os
 import imageio
 import json 
+import matplotlib.cm as cm
 
-def compare_img_to_test_file(fname, back_val = 255, close=15):
+def compare_img_to_test_file(fname, back_val = 255, close=15, pre_path=None):
     img_test = imageio.imread(fname)
-    tmpl_path = os.path.join('test/test_files/', os.path.split(fname)[1])
+    if pre_path is None:
+        pre_path = 'test/test_files/'
+    tmpl_path = os.path.join(pre_path, os.path.split(fname)[1])
     img_tmpl = imageio.imread(tmpl_path)
     assert(img_test.shape == img_tmpl.shape)
 
@@ -37,6 +40,28 @@ def eval_actor_image(actors, fname, tmp_path, camera=None, scale=2, make_image=F
         return True
     else:
         return compare_img_to_test_file(filepath)    
+
+def eval_actor_360(actors, dir_name, tmp_path, camera=None, scale=2, nframes=30, make_image=False):
+
+    if make_image:
+        fpath = os.path.dirname(os.path.abspath(__file__))
+    else:
+        fpath = os.path.join(tmp_path, dir_name)
+
+    trimesh_vtk.render_actors_360(actors, fpath,
+                                  nframes=nframes,
+                                  do_save =True,
+                                  camera_start=camera,
+                                  scale=scale,
+                                  back_color=(1,1,1))
+    if make_image:
+        return True
+    else:
+        is_good=np.zeros(nframes, np.bool)
+        for i in range(nframes):
+            img_file = os.path.join(fpath, f'%04d.png'%i)
+            is_good[i]=compare_img_to_test_file(img_file, pre_path='test/test_files/full_cell_movie')    
+        return np.all(is_good)
 
 @contextlib.contextmanager
 def build_basic_mesh():
@@ -124,6 +149,15 @@ def test_full_cell_camera(full_cell_mesh, full_cell_soma_pt, tmp_path):
     mesh_actor = trimesh_vtk.mesh_actor(full_cell_mesh)
     camera = trimesh_vtk.oriented_camera(full_cell_soma_pt, backoff=100)
     eval_actor_image([mesh_actor], 'full_cell_orient_camera.png', tmp_path, camera=camera, scale=1)
+    scale_bar_actor = trimesh_vtk.scale_bar_actor(full_cell_soma_pt-[15000,0,0], camera)
+    eval_actor_image([mesh_actor, scale_bar_actor], 'full_cell_scale_bar.png', tmp_path, camera=camera, scale=1)
+
+
+def test_full_cell_movie(full_cell_mesh, full_cell_soma_pt, tmp_path):
+    mesh_actor = trimesh_vtk.mesh_actor(full_cell_mesh)
+    camera = trimesh_vtk.oriented_camera(full_cell_soma_pt, backoff=100)
+    eval_actor_360([mesh_actor], 'full_cell_movie', tmp_path, camera=camera, scale=1)
+
 
 def test_vtk_errors():
     verts = np.random.rand(10,3)
@@ -172,6 +206,16 @@ def test_full_cell_with_links(full_cell_mesh, full_cell_merge_log, tmp_path, mon
     eval_actor_image([mesh_actor], 'full_cell_show_links.png', tmp_path, camera=camera)
               
 
+def test_vertex_colors(full_cell_mesh, tmp_path):
+    d = np.linalg.norm(full_cell_mesh.vertices - full_cell_mesh.centroid, axis=1)
+    cmap = np.array(cm.viridis.colors)
+    vclrs = trimesh_vtk.values_to_colors(d, cmap, 0, 80000)
+    clr_mesh_actor = trimesh_vtk.mesh_actor(full_cell_mesh, vertex_colors=vclrs, opacity=1.0)
+    eval_actor_image([clr_mesh_actor], 'full_cell_colors.png', tmp_path)
+
+    vclrs = trimesh_vtk.values_to_colors(d, cmap)
+    clr_mesh_actor = trimesh_vtk.mesh_actor(full_cell_mesh, vertex_colors=vclrs, opacity=1.0)
+    eval_actor_image([clr_mesh_actor], 'full_cell_auto_colors.png', tmp_path)
 
 
 def test_ngl_state(full_cell_mesh, tmp_path):
@@ -240,3 +284,5 @@ def test_point_cloud(full_cell_mesh, full_cell_synapses, full_cell_soma_pt, tmp_
         syn_actor = trimesh_vtk.point_cloud_actor(full_cell_synapses['positions'],
                                                   size=300,
                                                   color=np.random.rand(len(x),2))
+
+    

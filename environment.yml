@@ -1,0 +1,13 @@
+name: meshparty
+channels:
+  - anaconda
+  - conda-forge
+dependencies:
+  - pyembree
+  - pykdtree
+  - gevent
+  - scikit-build
+  - pip:
+    - dracopy
+    - python-dateutil==2.8.0
+    - sphinxcontrib.yt

@@ -4,7 +4,6 @@ import time
 from meshparty import trimesh_vtk, utils, mesh_filters
 import pandas as pd
 from pykdtree.kdtree import KDTree
-import pcst_fast
 from tqdm import trange, tqdm
 from meshparty.trimesh_io import Mesh
 from meshparty.skeleton import Skeleton
@@ -12,7 +11,7 @@ from collections import defaultdict
 from pykdtree.kdtree import KDTree as pyKDTree
 import trimesh.ray
 from trimesh.ray import ray_pyembree
-
+import logging
 
 def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True,
                      invalidation_d=12000, smooth_vertices=False, compute_radius=True,
@@ -54,7 +53,8 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True,
         whether to print verbose logging
 
     Returns
-        meshparty.skeleton.Skeleton
+    -------
+    :obj:`meshparty.skeleton.Skeleton`
            a Skeleton object for this mesh
     '''
     skel_verts, skel_edges, smooth_verts, orig_skel_index, skel_map = calculate_skeleton_paths_on_mesh(mesh,
@@ -105,7 +105,10 @@ def calculate_skeleton_paths_on_mesh(mesh, soma_pt=None, soma_thresh=7500,
                                      invalidation_d=10000, smooth_neighborhood=5,
                                      large_skel_path_threshold=5000,
                                      cc_vertex_thresh=100,  return_map=False):
-    """ function to turn a trimesh object of a neuron into a skeleton
+    """ function to turn a trimesh object of a neuron into a skeleton, without running soma collapse,
+    or recasting result into a Skeleton.  Used by :func:`meshparty.skeletonize.skeletonize_mesh` and
+    makes use of :func:`meshparty.skeletonize.skeletonize_components`
+    
     Parameters
     ----------
     mesh: meshparty.trimesh_io.Mesh
@@ -144,6 +147,7 @@ def calculate_skeleton_paths_on_mesh(mesh, soma_pt=None, soma_thresh=7500,
         based upon how it was invalidated.
 
     Returns
+    -------
         skel_verts: np.array
             a Nx3 matrix of skeleton vertex positions
         skel_edges: np.array
@@ -154,6 +158,7 @@ def calculate_skeleton_paths_on_mesh(mesh, soma_pt=None, soma_thresh=7500,
             a N long index of skeleton vertices in the original mesh vertex index
         (mesh_to_skeleton_map): np.array
             a Mx2 map of mesh vertex indices to skeleton vertex indices
+            
     """
 
     skeletonize_output = skeletonize_components(mesh,
@@ -190,14 +195,23 @@ def calculate_skeleton_paths_on_mesh(mesh, soma_pt=None, soma_thresh=7500,
 def reduce_verts(verts, faces):
     """removes unused vertices from a graph or mesh
 
-    verts = NxD numpy array of vertex locations
-    faces = MxK numpy array of connected shapes (i.e. edges or tris)
-    (entries are indices into verts)
+    Parameters
+    ----------
+    verts : numpy.array
+        NxD numpy array of vertex locations
+    faces : numpy.array
+        MxK numpy array of connected shapes (i.e. edges or tris)
+        (entries are indices into verts)
 
-    returns: 
-    new_verts, new_face, used_verts
-    a filtered set of vertices and reindexed set of faces
-    along with the index of the new_verts in the old verst
+    Returns
+    ------- 
+    np.array
+        new_verts, a filtered set of vertices 
+    np.array
+        new_face, a reindexed set of faces (or edges)
+    np.array
+        used_verts, the index of the new_verts in the old verts
+ 
     """
     used_verts = np.unique(faces.ravel())
     new_verts = verts[used_verts, :]
@@ -212,6 +226,8 @@ def skeletonize_components(mesh,
                            invalidation_d=10000,
                            cc_vertex_thresh=100,
                            return_map=False):
+    """ core skeletonization routine, used by :func:`meshparty.skeletonize.calculate_skeleton_paths_on_mesh`
+    to calculcate skeleton on all components of mesh, with no post processing """
     # find all the connected components in the mesh
     n_components, labels = sparse.csgraph.connected_components(mesh.csgraph,
                                                                directed=False,
@@ -272,6 +288,7 @@ def skeletonize_components(mesh,
 
 
 def setup_root(mesh, is_soma_pt=None, soma_d=None, is_valid=None):
+    """ function to find the root index to use for this mesh """
     if is_valid is not None:
         valid = np.copy(is_valid)
     else:
@@ -310,6 +327,7 @@ def setup_root(mesh, is_soma_pt=None, soma_d=None, is_valid=None):
 
 def mesh_teasar(mesh, root=None, valid=None, root_ds=None, root_pred=None, soma_pt=None,
                 soma_thresh=7500, invalidation_d=10000, return_timing=False, return_map=False):
+    """core skeletonization function used to skeletonize a single component of a mesh"""
     # if no root passed, then calculation one
     if root is None:
         root, root_ds, root_pred, valid = setup_root(mesh,
@@ -450,28 +468,40 @@ def mesh_teasar(mesh, root=None, valid=None, root_ds=None, root_pred=None, soma_
     return out_tuple
 
 
-def smooth_graph(verts, edges, mask=None, neighborhood=2, iterations=100, r=.1):
+def smooth_graph(values, edges, mask=None, neighborhood=2, iterations=100, r=.1):
     """ smooths a spatial graph via iterative local averaging
-        calculates the average position of neighboring vertices
-        and relaxes the vertices toward that average
+        calculates the average value of neighboring values
+        and relaxes the values toward that average
 
-        :param verts: a NxK numpy array of vertex positions
-        :param edges: a Mx2 numpy array of vertex indices that are edges
-        :param mask: optional N boolean vector of values to mask
-        the vert locations.  the result will return a result at every vert
-        but the values that are false in this mask will be ignored and not
-        factored into the smoothing.
-        :param neighborhood: an integer of how far in the graph to relax over
-        as being local to any vertex (default = 2)
-        :param iterations: number of relaxation iterations (default = 100)
-        :param r: relaxation factor at each iteration
-        new_vertex = (1-r)*old_vertex*mask + (r+(1-r)*(1-mask))*(local_avg)
+        Parameters
+        ----------
+        values : numpy.array
+            a NxK numpy array of values, for example xyz positions
+        edges : numpy.array
+            a Mx2 numpy array of indices into values that are edges
+        mask : numpy.array
+            NOT yet implemented
+            optional N boolean vector of values to mask
+            the vert locations.  the result will return a result at every vert
+            but the values that are false in this mask will be ignored and not
+            factored into the smoothing.
+        neighborhood : int
+            an integer of how far in the graph to relax over
+            as being local to any vertex (default = 2)
+        iterations : int
+            number of relaxation iterations (default = 100)
+        r : float
+            relaxation factor at each iteration
+            new_vertex = (1-r)*old_vertex*mask + (r+(1-r)*(1-mask))*(local_avg)
+            default = .1
 
-        :return: new_verts
-        verts is a Nx3 list of new smoothed vertex positions
+        Returns
+        -------
+        np.array
+            new_verts, a Nx3 list of new smoothed vertex positions
 
     """
-    N = len(verts)
+    N = len(values)
     E = len(edges)
 
     # setup a sparse matrix with the edges
@@ -511,16 +541,57 @@ def smooth_graph(verts, edges, mask=None, neighborhood=2, iterations=100, r=.1):
     A = C + (1-r)*eye
 
     # make a copy of original vertices to no destroy inpuyt
-    new_verts = np.copy(verts)
+    new_values = np.copy(values)
 
     # iteratively relax the vertices
     for i in range(iterations):
-        new_verts = A*new_verts
-    return new_verts
+        new_values = A*new_values
+    return new_values
 
 
 def collapse_soma_skeleton(soma_pt, verts, edges, soma_d_thresh=12000, mesh_to_skeleton_map=None,
                            soma_mesh_indices=None, return_filter=False, only_soma_component=True, return_soma_ind=False):
+    """function to adjust skeleton result to move root to soma_pt 
+
+    Parameters
+    ----------
+    soma_pt : numpy.array
+        a 3 long vector of xyz locations of the soma (None to just remove duplicate )
+    verts : numpy.array
+        a Nx3 array of xyz vertex locations
+    edges : numpy.array
+        a Kx2 array of edges of the skeleton
+    soma_d_thresh : float
+        distance from soma_pt to collapse skeleton nodes
+    mesh_to_skeleton_map : np.array
+        a M long array of how each mesh index maps to a skeleton vertex
+        (default None).  The function will update this as it collapses vertices to root.
+    soma_mesh_indices : np.array
+         a K long array of indices in the mesh that should be considered soma
+         Any  skeleton vertex on these vertices will all be collapsed to root.
+    return_filter : bool
+        whether to return a list of which skeleton vertices were used in the end
+        for the reduced set of skeleton vertices
+    only_soma_component : bool
+        whether to collapse only the skeleton connected component which is closest to the soma_pt
+        (default True)
+    return_soma_ind : bool
+        whether to return which skeleton index that is the soma_pt
+
+    Returns
+    -------
+    np.array
+        verts, Px3 array of xyz skeleton vertices
+    np.array
+        edges, Qx2 array of skeleton edges
+    (np.array)
+        new_mesh_to_skeleton_map, returned if mesh_to_skeleton_map and soma_pt passed 
+    (np.array)
+        used_vertices, if return_filter this contains the indices into the passed verts which the return verts is using
+    int
+        an index into the returned verts that is the root of the skeleton node, only returned if return_soma_ind is True
+        
+    """
     if soma_pt is not None:
         if only_soma_component:
             closest_soma_ind = np.argmin(np.linalg.norm(verts-soma_pt, axis=1))
@@ -569,6 +640,28 @@ def collapse_soma_skeleton(soma_pt, verts, edges, soma_d_thresh=12000, mesh_to_s
 def ray_trace_distance(vertex_inds, mesh, max_iter=10, rand_jitter=0.001, verbose=False, ray_inter=None):
     '''
     Compute distance to opposite side of the mesh for specified vertex indices on the mesh.
+
+    Parameters
+    ----------
+    vertex_inds : np.array
+        a K long set of indices into the mesh.vertices that you want to perform ray tracing on
+    mesh : :obj:`meshparty.trimesh_io.Mesh`
+        mesh to perform ray tracing on
+    max_iter : int
+        maximum retries to attempt in order to get a proper sdf measure (default 10)
+    rand_jitter : float
+        the amplitude of gaussian jitter on the vertex normal to add on each iteration (default .001)
+    verbose : bool
+        whether to print debug statements (default False)
+    ray_inter: ray_pyembree.RayMeshIntersector
+        a ray intercept object pre-initialized with a mesh, in case y ou are doing this many times
+        and want to avoid paying initialization costs. (default None) will initialize it for you
+
+    Returns
+    -------
+    np.array
+        rs, a K long array of sdf values. rays with no result after max_iters will contain zeros.
+
     '''
     if not trimesh.ray.has_embree:
         logging.warning("calculating rays without pyembree, conda install pyembree for large speedup")

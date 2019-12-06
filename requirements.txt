@@ -5,12 +5,11 @@ scipy>=1.3.0
 sklearn
 networkx
 multiwrapper
-cloud-volume>=0.53.6
+cloud-volume==0.65.4
 trimesh>=3.0.14
 pymeshfix>=0.12.3
 pykdtree
 vtk
-pcst_fast
 shapely
 imageio
 pandas
