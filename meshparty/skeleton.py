@@ -1,6 +1,6 @@
 import numpy as np
 from meshparty import utils
-from scipy import spatial, sparse
+from scipy import spatial, sparse, interpolate
 from pykdtree.kdtree import KDTree as pyKDTree
 from copy import copy
 import json
@@ -194,11 +194,60 @@ class Skeleton:
 
     @property
     def distance_to_root(self):
-        """ np.array : N length array with the distance to the root node along the skeleton. 
+        """an an array of distances to root for each skeleton vertex
+        
+        Returns
+        -------
+        np.array
+            N length array with the distance to the root node along the skeleton. 
         """
         ds = sparse.csgraph.dijkstra(self.csgraph, directed=False,
                                      indices=self.root)
         return ds
+    
+    def resample(self, spacing, kind='nearest'):
+        """ resample the skeleton to a new spacig
+        
+        Parameters
+        ----------
+        spacing : [float]
+            desired edge spacing in units of vertices
+        """
+        cpaths= self.cover_paths()
+        d_to_root = self.distance_to_root
+        path_counter=1
+        branch_d = {self.root: 0}
+        vert_list= [np.array([self.vertices[self.root,:]])]
+        edge_list = []
+        for path in cpaths:
+            cpath = path[:-1]
+            input_d = d_to_root[cpath]
+            des_d = np.arange(0,np.max(input_d), spacing)
+            fi = interpolate.interp1d(input_d, self.vertices[cpath,:], kind=kind)
+            new_verts = fi(des_d)
+
+            # find the index of the old branch points in the new path
+            is_branch = np.isin(np.array(cpath), self.branch_points)
+            path_branch = cpath[is_branch]
+            path_branch_verts = self.vertices[path_branch, :]
+            tree = pyKDTree(new_verts)
+            new_branch_on_path = tree.query(path_branch_verts)
+            new_branch_on_path+=path_counter
+
+            new_edges = np.vstack([np.arange(0, len(new_verts)-1), np.arange(1, len(new_verts))]).T + path_counter
+            new_branch_d = {pb: nw for pb, nw in zip(path_branch, new_branch_on_path)}
+            branch_d.update(new_branch_d)
+            end_node_new = branch_d[path[-1]]
+            new_edges = np.vstack([new_edges, [len(new_verts), end_node_new]])
+            edge_list.append(new_edges)
+            vert_list.append(new_verts)
+            path_counter += len(new_verts)
+
+        new_verts = np.vstack(vert_list)
+        new_edges = np.vstack(edge_list)
+
+        return Skeleton(new_verts, new_edges,
+                        root=0)
 
     def path_to_root(self, v_ind):
         '''
