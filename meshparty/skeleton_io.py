@@ -209,9 +209,8 @@ def _build_swc_array(skel, node_labels, radius, xyz_scaling):
     '''
     Helper function for producing the numpy table for an swc.
     '''
-    ds = skel.distance_to_root
-    order_old = np.argsort(ds)
-    new_ids = np.arange(len(ds))
+    order_old = np.concatenate([p[::-1] for p in skeleton.cover_paths]) 
+    new_ids = np.arange(skel.n_vertices)
     order_map = dict(zip(order_old, new_ids))
 
     node_labels = np.array(node_labels)[order_old]
