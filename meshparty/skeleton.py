@@ -232,9 +232,13 @@ class Skeleton:
         
         for path in cpaths:
             if ~np.isinf(d_to_root[path[-1]]):
+                # use the distance from root to parameterize the path
                 input_d = d_to_root[path]
+                # the desired distances from root are evenly spaced according to spacing
                 des_d = np.arange(np.min(input_d),np.max(input_d), spacing)
+                # setup an interpolation function based upon distance to root as input and xyz as output
                 fi = interpolate.interp1d(input_d, self.vertices[path,:], kind=kind, axis=0)
+                # use the function to interpolate the new values
                 new_verts = fi(des_d)
         
                 # find the index of the old branch points in the new path
@@ -242,28 +246,41 @@ class Skeleton:
                 path_branch = path[is_branch]
                 path_branch_verts = self.vertices[path_branch, :]
                 tree = pyKDTree(new_verts)
-    
                 map_ds, new_branch_on_path = tree.query(path_branch_verts)
-                map_ds, path_map = tree.query(self.vertices[path,:])
-                resample_map[path]=path_map+path_counter
                 new_branch_on_path+=path_counter
-
-                new_edges = np.vstack([ np.arange(len(new_verts)-1,0,-1), np.arange(len(new_verts)-2,-1,-1)]).T + path_counter
+                # create a temporary dictionary with this path's branch  points
                 new_branch_d = {pb: nw for pb, nw in zip(path_branch, new_branch_on_path)}
+                # update the overall mapping dictionary
                 branch_d.update(new_branch_d)
+
+                # map the entire path to the new vertices by euc distance
+                map_ds, path_map = tree.query(self.vertices[path,:])
+                # update the mapping
+                resample_map[path]=path_map+path_counter
+                
+                # new edges just march down path from last vertex to first
+                new_edges = np.vstack([ np.arange(len(new_verts)-1,0,-1), np.arange(len(new_verts)-2,-1,-1)]).T + path_counter
+                # need to construct the last edge since it wasn't in the original
+                # find that last edge whose start point was the first vertex in the path
                 last_edge=self.edges[self.edges[:,0]==path[-1],:]
+                # for the first path there won't be an edge as the first vertex is root
                 if len(last_edge)==1:
-                   new_edges = np.vstack([new_edges, [path_counter, branch_d[last_edge[0,1]] ]])
+                    # if we do have one, then we want to add an edge that is the from the first vertex
+                    # in the path, to the new vertex (mapped through branch_d) of the edge we found
+                    # in the original edge list
+                    new_edges = np.vstack([new_edges, [path_counter, branch_d[last_edge[0,1]] ]])
+                # collect the edges and vertices in a list
                 edge_list.append(new_edges)
                 vert_list.append(new_verts)
-              
+                # increment the counter to keep track of how many  vertices we have
                 path_counter += len(new_verts)
            
-
+        # concatenate the results together
         new_verts = np.vstack(vert_list)
         new_edges = np.vstack(edge_list)
    
-   
+        # create a new skeleton
+        # TODO add options to update mesh mapping and vertex properties
         return Skeleton(new_verts, new_edges,
                         root=branch_d[self.root]), resample_map
 
