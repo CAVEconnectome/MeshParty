@@ -206,48 +206,66 @@ class Skeleton:
         return ds
     
     def resample(self, spacing, kind='nearest'):
-        """ resample the skeleton to a new spacig
+        """ resample the skeleton to a new spacing and filter it to only include components connected to root
         
         Parameters
         ----------
         spacing : [float]
             desired edge spacing in units of vertices
+
+        Returns
+        -------
+        skeleton.Skeleton
+            a resampled skeleton, which has the parts which are not connected to root removed
+        resample_map:
+            a N long array with as many entries as vertices in the  original skeleton.
+            the entry reflects which new skeleton vertex that vertex should be mapped to
         """
-        cpaths= self.cover_paths()
+        cpaths= self.cover_paths
         d_to_root = self.distance_to_root
-        path_counter=1
-        branch_d = {self.root: 0}
-        vert_list= [np.array([self.vertices[self.root,:]])]
+        path_counter=0
+        branch_d = {}
+        vert_list= []
         edge_list = []
+    
+        resample_map = -np.ones(len(self.vertices), dtype=np.int32)
+        
         for path in cpaths:
-            cpath = path[:-1]
-            input_d = d_to_root[cpath]
-            des_d = np.arange(0,np.max(input_d), spacing)
-            fi = interpolate.interp1d(input_d, self.vertices[cpath,:], kind=kind)
-            new_verts = fi(des_d)
+            if ~np.isinf(d_to_root[path[-1]]):
+                input_d = d_to_root[path]
+                des_d = np.arange(np.min(input_d),np.max(input_d), spacing)
+                fi = interpolate.interp1d(input_d, self.vertices[path,:], kind=kind, axis=0)
+                new_verts = fi(des_d)
+        
+                # find the index of the old branch points in the new path
+                is_branch = np.isin(np.array(path), self.branch_points)
+                path_branch = path[is_branch]
+                path_branch_verts = self.vertices[path_branch, :]
+                tree = pyKDTree(new_verts)
+    
+                map_ds, new_branch_on_path = tree.query(path_branch_verts)
+                map_ds, path_map = tree.query(self.vertices[path,:])
+                resample_map[path]=path_map+path_counter
+                new_branch_on_path+=path_counter
 
-            # find the index of the old branch points in the new path
-            is_branch = np.isin(np.array(cpath), self.branch_points)
-            path_branch = cpath[is_branch]
-            path_branch_verts = self.vertices[path_branch, :]
-            tree = pyKDTree(new_verts)
-            new_branch_on_path = tree.query(path_branch_verts)
-            new_branch_on_path+=path_counter
-
-            new_edges = np.vstack([np.arange(0, len(new_verts)-1), np.arange(1, len(new_verts))]).T + path_counter
-            new_branch_d = {pb: nw for pb, nw in zip(path_branch, new_branch_on_path)}
-            branch_d.update(new_branch_d)
-            end_node_new = branch_d[path[-1]]
-            new_edges = np.vstack([new_edges, [len(new_verts), end_node_new]])
-            edge_list.append(new_edges)
-            vert_list.append(new_verts)
-            path_counter += len(new_verts)
+                new_edges = np.vstack([ np.arange(len(new_verts)-1,0,-1), np.arange(len(new_verts)-2,-1,-1)]).T + path_counter
+                new_branch_d = {pb: nw for pb, nw in zip(path_branch, new_branch_on_path)}
+                branch_d.update(new_branch_d)
+                last_edge=self.edges[self.edges[:,0]==path[-1],:]
+                if len(last_edge)==1:
+                   new_edges = np.vstack([new_edges, [path_counter, branch_d[last_edge[0,1]] ]])
+                edge_list.append(new_edges)
+                vert_list.append(new_verts)
+              
+                path_counter += len(new_verts)
+           
 
         new_verts = np.vstack(vert_list)
         new_edges = np.vstack(edge_list)
-
+   
+   
         return Skeleton(new_verts, new_edges,
-                        root=0)
+                        root=branch_d[self.root]), resample_map
 
     def path_to_root(self, v_ind):
         '''
