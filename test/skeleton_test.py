@@ -110,3 +110,9 @@ def test_downstream_nodes(full_cell_skeleton):
     sk = full_cell_skeleton
     assert len(sk.downstream_nodes(sk.root)) == sk.n_vertices
     assert len(sk.downstream_nodes(300)) == 135
+
+def test_resample(full_cell_skeleton):
+    sk = full_cell_skeleton
+    skn, resamp_map = sk.resample(1000)
+    assert(skn.n_vertices==4476)
+    assert(len(resamp_map)==sk.n_vertices)
