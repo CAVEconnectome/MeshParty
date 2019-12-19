@@ -48,7 +48,7 @@ def _rotated_cone(data):
 def oriented_vector_cones(center_vectors, num_points, widest_angle=np.pi/3, normalize=False):
     'Produces cones oriented along a list of center directions' 
     if normalize:
-        cv_norm = center_vectors / np.linalg.norm(center_vector, axis=1)[:, np.newaxis]
+        cv_norm = center_vectors / np.linalg.norm(center_vectors, axis=1)[:, np.newaxis]
     else:
         cv_norm = center_vectors
         
