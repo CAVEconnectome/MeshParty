@@ -28,7 +28,7 @@ class Skeleton:
     """
 
     def __init__(self, vertices, edges, mesh_to_skel_map=None, vertex_properties={},
-                 root=None):
+                 root=None, voxel_scaling=None):
 
         self._vertices = np.array(vertices)
         self._edges = np.vstack(edges).astype(int)
@@ -48,6 +48,9 @@ class Skeleton:
         self._csgraph_binary = None
         self._branch_points = None
         self._end_points = None
+
+        self._voxel_scaling = None
+        self.voxel_scaling = voxel_scaling
 
         self._reset_derived_objects()
         if root is None:
@@ -177,6 +180,33 @@ class Skeleton:
         if self._end_points is None:
             self._create_branch_and_end_points()
         return len(self._end_points)
+
+    @property
+    def voxel_scaling(self):
+        return self._voxel_scaling
+
+    @voxel_scaling.setter
+    def voxel_scaling(self, new_scaling):
+        self._update_voxel_scaling(new_scaling)
+    
+    @property
+    def inverse_voxel_scaling(self):
+        if self.voxel_scaling is None:
+            return None
+        else:
+            return 1/self.voxel_scaling
+
+    def _update_voxel_scaling(self, new_scaling):
+        if self.voxel_scaling is not None:
+            self._vertices = self._vertices * self.inverse_voxel_scaling
+        
+        if new_scaling is not None:
+            self._voxel_scaling = np.array(new_scaling).reshape(3)
+            self._vertices = self._vertices * self._voxel_scaling
+        else:
+            self._voxel_scaling = None
+
+        self._reset_derived_objects()
 
     @property
     def cover_paths(self):
@@ -384,6 +414,7 @@ class Skeleton:
         self._segments = None
         self._segment_map = None
 
+
     def _create_csgraph(self,
                         directed=True,
                         euclidean_weight=True):
@@ -399,6 +430,12 @@ class Skeleton:
         n_children = np.sum(self.csgraph_binary > 0, axis=0).squeeze()
         self._branch_points = np.flatnonzero(n_children > 1)
         self._end_points = np.flatnonzero(n_children == 0)
+
+    @property
+    def end_points_flat(self):
+        """End points without skeleton orientation, including root and disconnected components.
+        """
+        return np.flatnonzero(np.sum(self.csgraph_binary_undirected, axis=0) == 1)
 
     def _single_path_length(self, path):
         """Compute the length of a single path
@@ -454,6 +491,22 @@ class Skeleton:
                 segment_map[segment] = seg_ind
                 seg_ind += 1
         return segments, segment_map.astype(int)
+
+    def write_to_h5(self, filename, overwrite=True):
+        """Write the skeleton to an HDF5 file. Note that this is done in the original dimensons, not the scaled dimensions.
+        
+        Parameters
+        ----------
+        filename : str 
+            Filename to save file
+        overwrite : bool, optional
+            Flag to specify whether to overwrite existing files, by default True
+        """
+        existing_voxel_scaling = self.voxel_scaling
+        self.voxel_scaling = None
+        skeleton_io.write_skeleton_h5(self, filename, overwrite=overwrite)
+        self.voxel_scaling = existing_voxel_scaling
+
 
     def export_to_swc(self, filename, node_labels=None, radius=None, header=None, xyz_scaling=1000):
         '''
