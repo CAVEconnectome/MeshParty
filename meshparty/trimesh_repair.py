@@ -9,7 +9,7 @@ import logging
 try:
     from annotationframeworkclient import chunkedgraph
 except ImportError:
-    logging.warning("Need to pip install annotationframework client to repair mesh with pychunkedgraph")
+    logging.warning("Need to pip install annotationframeworkclient to repair mesh with pychunkedgraph")
 
 
 def np_shared_rows(A,B):
