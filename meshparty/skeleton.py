@@ -25,6 +25,8 @@ class Skeleton:
         self._csgraph = None
         self._distance_to_root = None
 
+        self.vertex_properties = vertex_properties
+
         self._reset_derived_objects()
         if root is None:
             self._create_default_root()
@@ -82,6 +84,19 @@ class Skeleton:
         row_ind, col_ind, _ = sparse.find(self.csgraph_undirected)
         return sparse.csr_matrix((np.ones(self.csgraph_undirected.nnz, dtype=int), (row_ind, col_ind)), shape=self.csgraph.shape)
 
+    @property
+    def cover_paths(self):
+        """ list : List of numpy.array objects with self.n_end_points elements, each a rootward
+        path (ordered set of indices) starting from an endpoint and continuing until it reaches
+        a point on a path earlier on the list. Paths are ordered by end point distance from root, 
+        starting with the most distal. When traversed from begining to end, gives the longest rootward 
+        path down each major branch first. When traversed from end to begining, guarentees every 
+        branch point is visited at the end of all its downstream paths before being traversed along
+        a path.
+        """
+        if self._cover_paths is None:
+            self._cover_paths = self._compute_cover_paths()
+        return self._cover_paths
     
     @property
     def n_vertices(self):
@@ -289,7 +304,11 @@ class Skeleton:
         return cinds
 
     def _create_default_root(self):
-        r = utils.find_far_points_graph(self._create_csgraph(directed=False))
+        temp_graph = utils.create_csgraph(self.vertices,
+                                          self.edges,
+                                          euclidean_weight=True,
+                                          directed=False)
+        r = utils.find_far_points_graph(temp_graph)
         self.reroot(r[0])
 
     def parent_nodes(self, vinds):
@@ -358,6 +377,24 @@ class Skeleton:
         xs = self.vertices[path[:-1]]
         ys = self.vertices[path[1:]]
         return np.sum(np.linalg.norm(ys-xs, axis=1))
+
+    @property
+    def segments(self):
+        """ list : A list of numpy.array indicies of segments, paths from each branch or
+        end point (inclusive) to the next rootward branch/root point (exclusive), that
+        cover the skeleton"""
+        if self._segments is None:
+            self._segments, self._segment_map = self._compute_segments()
+        return self._segments
+
+    @property
+    def segment_map(self):
+        """ np.array : N set of of indices between 0 and len(self.segments)-1, denoting
+        which segment a given skeleton vertex is in.
+        """
+        if self._segment_map is None:
+            self._segments, self._segment_map = self._compute_segments()
+        return self._segment_map
 
     def _compute_cover_paths(self):
         '''Compute the list of cover paths along the skeleton
