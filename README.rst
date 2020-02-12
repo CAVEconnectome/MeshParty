@@ -43,7 +43,7 @@ Usage example
 
 ::
 
-    from mesh_party import trimesh_io
+    from meshparty import trimesh_io
 
     meshmeta = trimesh_io.MeshMeta()
     mesh = meshmeta.mesh(path_to_mesh) # mesh gets cached
