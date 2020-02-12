@@ -10,6 +10,7 @@ import time
 import re
 from collections import defaultdict
 import warnings
+import logging
 
 import cloudvolume
 from multiwrapper import multiprocessing_utils as mu
