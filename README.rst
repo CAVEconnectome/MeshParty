@@ -5,6 +5,8 @@
     :target: https://travis-ci.com/sdorkenw/MeshParty
 .. image:: https://codecov.io/gh/sdorkenw/MeshParty/branch/master/graph/badge.svg
    :target: https://codecov.io/gh/sdorkenw/MeshParty
+.. image:: https://zenodo.org/badge/148393516.svg
+   :target: https://zenodo.org/badge/latestdoi/148393516
    
 MeshParty
 #########
