@@ -1361,7 +1361,7 @@ class Mesh(trimesh.Trimesh):
         np.array
             the indices mapped back to the original mesh index space
         '''
-        return self.indices_unmasked[unmapped_indices]
+        return utils.map_indices_to_unmasked(self.indices_unmasked, unmapped_indices)
 
     def map_boolean_to_unmasked(self, unmapped_boolean):
         '''
@@ -1377,9 +1377,7 @@ class Mesh(trimesh.Trimesh):
         np.array
             a bool array in the original index space.  Is True if the unmapped_boolean suggests it should be.
         '''
-        full_boolean = np.full(self.unmasked_size, False)
-        full_boolean[self.node_mask] = unmapped_boolean
-        return full_boolean
+        return utils.map_boolean_to_unmasked(self.unmasked_size, self.node_mask, unmapped_boolean)
 
     def filter_unmasked_boolean(self, unmasked_boolean):
         '''
@@ -1395,7 +1393,7 @@ class Mesh(trimesh.Trimesh):
         np.array
             returns the elements of unmasked_boolean that are still relevant in the masked index space
         '''
-        return unmasked_boolean[self.node_mask]
+        return utils.filter_unmasked_boolean(self.node_mask, unmasked_boolean)
 
     def filter_unmasked_indices(self, unmasked_shape, mask=None):
         """
@@ -1414,14 +1412,9 @@ class Mesh(trimesh.Trimesh):
         np.array
             the unmasked_shape indices mapped into the masked index space
         """
-        new_shape = self.filter_unmasked_indices_padded(unmasked_shape, mask=mask)
-
-        if len(new_shape.shape) > 1:
-            keep_rows = np.all(new_shape >= 0, axis=1)
-        else:
-            keep_rows = new_shape >= 0
-
-        return new_shape[keep_rows]
+        if mask is None:
+            mask = self.node_mask
+        return utils.filter_unmasked_indices(mask, unmasked_shape)
 
     def filter_unmasked_indices_padded(self, unmasked_shape, mask=None):
         """
@@ -1443,11 +1436,7 @@ class Mesh(trimesh.Trimesh):
         """
         if mask is None:
             mask = self.node_mask
-        new_index = np.zeros(mask.shape)-1
-        new_index[mask] = np.arange(np.sum(mask))
-        new_shape = new_index[unmasked_shape.ravel()].reshape(unmasked_shape.shape).astype(int)
-
-        return new_shape
+        return utils.filter_unmasked_indices_padded(mask, unmasked_shape)
 
     @ScalingManagement.original_scaling
     def write_to_file(self, filename, overwrite=True):

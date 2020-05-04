@@ -8,7 +8,6 @@ from tqdm import trange, tqdm
 from meshparty.trimesh_io import Mesh
 from meshparty.skeleton import Skeleton
 from collections import defaultdict
-from pykdtree.kdtree import KDTree as pyKDTree
 import trimesh.ray
 from trimesh.ray import ray_pyembree
 import logging
@@ -83,10 +82,10 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True,
             root_ind = utils.find_far_points_graph(sk_graph)[0]
         else:
             # Still try to root close to the soma
-            _, qry_inds = pyKDTree(new_v).query(soma_pt[np.newaxis, :])
+            _, qry_inds = spatial.cKDTree(new_v, balanced_tree=False).query(soma_pt[np.newaxis, :])
             root_ind = qry_inds[0]
 
-    skel_map_full_mesh = np.full(mesh.node_mask.shape, -1, dtype=np.int64)
+    skel_map_full_mesh = np.full(mesh.node_mask.shape, -1, dtype=np.int)
     skel_map_full_mesh[mesh.node_mask] = new_skel_map
     ind_to_fix = mesh.map_boolean_to_unmasked(np.isnan(new_skel_map))
     skel_map_full_mesh[ind_to_fix] = -1
@@ -258,7 +257,7 @@ def skeletonize_components(mesh,
         is_soma_pt = None
         soma_d = None
     # loop over the components
-    for k in trange(n_components):
+    for k in range(n_components):
         if comp_counts[k] > cc_vertex_thresh:
 
             # find the root using a soma position if you have it

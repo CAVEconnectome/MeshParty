@@ -1,4 +1,4 @@
-import numpy as np 
+import numpy as np
 from scipy import sparse
 import networkx as nx
 
@@ -24,17 +24,19 @@ def connected_component_slice(G, ind=None, return_boolean=False):
 
 
 def dist_from_line(pts, line_bound_pts, axis):
-    ps = (pts[:, axis] - line_bound_pts[0, axis]) / (line_bound_pts[1, axis] - line_bound_pts[0, axis])
-    line_pts = np.multiply(ps[:,np.newaxis], line_bound_pts[1] - line_bound_pts[0]) + line_bound_pts[0]
+    ps = (pts[:, axis] - line_bound_pts[0, axis]) / \
+        (line_bound_pts[1, axis] - line_bound_pts[0, axis])
+    line_pts = np.multiply(ps[:, np.newaxis], line_bound_pts[1] -
+                           line_bound_pts[0]) + line_bound_pts[0]
     ds = np.linalg.norm(pts - line_pts, axis=1)
     return ds
 
 
 def filter_close_to_line(mesh, line_bound_pts, line_dist_th, axis=1):
-    line_pt_ord = np.argsort(line_bound_pts[:,axis])
-    below_top = mesh.vertices[:,axis] > line_bound_pts[line_pt_ord[0], axis] 
-    above_bot = mesh.vertices[:,axis] < line_bound_pts[line_pt_ord[1], axis] 
-    ds = dist_from_line( mesh.vertices, line_bound_pts, axis)
+    line_pt_ord = np.argsort(line_bound_pts[:, axis])
+    below_top = mesh.vertices[:, axis] > line_bound_pts[line_pt_ord[0], axis]
+    above_bot = mesh.vertices[:, axis] < line_bound_pts[line_pt_ord[1], axis]
+    ds = dist_from_line(mesh.vertices, line_bound_pts, axis)
     is_close = (ds < line_dist_th) & below_top & above_bot
     return is_close
 
@@ -74,7 +76,7 @@ def find_far_points_graph(mesh_graph, start_ind=None, multicomponent=False):
     '''
     d = 0
     dn = 1
-   
+
     if start_ind is None:
         if multicomponent:
             a = connected_component_slice(mesh_graph)[0]
@@ -83,7 +85,7 @@ def find_far_points_graph(mesh_graph, start_ind=None, multicomponent=False):
     else:
         a = start_ind
     b = 1
-    
+
     k = 0
     pred = None
     ds = None
@@ -106,16 +108,17 @@ def find_far_points_graph(mesh_graph, start_ind=None, multicomponent=False):
 
     return b, a, pred, d, ds
 
+
 def edge_averaged_vertex_property(edge_property, vertices, edges):
     '''
     Converts a per-edge property to a vertex property by taking the mean
     of the adjacent edges.
     '''
-    vertex_property = np.full((len(vertices),2), np.nan)
-    vertex_property[edges[:,0],0] = np.array(edge_property)
-    vertex_property[edges[:,1],1] = np.array(edge_property)
+    vertex_property = np.full((len(vertices), 2), np.nan)
+    vertex_property[edges[:, 0], 0] = np.array(edge_property)
+    vertex_property[edges[:, 1], 1] = np.array(edge_property)
     return np.nanmean(vertex_property, axis=1)
-    
+
 
 def reduce_vertices(vertices, vertex_shape, v_filter=None, e_filter=None, return_filter_inds=False):
     '''
@@ -147,13 +150,13 @@ def create_csgraph(vertices, edges, euclidean_weight=True, directed=False):
     over weights as boolean or based on Euclidean distance.
     '''
     if euclidean_weight:
-        xs = vertices[edges[:,0]]
-        ys = vertices[edges[:,1]]
+        xs = vertices[edges[:, 0]]
+        ys = vertices[edges[:, 1]]
         weights = np.linalg.norm(xs-ys, axis=1)
         use_dtype = np.float32
-    else:   
+    else:
         weights = np.ones((len(edges),)).astype(np.int8)
-        use_dtype = np.int8 
+        use_dtype = np.int8
 
     if directed:
         edges = edges.T
@@ -170,8 +173,8 @@ def create_csgraph(vertices, edges, euclidean_weight=True, directed=False):
 
 def create_nxgraph(vertices, edges, euclidean_weight=True, directed=False):
     if euclidean_weight:
-        xs = vertices[edges[:,0]]
-        ys = vertices[edges[:,1]]
+        xs = vertices[edges[:, 0]]
+        ys = vertices[edges[:, 1]]
         weights = np.linalg.norm(xs-ys, axis=1)
         use_dtype = np.float32
     else:
@@ -218,6 +221,7 @@ def paths_to_edges(path_list):
         e = np.vstack((p[0:-1], p[1:])).T
         arrays.append(e)
     return np.vstack(arrays)
+
 
 def filter_shapes(node_ids, shapes):
     """ node_ids has to be sorted! """
@@ -281,3 +285,91 @@ def path_from_predecessors(Ps, ind_start):
         path.append(next_ind)
         next_ind = Ps[next_ind]
     return np.array(path)
+
+
+def map_indices_to_unmasked(indices_unmasked, unmapped_indices):
+    '''
+    For a set of masked indices, returns the corresponding unmasked indices
+
+    Parameters
+    ----------
+    unmapped_indices: np.array
+        a set of indices in the masked index space
+
+    Returns
+    -------
+    np.array
+        the indices mapped back to the original mesh index space
+    '''
+    return indices_unmasked[unmapped_indices]
+
+
+def map_boolean_to_unmasked(unmasked_size, node_mask, unmapped_boolean):
+    '''
+    For a boolean index in the masked indices, returns the corresponding unmasked boolean index
+
+    Parameters
+    ----------
+    unmapped_boolean : np.array
+        a bool array in the masked index space
+
+    Returns
+    -------
+    np.array
+        a bool array in the original index space.  Is True if the unmapped_boolean suggests it should be.
+    '''
+    full_boolean = np.full(unmasked_size, False)
+    full_boolean[node_mask] = unmapped_boolean
+    return full_boolean
+
+
+def filter_unmasked_boolean(node_mask, unmasked_boolean):
+    '''
+    For an unmasked boolean slice, returns a boolean slice filtered to the masked mesh
+
+    Parameters
+    ----------
+    unmasked_boolean : np.array
+        a bool array in the original mesh index space
+
+    Returns
+    -------
+    np.array
+        returns the elements of unmasked_boolean that are still relevant in the masked index space
+    '''
+    return unmasked_boolean[node_mask]
+
+
+def filter_unmasked_indices(node_mask, unmasked_shape):
+    """
+    filters a set of indices in the original mesh space
+    and returns it in the masked space
+
+    Parameters
+    ----------
+    mask: np.array or None
+        the mask to apply. default None will use this Mesh node_mask
+
+    unmasked_shape: np.array
+        a set of indices into vertices in the unmasked index space
+
+    Returns
+    -------
+    np.array
+        the unmasked_shape indices mapped into the masked index space
+    """
+    new_shape = filter_unmasked_indices_padded(node_mask, unmasked_shape)
+
+    if len(new_shape.shape) > 1:
+        keep_rows = np.all(new_shape >= 0, axis=1)
+    else:
+        keep_rows = new_shape >= 0
+
+    return new_shape[keep_rows]
+
+
+def filter_unmasked_indices_padded(node_mask, unmasked_shape):
+    new_index = np.zeros(node_mask.shape)-1
+    new_index[node_mask] = np.arange(np.sum(node_mask))
+    new_shape = new_index[unmasked_shape.ravel()].reshape(unmasked_shape.shape).astype(int)
+    return new_shape
