@@ -42,8 +42,8 @@ def filter_close_to_line(mesh, line_bound_pts, line_dist_th, axis=1):
 
 
 def mutual_closest_edges(mesh_a, mesh_b, distance_upper_bound=250):
-    a_ds, a_inds = mesh_a.kdtree.query(mesh_b.vertices,
-                                       distance_upper_bound=distance_upper_bound)
+    _, a_inds = mesh_a.kdtree.query(mesh_b.vertices,
+                                    distance_upper_bound=distance_upper_bound)
     b_ds, b_inds = mesh_b.kdtree.query(mesh_a.vertices,
                                        distance_upper_bound=distance_upper_bound)
     mutual_closest = b_inds[a_inds[b_inds[~np.isinf(b_ds)]]] == b_inds[~np.isinf(b_ds)]
@@ -371,5 +371,10 @@ def filter_unmasked_indices(node_mask, unmasked_shape):
 def filter_unmasked_indices_padded(node_mask, unmasked_shape):
     new_index = np.zeros(node_mask.shape)-1
     new_index[node_mask] = np.arange(np.sum(node_mask))
-    new_shape = new_index[unmasked_shape.ravel()].reshape(unmasked_shape.shape).astype(int)
+
+    if np.isscalar(unmasked_shape) is True:
+        new_shape = int(new_index[unmasked_shape])
+    else:
+        unmasked_shape = np.array(unmasked_shape)
+        new_shape = new_index[unmasked_shape.ravel()].reshape(unmasked_shape.shape).astype(int)
     return new_shape
