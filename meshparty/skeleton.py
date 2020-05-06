@@ -10,11 +10,14 @@ from meshparty.trimesh_io import Mesh
 
 
 class StaticSkeleton():
-    def __init__(self, vertices, edges, root=None, mesh_to_skel_map=None, vertex_properties=None, voxel_scaling=None):
+    def __init__(self, vertices, edges, root=None, radius=None, mesh_to_skel_map=None, mesh_index=None, vertex_properties=None, voxel_scaling=None):
         self._vertices = vertices
         self._edges = edges
         self._root = None
+        self._radius = radius
         self._mesh_to_skel_map = mesh_to_skel_map
+        self._mesh_index = mesh_index
+
         self._parent_node_array = None
         self._distance_to_root = None
         self._csgraph = None
@@ -71,6 +74,19 @@ class StaticSkeleton():
         if self._root is None:
             self._create_default_root()
         return self._root
+
+    @property
+    def radius(self):
+        return self._radius
+
+    @radius.setter
+    def radius(self, new_values):
+        if len(new_values) == self.n_vertices:
+            self._radius = np.array(new_values).reshape(self.n_vertices)
+
+    @property
+    def mesh_index(self):
+        return self.mesh_index
 
     def _create_default_root(self):
         temp_graph = utils.create_csgraph(self.vertices,
@@ -215,10 +231,12 @@ class StaticSkeleton():
 
 
 class Skeleton():
-    def __init__(self, vertices, edges, mesh_to_skel_map=None, vertex_properties={}, root=None, node_mask=None, voxel_scaling=None):
+    def __init__(self, vertices, edges, root=None, radius=None, mesh_to_skel_map=None, mesh_index=None, vertex_properties={},  node_mask=None, voxel_scaling=None):
         self._rooted = StaticSkeleton(vertices,
                                       edges,
+                                      radius=radius,
                                       mesh_to_skel_map=mesh_to_skel_map,
+                                      mesh_index=mesh_index,
                                       vertex_properties=vertex_properties,
                                       root=root,
                                       voxel_scaling=voxel_scaling)
@@ -403,6 +421,14 @@ class Skeleton():
             return None
         else:
             return self.filter_unmasked_indices_padded(self._rooted.mesh_to_skel_map)
+
+    @property
+    def radius(self):
+        return self._rooted.radius[self.node_mask]
+
+    @property
+    def mesh_index(self):
+        return self._rooted.radius[self.node_mask]
 
     @property
     def csgraph(self):
@@ -615,6 +641,15 @@ class Skeleton():
         if self._segment_map is None:
             self._segments, self._segment_map = self._compute_segments()
         return self._segment_map
+
+    @property
+    def path_between(self, s_ind, t_ind):
+        d, Ps = sparse.csgraph.dijkstra(self.csgraph_binary_undirected,
+                                        directed=False, indices=s_ind, return_predecessors=True)
+        if not np.isinf(d[t_ind]):
+            return utils.path_from_predecessors(Ps, t_ind)
+        else:
+            return None
 
     ############################
     # Relative node properties #
