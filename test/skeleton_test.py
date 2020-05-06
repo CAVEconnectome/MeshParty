@@ -26,8 +26,7 @@ def test_basic_components(simple_skeleton, simple_skeleton_with_properties):
 
 
 def test_skeleton_creation(simple_skeleton):
-    sk = skeleton.Skeleton(simple_skeleton.vertices,
-                           simple_skeleton.edges, root=0)
+    sk = simple_skeleton
     new_sk = skeleton.Skeleton(sk.vertices,
                                sk.edges, root=None)
     assert new_sk.root is not None
