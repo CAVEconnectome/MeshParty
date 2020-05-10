@@ -126,7 +126,7 @@ class StaticSkeleton():
                 comp_root = new_root
             else:
                 comp_root = utils.find_far_points_graph(self.csgraph_binary,
-                                                        start_ind=np.flatnonzero(lbls == comp),
+                                                        start_ind=np.flatnonzero(lbls == comp)[0],
                                                         multicomponent=True)[0]
 
             d = sparse.csgraph.dijkstra(self.csgraph_binary,
@@ -231,7 +231,13 @@ class StaticSkeleton():
 
 
 class Skeleton():
-    def __init__(self, vertices, edges, root=None, radius=None, mesh_to_skel_map=None, mesh_index=None, vertex_properties={},  node_mask=None, voxel_scaling=None):
+    def __init__(self, vertices, edges, root=None, radius=None, mesh_to_skel_map=None, mesh_index=None, vertex_properties={},  node_mask=None, voxel_scaling=None, remove_zero_length_edges=True):
+
+        if remove_zero_length_edges:
+            zlsk = utils.collapse_zero_length_edges(
+                vertices, edges, root, radius, mesh_to_skel_map, mesh_index, node_mask, vertex_properties)
+            vertices, edges, root, radius, mesh_to_skel_map, mesh_index, node_mask, vertex_properties = zlsk
+
         self._rooted = StaticSkeleton(vertices,
                                       edges,
                                       radius=radius,
@@ -284,6 +290,11 @@ class Skeleton():
 
         if in_place is False:
             return sk
+
+    def reset_mask(self, in_place=False):
+        out = self.apply_mask(np.full(self.unmasked_size, True), in_place=in_place)
+        if in_place is False:
+            return out
 
     def mask_from_indices(self, mask_indices):
         new_mask = np.full(self._rooted.n_vertices, False)

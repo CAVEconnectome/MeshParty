@@ -1,6 +1,7 @@
 import numpy as np
 from scipy import sparse
 import networkx as nx
+import fastremap
 
 
 def connected_component_slice(G, ind=None, return_boolean=False):
@@ -94,7 +95,7 @@ def find_far_points_graph(mesh_graph, start_ind=None, multicomponent=False):
         dsn, predn = sparse.csgraph.dijkstra(
             mesh_graph, False, a, return_predecessors=True)
         if multicomponent:
-            dsn[np.isinf(dsn)] = 0
+            dsn[np.isinf(dsn)] = -1
         bn = np.argmax(dsn)
         dn = dsn[bn]
         if dn > d:
@@ -318,6 +319,8 @@ def map_boolean_to_unmasked(unmasked_size, node_mask, unmapped_boolean):
     np.array
         a bool array in the original index space.  Is True if the unmapped_boolean suggests it should be.
     '''
+    if len(unmapped_boolean) == unmasked_size:   # Already is unmasked
+        return unmapped_boolean
     full_boolean = np.full(unmasked_size, False)
     full_boolean[node_mask] = unmapped_boolean
     return full_boolean
@@ -378,3 +381,59 @@ def filter_unmasked_indices_padded(node_mask, unmasked_shape):
         unmasked_shape = np.array(unmasked_shape)
         new_shape = new_index[unmasked_shape.ravel()].reshape(unmasked_shape.shape).astype(int)
     return new_shape
+
+
+def collapse_zero_length_edges(vertices, edges, root, radius, mesh_to_skel_map, mesh_index, node_mask, vertex_properties={}):
+    "Remove zero length edges from a skeleton"
+    # Find zero length edges and get replacement mapping
+    # ALL THE filtering needs to do the reindexing right
+
+    zl = np.linalg.norm(vertices[edges[:, 0]]-vertices[edges[:, 1]], axis=1) == 0
+    consolidate_dict = {x[0]: x[1] for x in edges[zl]}
+
+    node_filter = np.full(len(vertices), True)
+    node_filter[edges[zl, 0]] = False
+
+    new_vertices = vertices[node_filter]
+
+    new_index = np.full(len(vertices), -1)
+    new_index[node_filter] = np.arange(node_filter.sum())
+
+    for k, v in consolidate_dict.items():
+        new_index[k] = new_index[v]
+    new_index_dict = {ii: new_index[ii] for ii in range(len(new_index))}
+
+    new_edges = fastremap.remap(edges, new_index_dict)
+    new_edges = new_edges[new_edges[:, 0] != new_edges[:, 1]]
+
+    if mesh_to_skel_map is not None:
+        new_index_dict[-1] = -1
+        new_mesh_to_skel_map = fastremap.remap(
+            mesh_to_skel_map, new_index_dict)
+    else:
+        new_mesh_to_skel_map = None
+
+    new_root = new_index_dict.get(root, root)
+    if radius is not None:
+        new_radius = radius[node_filter]
+    else:
+        new_radius = None
+
+    if mesh_index is not None:
+        new_mesh_index = mesh_index[node_filter]
+    else:
+        new_mesh_index = None
+
+    if node_mask is not None:
+        new_node_mask = node_mask[node_filter]
+    else:
+        new_node_mask = None
+
+    new_vp = {}
+    for vp, val in vertex_properties.items():
+        try:
+            new_vp[vp] = val[node_filter]
+        except:
+            pass
+
+    return new_vertices, new_edges, new_root, new_radius, new_mesh_to_skel_map, new_mesh_index, new_node_mask, new_vp
