@@ -372,7 +372,7 @@ def filter_unmasked_indices(node_mask, unmasked_shape):
 
 
 def filter_unmasked_indices_padded(node_mask, unmasked_shape):
-    new_index = np.zeros(node_mask.shape)-1
+    new_index = np.zeros(node_mask.shape, dtype=int)-1
     new_index[node_mask] = np.arange(np.sum(node_mask))
 
     if np.isscalar(unmasked_shape) is True:
@@ -383,26 +383,40 @@ def filter_unmasked_indices_padded(node_mask, unmasked_shape):
     return new_shape
 
 
+def remap_dict(n_vertices, map_dict):
+    "Assumes only do remap of indices that are keys in map dict"
+    ind_filter = np.full(n_vertices, True)
+    remove_inds = list(map_dict.keys())
+    ind_filter[np.array(remove_inds, dtype=int)] = False
+
+    new_index = np.full(n_vertices, None)
+    new_index[ind_filter] = np.arange(ind_filter.sum())
+    for k, v in map_dict.items():
+        new_index[k] = new_index[v]
+    return {ii: new_index[ii] for ii in range(len(new_index))}, ind_filter
+
+
 def collapse_zero_length_edges(vertices, edges, root, radius, mesh_to_skel_map, mesh_index, node_mask, vertex_properties={}):
     "Remove zero length edges from a skeleton"
-    # Find zero length edges and get replacement mapping
-    # ALL THE filtering needs to do the reindexing right
 
     zl = np.linalg.norm(vertices[edges[:, 0]]-vertices[edges[:, 1]], axis=1) == 0
     consolidate_dict = {x[0]: x[1] for x in edges[zl]}
 
-    node_filter = np.full(len(vertices), True)
-    node_filter[edges[zl, 0]] = False
+    # node_filter = np.full(len(vertices), True)
+    # node_filter[edges[zl, 0]] = False
+
+    #
+
+    # new_index = np.full(len(vertices), -1)
+    # new_index[node_filter] = np.arange(node_filter.sum())
+
+    # for k, v in consolidate_dict.items():
+    #     new_index[k] = new_index[v]
+    # new_index_dict = {ii: new_index[ii] for ii in range(len(new_index))}
+
+    new_index_dict, node_filter = remap_dict(len(vertices), consolidate_dict)
 
     new_vertices = vertices[node_filter]
-
-    new_index = np.full(len(vertices), -1)
-    new_index[node_filter] = np.arange(node_filter.sum())
-
-    for k, v in consolidate_dict.items():
-        new_index[k] = new_index[v]
-    new_index_dict = {ii: new_index[ii] for ii in range(len(new_index))}
-
     new_edges = fastremap.remap(edges, new_index_dict)
     new_edges = new_edges[new_edges[:, 0] != new_edges[:, 1]]
 

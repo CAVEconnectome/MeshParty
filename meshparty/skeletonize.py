@@ -10,6 +10,7 @@ from meshparty.skeleton import Skeleton
 from collections import defaultdict
 import trimesh.ray
 from trimesh.ray import ray_pyembree
+import fastremap
 import logging
 
 
@@ -71,7 +72,7 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True,
             mesh, [soma_pt], soma_radius, map_to_unmasked=False)
         new_v, new_e, new_skel_map, vert_filter, root_ind = collapse_soma_skeleton(soma_pt, skel_verts, skel_edges,
                                                                                    soma_d_thresh=soma_radius, mesh_to_skeleton_map=skel_map,
-                                                                                   soma_mesh_indices=soma_verts, return_filter=True,
+                                                                                   return_filter=True,
                                                                                    return_soma_ind=True)
     else:
         new_v, new_e, new_skel_map = skel_verts, skel_edges, skel_map
@@ -92,16 +93,18 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True,
 
     props = {}
     if compute_original_index is True:
-        props['mesh_index'] = np.append(
-            mesh.map_indices_to_unmasked(orig_skel_index[vert_filter]), -1)
+        mesh_index = mesh.map_indices_to_unmasked(orig_skel_index[vert_filter])
+        if collapse_soma:
+            mesh_index = np.append(mesh_index, -1)
+        props['mesh_index'] = mesh_index
     if compute_radius is True:
-
         rs = ray_trace_distance(orig_skel_index[vert_filter], mesh)
-        rs = np.append(rs, soma_radius)
+        if collapse_soma:
+            rs = np.append(rs, soma_radius)
         props['rs'] = rs
 
     sk = Skeleton(new_v, new_e, mesh_to_skel_map=skel_map_full_mesh,
-                  vertex_properties=props, root=root_ind)
+                  mesh_index=props.get('mesh_index', None), radius=props.get('rs', None), root=root_ind)
     return sk
 
 
@@ -620,13 +623,9 @@ def collapse_soma_skeleton(soma_pt, verts, edges, soma_d_thresh=12000, mesh_to_s
         good_edges = ~(simple_edges[:, 0] == simple_edges[:, 1])
 
         if mesh_to_skeleton_map is not None:
-            new_mesh_to_skeleton_map = mesh_to_skeleton_map.copy()
-            remap_rows = np.isin(mesh_to_skeleton_map, soma_verts)
-            new_mesh_to_skeleton_map[remap_rows] = soma_i
-            new_mesh_to_skeleton_map = utils.nanfilter_shapes(np.unique(edges_m.ravel()),
-                                                              new_mesh_to_skeleton_map)
-            if soma_mesh_indices is not None:
-                new_mesh_to_skeleton_map[soma_mesh_indices] = len(simple_verts)-1
+            consolidate_dict = {v: soma_i for v in soma_verts}
+            new_index_dict, _ = utils.remap_dict(len(verts)+1, consolidate_dict)
+            new_mesh_to_skeleton_map = fastremap.remap(mesh_to_skeleton_map, new_index_dict)
 
         output = [simple_verts, simple_edges[good_edges]]
         if mesh_to_skeleton_map is not None:

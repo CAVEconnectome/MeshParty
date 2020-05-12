@@ -86,7 +86,7 @@ class StaticSkeleton():
 
     @property
     def mesh_index(self):
-        return self.mesh_index
+        return self._mesh_index
 
     def _create_default_root(self):
         temp_graph = utils.create_csgraph(self.vertices,
@@ -439,7 +439,7 @@ class Skeleton():
 
     @property
     def mesh_index(self):
-        return self._rooted.radius[self.node_mask]
+        return self._rooted.mesh_index[self.node_mask]
 
     @property
     def csgraph(self):
