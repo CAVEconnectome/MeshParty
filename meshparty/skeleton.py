@@ -653,7 +653,6 @@ class Skeleton():
             self._segments, self._segment_map = self._compute_segments()
         return self._segment_map
 
-    @property
     def path_between(self, s_ind, t_ind):
         d, Ps = sparse.csgraph.dijkstra(self.csgraph_binary_undirected,
                                         directed=False, indices=s_ind, return_predecessors=True)

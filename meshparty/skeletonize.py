@@ -625,6 +625,8 @@ def collapse_soma_skeleton(soma_pt, verts, edges, soma_d_thresh=12000, mesh_to_s
         if mesh_to_skeleton_map is not None:
             consolidate_dict = {v: soma_i for v in soma_verts}
             new_index_dict, _ = utils.remap_dict(len(verts)+1, consolidate_dict)
+            new_index_dict[-1] = -1
+            mesh_to_skeleton_map[np.isnan(mesh_to_skeleton_map)] = -1
             new_mesh_to_skeleton_map = fastremap.remap(mesh_to_skeleton_map, new_index_dict)
 
         output = [simple_verts, simple_edges[good_edges]]
