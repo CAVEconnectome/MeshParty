@@ -231,7 +231,7 @@ class StaticSkeleton():
 
 
 class Skeleton():
-    def __init__(self, vertices, edges, root=None, radius=None, mesh_to_skel_map=None, mesh_index=None, vertex_properties={},  node_mask=None, voxel_scaling=None, remove_zero_length_edges=True):
+    def __init__(self, vertices, edges, root=None, radius=None, mesh_to_skel_map=None, mesh_index=None, vertex_properties={},  node_mask=None, voxel_scaling=None, remove_zero_length_edges=True, skeleton_index=None):
 
         if remove_zero_length_edges:
             zlsk = utils.collapse_zero_length_edges(
@@ -249,6 +249,7 @@ class Skeleton():
 
         self._node_mask = np.full(self._rooted.n_vertices, True)
         self._edges = None
+        self._SkeletonIndex = skeleton_index
 
         # Derived properties of the filtered graph
         self._csgraph_filtered = None
@@ -267,12 +268,21 @@ class Skeleton():
     ###################
 
     @property
+    def SkeletonIndex(self):
+        if self._SkeletonIndex is None:
+            self._SkeletonIndex = SkeletonIndexFactory(self)
+        return self._SkeletonIndex
+
+    def _register_skeleton_index(self, NewSkeletonIndex):
+        self._SkeletonIndex = NewSkeletonIndex
+
+    @property
     def node_mask(self):
         return self._node_mask
 
     def copy(self):
-        return Skeleton(self._rooted.vertices, self._rooted.edges, self._rooted.mesh_to_skel_map, vertex_properties=self._rooted.vertex_properties,
-                        root=self._rooted.root, node_mask=self.node_mask, voxel_scaling=self.voxel_scaling)
+        return Skeleton(self._rooted.vertices, self._rooted.edges, mesh_to_skel_map=self._rooted.mesh_to_skel_map, vertex_properties=self._rooted.vertex_properties,
+                        root=self._rooted.root, node_mask=self.node_mask, radius=self.radius, voxel_scaling=self.voxel_scaling, skeleton_index=self._SkeletonIndex, mesh_index=self.mesh_index)
 
     def apply_mask(self, new_mask, in_place=False):
         if in_place:
@@ -487,7 +497,7 @@ class Skeleton():
 
     @property
     def root(self):
-        return self.filter_unmasked_indices_padded(self._rooted.root)
+        return self.SkeletonIndex(self.filter_unmasked_indices_padded(self._rooted.root))
 
     @property
     def root_position(self):
@@ -510,7 +520,7 @@ class Skeleton():
             last_ind = np.flatnonzero(path_filt == -1)[0]
         else:
             last_ind = len(path_filt)
-        return path_filt[:last_ind]
+        return self.SkeletonIndex(path_filt[:last_ind])
 
     #######################
     # Filtered properties #
@@ -526,7 +536,7 @@ class Skeleton():
 
         self._segments = None
         self._segment_map = None
-
+        self._SkeletonIndex = None
         self._cover_paths = None
 
     #########################
@@ -590,14 +600,14 @@ class Skeleton():
         """ numpy.array : Indices of branch points on the skeleton (pottentially including root)"""
         if self._branch_points is None:
             self._create_branch_and_end_points()
-        return self._branch_points
+        return self.SkeletonIndex(self._branch_points)
 
     @property
     def end_points(self):
         """ numpy.array : Indices of end points on the skeleton (pottentially including root)"""
         if self._end_points is None:
             self._create_branch_and_end_points()
-        return self._end_points
+        return self.SkeletonIndex(self._end_points)
 
     @property
     def n_branch_points(self):
@@ -611,11 +621,11 @@ class Skeleton():
     def end_points_undirected(self):
         """End points without skeleton orientation, including root and disconnected components.
         """
-        return np.flatnonzero(np.sum(self.csgraph_binary_undirected, axis=0) == 1)
+        return self.SkeletonIndex(np.flatnonzero(np.sum(self.csgraph_binary_undirected, axis=0) == 1))
 
     @property
     def branch_points_undirected(self):
-        return np.flatnonzero(np.sum(self.csgraph_binary_undirected, axis=0) > 2)
+        return self.SkeletonIndex(np.flatnonzero(np.sum(self.csgraph_binary_undirected, axis=0) > 2))
 
     def _compute_segments(self):
         """Precompute segments between branches and end points"""
@@ -630,7 +640,7 @@ class Skeleton():
             _, ls = sparse.csgraph.connected_components(self.csgraph_binary)
 
         _, invs = np.unique(ls, return_inverse=True)
-        segments = [np.flatnonzero(invs == ii) for ii in np.unique(invs)]
+        segments = [self.SkeletonIndex(np.flatnonzero(invs == ii)) for ii in np.unique(invs)]
         segment_map = invs
 
         return segments, segment_map.astype(int)
@@ -657,7 +667,7 @@ class Skeleton():
         d, Ps = sparse.csgraph.dijkstra(self.csgraph_binary_undirected,
                                         directed=False, indices=s_ind, return_predecessors=True)
         if not np.isinf(d[t_ind]):
-            return utils.path_from_predecessors(Ps, t_ind)
+            return self.SkeletonIndex(utils.path_from_predecessors(Ps, t_ind))
         else:
             return None
 
@@ -666,7 +676,7 @@ class Skeleton():
     ############################
 
     def parent_nodes(self, vinds):
-        """Get a list of parent nodes for specified vertices 
+        """Get a list of parent nodes for specified vertices
 
         Parameters
         ----------
@@ -682,15 +692,14 @@ class Skeleton():
         if isinstance(vinds_b, int):
             vinds_b = np.array([vinds_b])
         p_inds_filtered = self.filter_unmasked_indices_padded(self._rooted.parent_nodes(vinds_b))
-        p_inds_filtered[p_inds_filtered == -1] = None
-        return p_inds_filtered
+        return self.SkeletonIndex(p_inds_filtered)
 
     def cut_graph(self, vinds, directed=True, euclidean_weight=True):
         """Return a csgraph for the skeleton with specified vertices cut off from their parent vertex.
 
         Parameters
         ----------
-        vinds :  
+        vinds :
             Collection of indices to cut off from their parent.
         directed : bool, optional
             Return the graph as directed, by default True
@@ -699,7 +708,7 @@ class Skeleton():
 
         Returns
         -------
-        scipy.sparse.csr.csr_matrix  
+        scipy.sparse.csr.csr_matrix
             Graph with vertices in vinds cutt off from parents.
         """
         e_keep = ~np.isin(self.edges[:, 0], vinds)
@@ -736,7 +745,7 @@ class Skeleton():
             d = sparse.csgraph.dijkstra(g.T, indices=[vind])
             if inclusive is False:
                 d[vind] = np.inf
-            dns.append(np.flatnonzero(~np.isinf(d[0])))
+            dns.append(self.SkeletonIndex(np.flatnonzero(~np.isinf(d[0]))))
 
         if return_single:
             dns = dns[0]
@@ -753,7 +762,7 @@ class Skeleton():
         Returns
         -------
         List of arrays
-            A list whose ith element is the children of the ith element of vinds. 
+            A list whose ith element is the children of the ith element of vinds.
         """
         if np.isscalar(vinds):
             vinds = [vinds]
@@ -763,7 +772,11 @@ class Skeleton():
 
         cinds = []
         for vind in vinds:
-            cinds.append(self.edges[self.edges[:, 1] == vind, 0])
+            cinds.append(
+                self.SkeletonIndex(
+                    self.edges[self.edges[:, 1] == vind, 0]
+                )
+            )
 
         if return_single:
             cinds = cinds[0]
@@ -781,7 +794,7 @@ class Skeleton():
         ep_order = np.argsort(self.distance_to_root[self.end_points])[::-1]
         for ep in self.end_points[ep_order]:
             ptr = np.array(self.path_to_root(ep))
-            cover_paths.append(ptr[~seen[ptr]])
+            cover_paths.append(self.SkeletonIndex(ptr[~seen[ptr]]))
             seen[ptr] = True
         return cover_paths
 
@@ -789,9 +802,9 @@ class Skeleton():
     def cover_paths(self):
         """ list : List of numpy.array objects with self.n_end_points elements, each a rootward
         path (ordered set of indices) starting from an endpoint and continuing until it reaches
-        a point on a path earlier on the list. Paths are ordered by end point distance from root, 
-        starting with the most distal. When traversed from begining to end, gives the longest rootward 
-        path down each major branch first. When traversed from end to begining, guarentees every 
+        a point on a path earlier on the list. Paths are ordered by end point distance from root,
+        starting with the most distal. When traversed from begining to end, gives the longest rootward
+        path down each major branch first. When traversed from end to begining, guarentees every
         branch point is visited at the end of all its downstream paths before being traversed along
         a path.
         """
@@ -808,7 +821,7 @@ class Skeleton():
 
         Parameters
         ----------
-        filename : str 
+        filename : str
             Filename to save file
         overwrite : bool, optional
             Flag to specify whether to overwrite existing files, by default True
@@ -844,3 +857,41 @@ class Skeleton():
         '''
         skeleton_io.export_to_swc(self, filename, node_labels=node_labels,
                                   radius=radius, header=header, xyz_scaling=xyz_scaling)
+
+
+def SkeletonIndexFactory(sk):
+    class SkeletonIndex(np.ndarray):
+        def __new__(cls, skel_indices):
+            if np.array(skel_indices).dtype is np.dtype('bool') and len(skel_indices) == sk.n_vertices:
+                skel_indices = np.flatnonzero(skel_indices)
+
+            skel_inds = np.asarray(skel_indices, dtype=int)
+            obj = skel_inds.view(cls)
+            obj._skel_indices_base = sk.map_indices_to_unmasked(
+                skel_inds)
+            return obj
+
+        def __finalize_array__(self, obj):
+            if obj is None:
+                return
+            obj._skel_indices_base = getattr(
+                obj, '_skel_indices_base', np.array([]))
+
+        @property
+        def to_skel_index(self):
+            return self
+
+        @property
+        def to_skel_index_padded(self):
+            return self
+
+        @property
+        def to_skel_mask_base(self):
+            mask = np.full(len(sk.node_mask), False)
+            mask[self.to_skel_index_base] = True
+            return mask
+
+        @property
+        def to_skel_mask(self):
+            return sk.filter_unmasked_boolean(self.to_skel_mask_base)
+    return SkeletonIndex

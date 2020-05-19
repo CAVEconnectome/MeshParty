@@ -302,7 +302,7 @@ def map_indices_to_unmasked(indices_unmasked, unmapped_indices):
     np.array
         the indices mapped back to the original mesh index space
     '''
-    return indices_unmasked[unmapped_indices]
+    return np.where(unmapped_indices >= 0, indices_unmasked[unmapped_indices], -1)
 
 
 def map_boolean_to_unmasked(unmasked_size, node_mask, unmapped_boolean):
@@ -379,7 +379,10 @@ def filter_unmasked_indices_padded(node_mask, unmasked_shape):
         new_shape = int(new_index[unmasked_shape])
     else:
         unmasked_shape = np.array(unmasked_shape)
-        new_shape = new_index[unmasked_shape.ravel()].reshape(unmasked_shape.shape).astype(int)
+        unmasked_shape[unmasked_shape == None] = -1
+        new_shape = new_index[unmasked_shape.ravel().astype(
+            int)].reshape(unmasked_shape.shape)
+        new_shape[unmasked_shape == -1] = -1
     return new_shape
 
 
