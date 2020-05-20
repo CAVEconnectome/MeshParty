@@ -219,10 +219,10 @@ class AnchoredAnnotation(object):
             self._anchor_points(mesh)
 
     def __repr__(self):
-        return self.df.__repr__()
+        return self.df.head().__repr__()
 
     def _repr_html_(self):
-        return self.df._repr_html_()
+        return self.df.head()._repr_html_()
 
     def __getitem__(self, key):
         return self.df.__getitem__(key)
@@ -531,6 +531,16 @@ class Meshwork(object):
     # Skeleton functions #
     ######################
 
+    class OnlyIfSkeleton(object):
+        @staticmethod
+        def exists(func):
+            def wrapper(self, *args, **kwargs):
+                if self.skeleton is not None:
+                    return func(self, *args, **kwargs)
+                else:
+                    return None
+            return wrapper
+
     @property
     def skeleton(self):
         return self._skeleton
@@ -544,7 +554,7 @@ class Meshwork(object):
         from meshparty.skeletonize import skeletonize_mesh
 
         if self._original_mesh_data is not None:
-            vs, fs, es, nm, vxsc = _decompress_mesh_data(
+            vs, fs, es, nm, vxsc = decompress_mesh_data(
                 *self._original_mesh_data)
             mesh_to_sk = Mesh(vs, fs, link_edges=es,
                               node_mask=nm, voxel_scaling=vxsc)
@@ -608,41 +618,51 @@ class Meshwork(object):
         return in1d_first_item(self.skeleton.mesh_to_skel_map[self.mesh.node_mask], skinds)
 
     @property
+    @OnlyIfSkeleton.exists
     def branch_points_skel(self):
         return self.SkeletonIndex(self.skeleton.branch_points)
 
     @property
+    @OnlyIfSkeleton.exists
     def branch_points_region(self):
         return self.branch_points_skel.to_mesh_regions
 
     @property
+    @OnlyIfSkeleton.exists
     def branch_points(self):
         return self.branch_points_skel.to_mesh_region_points
 
     @property
+    @OnlyIfSkeleton.exists
     def end_points_skel(self):
         return self.SkeletonIndex(self.skeleton.end_points)
 
     @property
+    @OnlyIfSkeleton.exists
     def end_points(self):
         return self.end_points_skel.to_mesh_region_points
 
     @property
+    @OnlyIfSkeleton.exists
     def end_points_region(self):
         return self.end_points_skel.to_mesh_regions
 
     @property
+    @OnlyIfSkeleton.exists
     def root_skel(self):
         return self.SkeletonIndex([self.skeleton.root])
 
     @property
+    @OnlyIfSkeleton.exists
     def root_region(self):
         return self.root_skel.to_mesh_regions[0]
 
     @property
+    @OnlyIfSkeleton.exists
     def root(self):
         return self.root_skel.to_mesh_region_points[0]
 
+    @OnlyIfSkeleton.exists
     def parent_index(self, mesh_inds, include_parent_free=False, return_as_skel=False):
         mesh_inds = self._convert_to_meshindex(mesh_inds)
         parent_index = self.skeleton.parent_nodes(mesh_inds.to_skel_index)
@@ -653,13 +673,21 @@ class Meshwork(object):
         else:
             return parent_index[parent_index >= 0].to_mesh_region_points
 
+    @OnlyIfSkeleton.exists
     def child_index(self, mesh_inds, return_as_skel=False):
+        if np.isscalar(mesh_inds):
+            return_scalar = True
+        else:
+            return_scalar = False
         mesh_inds = self._convert_to_meshindex(mesh_inds)
         child_index = self.skeleton.child_nodes(mesh_inds.to_skel_index)
         if return_as_skel:
             return child_index
+        if return_scalar:
+            return child_index[0].to_mesh_region_points
         return [n.to_mesh_region_points for n in child_index]
 
+    @OnlyIfSkeleton.exists
     def distance_to_root(self, mesh_indices=None):
         if mesh_indices is None:
             mesh_indices = np.arange(self.mesh.n_vertices)
@@ -669,6 +697,7 @@ class Meshwork(object):
         ds[skinds >= 0] = self.skeleton.distance_to_root[skinds[skinds >= 0]]
         return ds
 
+    @OnlyIfSkeleton.exists
     def downstream_of(self, mesh_index, inclusive=True, return_as_skel=False):
         if np.isscalar(mesh_index):
             use_scalar = True
@@ -687,6 +716,7 @@ class Meshwork(object):
             minds_downstream = minds_downstream[0]
         return minds_downstream
 
+    @OnlyIfSkeleton.exists
     def same_segment(self, mesh_inds, return_as_skel=False):
         if np.isscalar(mesh_inds):
             return_scalar = True
@@ -711,6 +741,7 @@ class Meshwork(object):
             graph, directed=False, indices=inds_source)
         return ds[:, inds_target].squeeze()
 
+    @OnlyIfSkeleton.exists
     def distance_between(self, inds_source, inds_target, along_path=True):
         inds_source = self._convert_to_meshindex(inds_source)
         inds_target = self._convert_to_meshindex(inds_target)
@@ -722,6 +753,7 @@ class Meshwork(object):
         else:
             return self._distance_between(inds_source, inds_target, self.mesh.csgraph)
 
+    @OnlyIfSkeleton.exists
     def path_between(self, source_index, target_index, return_as_skel=False):
         source_index = self._convert_to_meshindex(source_index)
         target_index = self._convert_to_meshindex(target_index)
@@ -735,6 +767,7 @@ class Meshwork(object):
         ds = sparse.csgraph.dijkstra(graph, indices=inds, directed=False)
         return ds < max_distance
 
+    @OnlyIfSkeleton.exists
     def within_distance(self, source_inds, max_distance, collapse=True, return_as_skel=False):
         # along path or surface
         if np.isscalar(source_inds) or collapse:
@@ -776,6 +809,7 @@ class Meshwork(object):
         if anno_name in self.anno.table_names:
             return trimesh_vtk.point_cloud_actor(self.anno[anno_name].points, **kwargs)
 
+    @OnlyIfSkeleton.exists
     def skeleton_actor(self, **kwargs):
         if self.skeleton is not None:
             return trimesh_vtk.skeleton_actor(self.skeleton, **kwargs)

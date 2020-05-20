@@ -47,6 +47,10 @@ def MeshworkIndexFactory(mw):
             return self.to_skel_index.to_mesh_index
 
         @property
+        def to_all_equivalent_mask(self):
+            return self.to_skel_index.to_mesh_mask
+
+        @property
         def to_skel_index(self):
             if mw.skeleton is None:
                 return None
