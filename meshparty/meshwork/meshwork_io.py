@@ -12,7 +12,8 @@ warnings.simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
 def save_meshwork_metadata(filename, mw):
     with h5py.File(filename, 'a') as f:
         f.attrs['voxel_resolution'] = mw.anno.voxel_resolution
-        f.attrs['seg_id'] = mw.seg_id
+        if mw.seg_id is not None:
+            f.attrs['seg_id'] = mw.seg_id
 
 
 def load_meshwork_metadata(filename):
@@ -24,6 +25,7 @@ def load_meshwork_metadata(filename):
 
 
 def save_meshwork_mesh(filename, mw):
+    node_mask = mw.mesh_mask
     if mw._original_mesh_data is not None:
         vs, fs, es, nm, vxsc = decompress_mesh_data(
             *mw._original_mesh_data)
@@ -40,6 +42,7 @@ def save_meshwork_mesh(filename, mw):
             f['mesh'].attrs['voxel_scaling'] = mesh.voxel_scaling
         if mesh.link_edges is not None:
             f.create_dataset("mesh/link_edges", data=mesh.link_edges, compression="gzip")
+        f.create_dataset("mesh/mesh_mask", data=node_mask, compression='gzip')
 
 
 def load_meshwork_mesh(filename):
@@ -56,8 +59,8 @@ def load_meshwork_mesh(filename):
 
         node_mask = f['mesh/node_mask'][()]
         voxel_scaling = f['mesh'].attrs.get('voxel_scaling', None)
-
-    return Mesh(vertices=verts, faces=faces, link_edges=link_edges, node_mask=node_mask, voxel_scaling=voxel_scaling)
+        mesh_mask = f['mesh/mesh_mask'][()]
+    return Mesh(vertices=verts, faces=faces, link_edges=link_edges, node_mask=node_mask, voxel_scaling=voxel_scaling), mesh_mask
 
 
 def save_meshwork_skeleton(filename, mw):
@@ -109,7 +112,8 @@ def save_meshwork_annotations(filename, mw):
             dset.attrs['max_distance'] = anno._max_distance
             if anno._index_column_base in anno._original_columns:
                 dset.attrs['index_column'] = anno._index_column_base
-        annos[table_name].data_original.to_hdf(filename, f"annotations/{table_name}/data")
+        annos[table_name].data_original.to_hdf(
+            filename, f"annotations/{table_name}/data", complib='blosc', complevel=5)
 
 
 def load_meshwork_annotations(filename):
@@ -140,20 +144,15 @@ def _save_meshwork(filename, mw, overwrite=False, verbose=False):
                 for d in f.keys():
                     del f[d]
 
-    with tqdm(total=4) as pbar:
-        save_meshwork_metadata(filename, mw)
-        pbar.update(1)
-        save_meshwork_mesh(filename, mw)
-        pbar.update(1)
-        save_meshwork_skeleton(filename, mw)
-        pbar.update(1)
-        save_meshwork_annotations(filename, mw)
-        pbar.update(1)
+    save_meshwork_metadata(filename, mw)
+    save_meshwork_mesh(filename, mw)
+    save_meshwork_skeleton(filename, mw)
+    save_meshwork_annotations(filename, mw)
 
 
 def _load_meshwork(filename):
     meta = load_meshwork_metadata(filename)
-    mesh = load_meshwork_mesh(filename)
+    mesh, mask = load_meshwork_mesh(filename)
     skel = load_meshwork_skeleton(filename)
     annos = load_meshwork_annotations(filename)
-    return meta, mesh, skel, annos
+    return meta, mesh, skel, annos, mask

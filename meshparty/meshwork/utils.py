@@ -7,44 +7,6 @@ from ..skeleton import Skeleton
 DEFAULT_VOXEL_RESOLUTION = [4, 4, 40]
 
 
-def MeshIndexFactory(mesh):
-    class MeshIndex(np.ndarray):
-        def __new__(cls, mesh_indices):
-            if np.array(mesh_indices).dtype is np.dtype('bool') and len(mesh_indices) == mesh.n_vertices:
-                mesh_indices = np.flatnonzero(mesh_indices)
-
-            mesh_inds = np.asarray(mesh_indices, dtype=int)
-            obj = mesh_inds.view(cls)
-            obj._mesh_indices_base = mesh.map_indices_to_unmasked(mesh_inds)
-            return obj
-
-        def __finalize_array__(self, obj):
-            if obj is None:
-                return
-            self._mesh_indices_base = getattr(
-                obj, '_mesh_indices_base', np.array([]))
-
-        @property
-        def to_mesh_index(self):
-            return self
-
-        @property
-        def to_mesh_index_base(self):
-            return self._mesh_indices_base
-
-        @property
-        def to_mesh_mask_base(self):
-            mask = np.full(len(mesh.node_mask), False)
-            mask[self.to_mesh_index_base] = True
-            return mask
-
-        @property
-        def to_mesh_mask(self):
-            return mesh.filter_unmasked_boolean(self.to_mesh_mask_base)
-
-    return MeshIndex
-
-
 def MeshworkIndexFactory(mw):
     class JointMeshIndex(np.ndarray):
         def __new__(cls, mesh_indices):

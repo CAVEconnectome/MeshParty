@@ -160,6 +160,7 @@ class AnchoredAnnotationManager(object):
             self._data_tables[tn]._reset_filter()
 
     def _register_MeshIndex(self, NewMeshIndex):
+        self._MeshIndex = NewMeshIndex
         for tn in self.table_names:
             self._data_tables[tn]._register_MeshIndex(NewMeshIndex)
 
@@ -368,6 +369,11 @@ class AnchoredAnnotation(object):
         else:
             return np.full(len(self.df), True)
 
+    def query(self, query_str):
+        filt_df = self.df.query(query_str)
+        row_filter = np.isin(self.df.index, filt_df.index)
+        return self._filter_query_response(row_filter)
+
     def filter_query(self, node_mask):
         row_filter = self._filter_query(node_mask)
         return self._filter_query_response(row_filter)
@@ -403,6 +409,7 @@ class Meshwork(object):
         self._original_mesh_data = None
         self._MeshIndex = None
         self._SkeletonIndex = None
+        self._recompute_indices()
 
     @property
     def seg_id(self):
@@ -412,12 +419,16 @@ class Meshwork(object):
     # Mesh functions #
     ##################
 
+    def _recompute_indices(self):
+        self._MeshIndex, self._SkeletonIndex = MeshworkIndexFactory(self)
+        self.anno._register_MeshIndex(self._MeshIndex)
+        if self.skeleton is not None:
+            self.skeleton._register_skeleton_index(self._SkeletonIndex)
+
     @property
     def MeshIndex(self):
         if self._MeshIndex is None:
-            self._MeshIndex, self._SkeletonIndex = MeshworkIndexFactory(self)
-            if self.skeleton is not None:
-                self.skeleton._register_skeleton_index(self._SkeletonIndex)
+            self._recompute_indices()
         return self._MeshIndex
 
     def _convert_to_meshindex(self, mesh_indices):
@@ -433,9 +444,7 @@ class Meshwork(object):
     @property
     def SkeletonIndex(self):
         if self._SkeletonIndex is None:
-            self._MeshIndex, self._SkeletonIndex = MeshworkIndexFactory(self)
-            if self.skeleton is not None:
-                self.skeleton._register_skeleton_index(self._SkeletonIndex)
+            self._recompute_indices()
         return self._SkeletonIndex
 
     def _convert_to_skelindex(self, skel_indices):
@@ -655,7 +664,10 @@ class Meshwork(object):
         if mesh_indices is None:
             mesh_indices = np.arange(self.mesh.n_vertices)
         mesh_indices = self._convert_to_meshindex(mesh_indices)
-        return self.skeleton.distance_to_root[mesh_indices.to_skel_index]
+        ds = np.full(len(mesh_indices), np.nan)
+        skinds = mesh_indices.to_skel_index_padded
+        ds[skinds >= 0] = self.skeleton.distance_to_root[skinds[skinds >= 0]]
+        return ds
 
     def downstream_of(self, mesh_index, inclusive=True, return_as_skel=False):
         if np.isscalar(mesh_index):
@@ -704,8 +716,6 @@ class Meshwork(object):
         inds_target = self._convert_to_meshindex(inds_target)
 
         if along_path:
-            inds_source = self._mind_to_skind_padded(inds_source)
-            inds_target = self._mind_to_skind_padded(inds_target)
             return self._distance_between(inds_source.to_skel_index_padded,
                                           inds_target.to_skel_index_padded,
                                           self.skeleton.csgraph)
@@ -779,7 +789,7 @@ class Meshwork(object):
 
 
 def load_meshwork(filename):
-    meta, mesh, skel, annos = meshwork_io._load_meshwork(filename)
+    meta, mesh, skel, annos, mask = meshwork_io._load_meshwork(filename)
     mw = Meshwork(mesh, skeleton=skel, seg_id=meta.get('seg_id', None),
                   voxel_resolution=meta.get('voxel_resolution', DEFAULT_VOXEL_RESOLUTION))
     for name, data in annos.items():
@@ -789,4 +799,6 @@ def load_meshwork(filename):
                            point_column=data.get('point_column'),
                            max_distance=data.get('max_distance'),
                            index_column=data.get('index_column', None))
+    if not np.all(mask == mesh.node_mask):
+        mw.apply_mask(mask)
     return mw
