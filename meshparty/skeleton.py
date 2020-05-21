@@ -559,11 +559,9 @@ class Skeleton():
     def _single_path_length(self, path):
         """Compute the length of a single path (assumed to be correct)
         """
-        xs = self.vertices[path[:-1]]
-        ys = self.vertices[path[1:]]
-        return np.sum(np.linalg.norm(ys-xs, axis=1))
+        return np.sum(self.csgraph[:,path][path])
 
-    def path_length(self, paths):
+    def path_length(self, paths=None):
         """Returns the length of a path (described as an ordered collection of connected indices)
         Parameters
         ----------
@@ -573,6 +571,9 @@ class Skeleton():
         -------
         Float or list of floats : The length of each path.
         """
+        if paths  is None:
+            paths = np.arange(self.n_vertices)
+            
         if len(paths) == 0:
             return 0
 

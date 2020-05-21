@@ -18,11 +18,17 @@ def MeshworkIndexFactory(mw):
             obj._mesh_indices_base = mw.mesh.map_indices_to_unmasked(mesh_inds)
             return obj
 
-        def __finalize_array__(self, obj):
+        def __array_finalize__(self, obj):
             if obj is None:
                 return
             self._mesh_indices_base = getattr(
                 obj, '_mesh_indices_base', np.array([]))
+
+        def __getitem__(self, k):
+            ret = super(JointMeshIndex, self).__getitem__(k)
+            if not isinstance(ret, np.integer):
+                ret._mesh_indices_base = self._mesh_indices_base[k]
+            return ret
 
         @property
         def to_mesh_index(self):
@@ -82,11 +88,17 @@ def MeshworkIndexFactory(mw):
                 skel_inds[skel_inds >= 0])
             return obj
 
-        def __finalize_array__(self, obj):
+        def __array_finalize__(self, obj):
             if obj is None:
                 return
-            obj._skel_indices_base = getattr(
+            self._skel_indices_base = getattr(
                 obj, '_skel_indices_base', np.array([]))
+
+        def __getitem__(self, k):
+            ret = super(JointSkeletonIndex, self).__getitem__(k)
+            if not isinstance(ret, np.integer):
+                ret._skel_indices_base = self._skel_indices_base[k]
+            return ret
 
         @property
         def to_mesh_index(self):
@@ -105,12 +117,12 @@ def MeshworkIndexFactory(mw):
             return mw._skind_to_mind_mask(self[self >= 0])
 
         @property
-        def to_mesh_regions(self):
+        def to_mesh_region(self):
             return [JointMeshIndex(x) if self[ii] >= 0 else JointMeshIndex([])
                     for ii, x in enumerate(mw._skind_regions(self))]
 
         @property
-        def to_mesh_region_points(self):
+        def to_mesh_region_point(self):
             out = mw._skind_region_first(self)
             out[self < 0] = -1
             return JointMeshIndex(out)

@@ -4,16 +4,23 @@ from ..skeleton import Skeleton
 import pandas as pd
 import numpy as np
 from scipy import sparse
-from .utils import DEFAULT_VOXEL_RESOLUTION, MeshworkIndexFactory, in1d_items, in1d_first_item, unique_column_name, compress_mesh_data, decompress_mesh_data, MaskedMeshMemory
+from .utils import (
+    DEFAULT_VOXEL_RESOLUTION,
+    MeshworkIndexFactory,
+    in1d_items,
+    in1d_first_item,
+    unique_column_name,
+    compress_mesh_data,
+    decompress_mesh_data,
+    MaskedMeshMemory,
+)
 from . import meshwork_io
 
 
 class AnchoredAnnotationManager(object):
-    def __init__(self,
-                 anchor_mesh=None,
-                 filter_mesh=None,
-                 voxel_resolution=None,
-                 ):
+    def __init__(
+        self, anchor_mesh=None, filter_mesh=None, voxel_resolution=None,
+    ):
         """Collection of dataframes anchored to a common mesh and filter.
 
         Parameters
@@ -46,7 +53,7 @@ class AnchoredAnnotationManager(object):
             del self.__dict__[key]
 
     def __repr__(self):
-        return f'Data tables: {self.table_names}'
+        return f"Data tables: {self.table_names}"
 
     def items(self):
         return self._data_tables.items()
@@ -87,13 +94,15 @@ class AnchoredAnnotationManager(object):
             else:
                 point_column = None
 
-            self._data_tables[name] = AnchoredAnnotation(name,
-                                                         table.data_original,
-                                                         self._anchor_mesh,
-                                                         point_column=point_column,
-                                                         max_distance=table._max_distance,
-                                                         index_column=index_column,
-                                                         voxel_resolution=self.voxel_resolution)
+            self._data_tables[name] = AnchoredAnnotation(
+                name,
+                table.data_original,
+                self._anchor_mesh,
+                point_column=point_column,
+                max_distance=table._max_distance,
+                index_column=index_column,
+                voxel_resolution=self.voxel_resolution,
+            )
             if self._filter_mesh is not None:
                 self._data_tables[name]._filter_data(self._filter_mesh)
 
@@ -104,30 +113,33 @@ class AnchoredAnnotationManager(object):
         else:
             self.__dict__[key] = self._data_tables[key]
 
-    def add_annotations(self,
-                        name,
-                        data,
-                        anchored=True,
-                        point_column=None,
-                        max_distance=np.inf,
-                        index_column=None,
-                        overwrite=False,
-                        ):
+    def add_annotations(
+        self,
+        name,
+        data,
+        anchored=True,
+        point_column=None,
+        max_distance=np.inf,
+        index_column=None,
+        overwrite=False,
+    ):
         "Add a dataframe to the manager"
 
         if name in self.table_names and overwrite is False:
             raise ValueError(
-                'Table name already taken. Overwrite or choose a different name.')
+                "Table name already taken. Overwrite or choose a different name."
+            )
 
-        self._data_tables[name] = AnchoredAnnotation(name,
-                                                     data,
-                                                     self._anchor_mesh,
-                                                     point_column=point_column,
-                                                     anchor_to_mesh=anchored,
-                                                     max_distance=max_distance,
-                                                     index_column=index_column,
-                                                     voxel_resolution=self.voxel_resolution,
-                                                     )
+        self._data_tables[name] = AnchoredAnnotation(
+            name,
+            data,
+            self._anchor_mesh,
+            point_column=point_column,
+            anchor_to_mesh=anchored,
+            max_distance=max_distance,
+            index_column=index_column,
+            voxel_resolution=self.voxel_resolution,
+        )
         self._data_tables[name]._register_MeshIndex(self._MeshIndex)
         self._add_attribute(name)
 
@@ -166,16 +178,17 @@ class AnchoredAnnotationManager(object):
 
 
 class AnchoredAnnotation(object):
-    def __init__(self,
-                 name,
-                 data,
-                 mesh=None,
-                 anchor_to_mesh=True,
-                 point_column=None,
-                 max_distance=np.inf,
-                 index_column=None,
-                 voxel_resolution=None,
-                 ):
+    def __init__(
+        self,
+        name,
+        data,
+        mesh=None,
+        anchor_to_mesh=True,
+        point_column=None,
+        max_distance=np.inf,
+        index_column=None,
+        voxel_resolution=None,
+    ):
 
         self._name = name
         self._data = data.reset_index()
@@ -184,24 +197,22 @@ class AnchoredAnnotation(object):
 
         self._point_column = point_column
         if index_column is None:
-            index_column = unique_column_name(
-                None, 'mesh_index_base', data)
+            index_column = unique_column_name(None, "mesh_index_base", data)
         self._index_column_base = index_column
-        self._index_column_filt = unique_column_name(
-            None, 'mesh_index', data)
+        self._index_column_filt = unique_column_name(None, "mesh_index", data)
 
-        self._orig_col_plus_index = list(
-            self._original_columns) + [self._index_column_filt]
+        self._orig_col_plus_index = list(self._original_columns) + [
+            self._index_column_filt
+        ]
         # Initalize to -1 so the column exists
         self._data[self._index_column_base] = -1
         self._data[self._index_column_filt] = -1
 
-        valid_column = unique_column_name(index_column, 'valid', data)
+        valid_column = unique_column_name(index_column, "valid", data)
         self._data[valid_column] = True
         self._valid_column = valid_column
 
-        self._mask_column = unique_column_name(
-            index_column, 'in_mask', data)
+        self._mask_column = unique_column_name(index_column, "in_mask", data)
         # Initalize in_mask to True before any subsequent masking
         self._data[self._mask_column] = True
 
@@ -295,7 +306,9 @@ class AnchoredAnnotation(object):
     @property
     def mesh_index(self):
         if self.anchored:
-            return self.MeshIndex(self._data[self._index_column_filt][self._is_included].values)
+            return self.MeshIndex(
+                self._data[self._index_column_filt][self._is_included].values
+            )
         else:
             return None
 
@@ -323,8 +336,9 @@ class AnchoredAnnotation(object):
         """
         if self._anchored:
             self._data[self._mask_column] = filter_mesh.node_mask[self._mesh_index_base]
-            self._data[self._index_column_filt] = filter_mesh.filter_unmasked_indices_padded(
-                self._mesh_index_base)
+            self._data[
+                self._index_column_filt
+            ] = filter_mesh.filter_unmasked_indices_padded(self._mesh_index_base)
 
     def _filter_query_response(self, row_filter):
         _parent = self
@@ -381,8 +395,9 @@ class AnchoredAnnotation(object):
     def _reset_filter(self):
         if self._anchored:
             self._data[self._mask_column] = True
-            self._data[self._index_column_filt] = self._anchor_mesh.filter_unmasked_indices(
-                self._mesh_index_base)
+            self._data[
+                self._index_column_filt
+            ] = self._anchor_mesh.filter_unmasked_indices(self._mesh_index_base)
 
     def _anchor_to_mesh(self, anchor_mesh):
         self._anchored = True
@@ -404,7 +419,8 @@ class Meshwork(object):
         if voxel_resolution is None:
             voxel_resolution = DEFAULT_VOXEL_RESOLUTION
         self._anno = AnchoredAnnotationManager(
-            self._mesh, voxel_resolution=voxel_resolution)
+            self._mesh, voxel_resolution=voxel_resolution
+        )
 
         self._original_mesh_data = None
         self._MeshIndex = None
@@ -488,10 +504,8 @@ class Meshwork(object):
         if self._original_mesh_data is not None:
             self._anno.remove_filter()
 
-            vs, fs, es, nm, vxsc = decompress_mesh_data(
-                *self._original_mesh_data)
-            self._mesh = Mesh(vs, fs, link_edges=es,
-                              node_mask=nm, voxel_scaling=vxsc)
+            vs, fs, es, nm, vxsc = decompress_mesh_data(*self._original_mesh_data)
+            self._mesh = Mesh(vs, fs, link_edges=es, node_mask=nm, voxel_scaling=vxsc)
 
             self._original_mesh_data = None
             if self.skeleton is not None:
@@ -506,17 +520,19 @@ class Meshwork(object):
     def anno(self):
         return self._anno
 
-    def add_annotations(self,
-                        name,
-                        data,
-                        anchored=True,
-                        point_column=None,
-                        max_distance=np.inf,
-                        index_column=None,
-                        overwrite=False,
-                        ):
+    def add_annotations(
+        self,
+        name,
+        data,
+        anchored=True,
+        point_column=None,
+        max_distance=np.inf,
+        index_column=None,
+        overwrite=False,
+    ):
         self._anno.add_annotations(
-            name, data, anchored, point_column, max_distance, index_column, overwrite)
+            name, data, anchored, point_column, max_distance, index_column, overwrite
+        )
 
     def remove_annotations(self, name):
         self._anno.remove_annotations(name)
@@ -539,40 +555,42 @@ class Meshwork(object):
                     return func(self, *args, **kwargs)
                 else:
                     return None
+
             return wrapper
 
     @property
     def skeleton(self):
         return self._skeleton
 
-    def skeletonize_mesh(self,
-                         soma_pt=None,
-                         soma_thresh_distance=7500,
-                         invalidation_distance=12000,
-                         compute_radius=True,
-                         overwrite=False):
+    def skeletonize_mesh(
+        self,
+        soma_pt=None,
+        soma_thresh_distance=7500,
+        invalidation_distance=12000,
+        compute_radius=True,
+        overwrite=False,
+    ):
         from meshparty.skeletonize import skeletonize_mesh
 
         if self._original_mesh_data is not None:
-            vs, fs, es, nm, vxsc = decompress_mesh_data(
-                *self._original_mesh_data)
-            mesh_to_sk = Mesh(vs, fs, link_edges=es,
-                              node_mask=nm, voxel_scaling=vxsc)
+            vs, fs, es, nm, vxsc = decompress_mesh_data(*self._original_mesh_data)
+            mesh_to_sk = Mesh(vs, fs, link_edges=es, node_mask=nm, voxel_scaling=vxsc)
         else:
             mesh_to_sk = self.mesh
 
         if self._skeleton is None or overwrite is True:
-            self._skeleton = skeletonize_mesh(mesh_to_sk,
-                                              soma_pt=soma_pt,
-                                              soma_radius=soma_thresh_distance,
-                                              collapse_soma=True,
-                                              invalidation_d=invalidation_distance,
-                                              compute_original_index=True,
-                                              compute_radius=compute_radius
-                                              )
+            self._skeleton = skeletonize_mesh(
+                mesh_to_sk,
+                soma_pt=soma_pt,
+                soma_radius=soma_thresh_distance,
+                collapse_soma=True,
+                invalidation_d=invalidation_distance,
+                compute_original_index=True,
+                compute_radius=compute_radius,
+            )
             self._reset_indices()
         else:
-            print('Skeleton already exists')
+            print("Skeleton already exists")
         pass
 
     # all functions of this class take filtered indices and return filtered indices.
@@ -609,13 +627,14 @@ class Meshwork(object):
 
     def _skind_regions(self, skinds):
         skinds = self.skeleton.map_indices_to_unmasked(skinds)
-        out = in1d_items(
-            self.skeleton.mesh_to_skel_map[self.mesh.node_mask], skinds)
+        out = in1d_items(self.skeleton.mesh_to_skel_map[self.mesh.node_mask], skinds)
         return out
 
     def _skind_region_first(self, skinds):
         skinds = self.skeleton.map_indices_to_unmasked(skinds)
-        return in1d_first_item(self.skeleton.mesh_to_skel_map[self.mesh.node_mask], skinds)
+        return in1d_first_item(
+            self.skeleton.mesh_to_skel_map[self.mesh.node_mask], skinds
+        )
 
     @property
     @OnlyIfSkeleton.exists
@@ -625,27 +644,27 @@ class Meshwork(object):
     @property
     @OnlyIfSkeleton.exists
     def branch_points_region(self):
-        return self.branch_points_skel.to_mesh_regions
+        return self.branch_points_skel.to_mesh_region
 
     @property
     @OnlyIfSkeleton.exists
     def branch_points(self):
-        return self.branch_points_skel.to_mesh_region_points
+        return self.branch_points_skel.to_mesh_region_point
 
     @property
     @OnlyIfSkeleton.exists
     def end_points_skel(self):
-        return self.SkeletonIndex(self.skeleton.end_points)
+        return self.SkeletonIndex(self.skeleton.end_point)
 
     @property
     @OnlyIfSkeleton.exists
     def end_points(self):
-        return self.end_points_skel.to_mesh_region_points
+        return self.end_points_skel.to_mesh_region_point
 
     @property
     @OnlyIfSkeleton.exists
     def end_points_region(self):
-        return self.end_points_skel.to_mesh_regions
+        return self.end_points_skel.to_mesh_region
 
     @property
     @OnlyIfSkeleton.exists
@@ -655,12 +674,12 @@ class Meshwork(object):
     @property
     @OnlyIfSkeleton.exists
     def root_region(self):
-        return self.root_skel.to_mesh_regions[0]
+        return self.root_skel.to_mesh_region[0]
 
     @property
     @OnlyIfSkeleton.exists
     def root(self):
-        return self.root_skel.to_mesh_region_points[0]
+        return self.root_skel.to_mesh_region_point[0]
 
     @OnlyIfSkeleton.exists
     def parent_index(self, mesh_inds, include_parent_free=False, return_as_skel=False):
@@ -669,9 +688,9 @@ class Meshwork(object):
         if return_as_skel:
             return parent_index
         if include_parent_free:
-            return parent_index.to_mesh_region_points
+            return parent_index.to_mesh_region_point
         else:
-            return parent_index[parent_index >= 0].to_mesh_region_points
+            return parent_index[parent_index >= 0].to_mesh_region_point
 
     @OnlyIfSkeleton.exists
     def child_index(self, mesh_inds, return_as_skel=False):
@@ -684,8 +703,8 @@ class Meshwork(object):
         if return_as_skel:
             return child_index
         if return_scalar:
-            return child_index[0].to_mesh_region_points
-        return [n.to_mesh_region_points for n in child_index]
+            return child_index[0].to_mesh_region_point
+        return [n.to_mesh_region_point for n in child_index]
 
     @OnlyIfSkeleton.exists
     def distance_to_root(self, mesh_indices=None):
@@ -705,8 +724,7 @@ class Meshwork(object):
         else:
             use_scalar = False
         mesh_index = self._convert_to_meshindex(mesh_index)
-        skinds_downstream = self.skeleton.downstream_nodes(
-            mesh_index.to_skel_index)
+        skinds_downstream = self.skeleton.downstream_nodes(mesh_index.to_skel_index)
         if return_as_skel:
             return skinds_downstream
         minds_downstream = []
@@ -737,8 +755,7 @@ class Meshwork(object):
         return segment_list
 
     def _distance_between(self, inds_source, inds_target, graph):
-        ds = sparse.csgraph.dijkstra(
-            graph, directed=False, indices=inds_source)
+        ds = sparse.csgraph.dijkstra(graph, directed=False, indices=inds_source)
         return ds[:, inds_target].squeeze()
 
     @OnlyIfSkeleton.exists
@@ -747,9 +764,11 @@ class Meshwork(object):
         inds_target = self._convert_to_meshindex(inds_target)
 
         if along_path:
-            return self._distance_between(inds_source.to_skel_index_padded,
-                                          inds_target.to_skel_index_padded,
-                                          self.skeleton.csgraph)
+            return self._distance_between(
+                inds_source.to_skel_index_padded,
+                inds_target.to_skel_index_padded,
+                self.skeleton.csgraph,
+            )
         else:
             return self._distance_between(inds_source, inds_target, self.mesh.csgraph)
 
@@ -757,8 +776,11 @@ class Meshwork(object):
     def path_between(self, source_index, target_index, return_as_skel=False):
         source_index = self._convert_to_meshindex(source_index)
         target_index = self._convert_to_meshindex(target_index)
-        skpath = self.SkeletonIndex(self.skeleton.path_between(
-            source_index.to_skel_index[0], target_index.to_skel_index[0]))
+        skpath = self.SkeletonIndex(
+            self.skeleton.path_between(
+                source_index.to_skel_index[0], target_index.to_skel_index[0]
+            )
+        )
         if return_as_skel:
             return skpath
         return skpath.to_mesh_index
@@ -768,7 +790,9 @@ class Meshwork(object):
         return ds < max_distance
 
     @OnlyIfSkeleton.exists
-    def within_distance(self, source_inds, max_distance, collapse=True, return_as_skel=False):
+    def within_distance(
+        self, source_inds, max_distance, collapse=True, return_as_skel=False
+    ):
         # along path or surface
         if np.isscalar(source_inds) or collapse:
             return_scalar = True
@@ -778,7 +802,8 @@ class Meshwork(object):
         source_inds = self._convert_to_meshindex(source_inds)
 
         dmask = self._within_distance(
-            source_inds.to_skel_index, self.skeleton.csgraph, max_distance)
+            source_inds.to_skel_index, self.skeleton.csgraph, max_distance
+        )
         if collapse:
             if (dmask.shape) == 1:
                 dmask = dmask.reshape(1, -1)
@@ -796,6 +821,23 @@ class Meshwork(object):
             else:
                 dmask = [self.MeshIndex(np.flatnonzero(m)) for m in dmask]
         return dmask
+
+    @OnlyIfSkeleton.exists
+    def path_length(self, inds):
+        """Get path length of collection of mesh index
+        
+        Parameters
+        ----------
+        inds : TYPE
+            Description
+        
+        Returns
+        -------
+        TYPE
+            Description
+        """
+        inds = self._convert_to_meshindex(inds)
+        return self.skeleton.path_length(inds.to_skel_mask)
 
     ###########################
     # Visualization functions #
@@ -824,15 +866,21 @@ class Meshwork(object):
 
 def load_meshwork(filename):
     meta, mesh, skel, annos, mask = meshwork_io._load_meshwork(filename)
-    mw = Meshwork(mesh, skeleton=skel, seg_id=meta.get('seg_id', None),
-                  voxel_resolution=meta.get('voxel_resolution', DEFAULT_VOXEL_RESOLUTION))
+    mw = Meshwork(
+        mesh,
+        skeleton=skel,
+        seg_id=meta.get("seg_id", None),
+        voxel_resolution=meta.get("voxel_resolution", DEFAULT_VOXEL_RESOLUTION),
+    )
     for name, data in annos.items():
-        mw.add_annotations(name=name,
-                           data=data.get('data'),
-                           anchored=data.get('anchor_to_mesh'),
-                           point_column=data.get('point_column'),
-                           max_distance=data.get('max_distance'),
-                           index_column=data.get('index_column', None))
+        mw.add_annotations(
+            name=name,
+            data=data.get("data"),
+            anchored=data.get("anchor_to_mesh"),
+            point_column=data.get("point_column"),
+            max_distance=data.get("max_distance"),
+            index_column=data.get("index_column", None),
+        )
     if not np.all(mask == mesh.node_mask):
         mw.apply_mask(mask)
     return mw
