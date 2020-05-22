@@ -1,6 +1,7 @@
 import blosc
 import numpy as np
 import numba
+from scipy import sparse
 from ..trimesh_io import Mesh
 from ..skeleton import Skeleton
 
@@ -10,7 +11,10 @@ DEFAULT_VOXEL_RESOLUTION = [4, 4, 40]
 def MeshworkIndexFactory(mw):
     class JointMeshIndex(np.ndarray):
         def __new__(cls, mesh_indices):
-            if np.array(mesh_indices).dtype is np.dtype('bool') and len(mesh_indices) == mw.mesh.n_vertices:
+            if (
+                np.array(mesh_indices).dtype is np.dtype("bool")
+                and len(mesh_indices) == mw.mesh.n_vertices
+            ):
                 mesh_indices = np.flatnonzero(mesh_indices)
 
             mesh_inds = np.asarray(mesh_indices, dtype=int)
@@ -21,8 +25,7 @@ def MeshworkIndexFactory(mw):
         def __array_finalize__(self, obj):
             if obj is None:
                 return
-            self._mesh_indices_base = getattr(
-                obj, '_mesh_indices_base', np.array([]))
+            self._mesh_indices_base = getattr(obj, "_mesh_indices_base", np.array([]))
 
         def __getitem__(self, k):
             ret = super(JointMeshIndex, self).__getitem__(k)
@@ -79,20 +82,23 @@ def MeshworkIndexFactory(mw):
 
     class JointSkeletonIndex(np.ndarray):
         def __new__(cls, skel_indices):
-            if np.array(skel_indices).dtype is np.dtype('bool') and len(skel_indices) == mw.skeleton.n_vertices:
+            if (
+                np.array(skel_indices).dtype is np.dtype("bool")
+                and len(skel_indices) == mw.skeleton.n_vertices
+            ):
                 skel_indices = np.flatnonzero(skel_indices)
 
             skel_inds = np.asarray(skel_indices, dtype=int)
             obj = skel_inds.view(cls)
             obj._skel_indices_base = mw.skeleton.map_indices_to_unmasked(
-                skel_inds[skel_inds >= 0])
+                skel_inds[skel_inds >= 0]
+            )
             return obj
 
         def __array_finalize__(self, obj):
             if obj is None:
                 return
-            self._skel_indices_base = getattr(
-                obj, '_skel_indices_base', np.array([]))
+            self._skel_indices_base = getattr(obj, "_skel_indices_base", np.array([]))
 
         def __getitem__(self, k):
             ret = super(JointSkeletonIndex, self).__getitem__(k)
@@ -118,8 +124,10 @@ def MeshworkIndexFactory(mw):
 
         @property
         def to_mesh_region(self):
-            return [JointMeshIndex(x) if self[ii] >= 0 else JointMeshIndex([])
-                    for ii, x in enumerate(mw._skind_regions(self))]
+            return [
+                JointMeshIndex(x) if self[ii] >= 0 else JointMeshIndex([])
+                for ii, x in enumerate(mw._skind_regions(self))
+            ]
 
         @property
         def to_mesh_region_point(self):
@@ -148,6 +156,7 @@ def MeshworkIndexFactory(mw):
         @property
         def to_skel_mask(self):
             return mw.skeleton.filter_unmasked_boolean(self.to_skel_mask_base)
+
     return JointMeshIndex, JointSkeletonIndex
 
 
@@ -175,10 +184,96 @@ def in1d_first_item(elements, test_vals):
     el_mask = np.isin(elements, test_vals)
     vals, ind_mask = np.unique(elements[el_mask], return_index=True)
     out = np.full(len(test_vals), -1)
-    _, slots = np.unique(
-        test_vals[np.isin(test_vals, vals)], return_inverse=True)
+    _, slots = np.unique(test_vals[np.isin(test_vals, vals)], return_inverse=True)
     out[slots] = np.flatnonzero(el_mask)[ind_mask]
     return out
+
+
+# @numba.njit
+# def _tree_density(
+#     inds,
+#     branch_points,
+#     bp_downstream,
+#     distance_to_root,
+#     cover_paths,
+#     width,
+#     len_per,
+#     weight,
+# ):
+#     norm = np.zeros(len(distance_to_root))
+#     count = np.zeros(len(distance_to_root))
+#     has_count = np.zeros(len(distance_to_root))
+#     has_count[inds] = weight
+#     has_bp = np.full(len(distance_to_root), -1)
+#     has_bp[branch_points] = branch_points 
+
+#     for path in cover_paths:
+#         path_d = distance_to_root[path]
+         
+#         for jj in path:
+#             dfrom = path_d - distance_to_root[jj]
+#             window = np.abs(dfrom) <= width
+
+#             norm[window] += len_per[jj]
+#             count[jj] = has_count[path[window]].sum()
+
+#             bps_in_window = has_bp[path[window]]
+#             bps_in_window = bps_in_window[bps_in_window>=0]
+#             for kk in bps_in_window:
+#                 init_dist = distance_to_root[jj]-distance_to_root[kk]
+#                 remaining_dist = width - init_dist
+#                 bp_dist = distance_to_root[kk]
+#                 inds_downstream = bp_downstream[kk] # Check if this is inclusive
+#                 upstream_dist = distance_to_root[inds_downstream] - bp_dist
+#                 inds_to_add = inds_downstream[upstream_dist <= remaining_dist]
+                
+#                 norm[inds_to_add] += len_per[jj]
+#                 count[jj] += has_count[inds_to_add].sum()
+#     return count, norm
+
+def _window_matrix(branch_points, bp_downstream, distance_to_root, end_paths_to_root, width):
+    """ Generate matrix such that Aij is 1 if j is within width of i.
+    """
+    has_bp = np.full(len(distance_to_root), -1)
+    has_bp[branch_points] = branch_points 
+    seen = np.full(len(distance_to_root), False)
+    
+    row_ind = []
+    col_ind = []
+    
+    for path in end_paths_to_root:
+        path_d = distance_to_root[path]
+        for jj in path:
+            dfrom = path_d - distance_to_root[jj]
+            window = np.abs(dfrom) <= width
+            bp_in_window = has_bp[path[window]]
+            bp_in_window = bp_in_window[bp_in_window>=0]
+            ind_list = [path[window]]
+            for kk in bp_in_window:
+                init_dist = np.abs(distance_to_root[jj]-distance_to_root[kk])
+                remaining_dist = width - init_dist
+                inds_downstream = bp_downstream[kk]
+                upstream_dist = distance_to_root[inds_downstream] - distance_to_root[kk]
+                inds_to_add = inds_downstream[upstream_dist <= remaining_dist]
+                ind_list.append(inds_to_add)
+            all_inds = np.unique(np.concatenate(tuple(ind_list)))
+            for kk in all_inds:
+                row_ind.append(jj)
+                col_ind.append(kk)
+            
+            if seen[jj]:
+                break
+            else:
+                seen[jj] = True
+    return np.array(row_ind), np.array(col_ind)
+
+def window_matrix(sk, width):
+    """ Generate matrix such that Aij is 1 if j is within width of i.
+    """
+    bp_downstream = {bp: sk.downstream_nodes(bp) for bp in sk.branch_points}
+    end_paths_to_root = [sk.path_to_root(ep) for ep in sk.end_points]  
+    wm_inds = _window_matrix(sk.branch_points, bp_downstream, sk.distance_to_root, end_paths_to_root, width)
+    return sparse.csr_matrix((np.ones(len(wm_inds[0])), wm_inds), shape=((sk.n_vertices, sk.n_vertices)))
 
 
 def unique_column_name(base_name, suffix, df):
@@ -197,7 +292,7 @@ def unique_column_name(base_name, suffix, df):
     return col_name
 
 
-def compress_mesh_data(mesh, cname='lz4'):
+def compress_mesh_data(mesh, cname="lz4"):
     if mesh.voxel_scaling is not None:
         vxsc = mesh.voxel_scaling
     else:

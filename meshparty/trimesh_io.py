@@ -34,6 +34,7 @@ except ImportError:
     allow_framework_client = False
 
 
+
 class EmptyMaskException(Exception):
     """Raised when applying a mask that has all zeros"""
     pass

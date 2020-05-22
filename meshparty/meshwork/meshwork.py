@@ -13,6 +13,7 @@ from .utils import (
     compress_mesh_data,
     decompress_mesh_data,
     MaskedMeshMemory,
+    window_matrix,
 )
 from . import meshwork_io
 
@@ -828,18 +829,74 @@ class Meshwork(object):
         
         Parameters
         ----------
-        inds : TYPE
-            Description
+        inds : array-like
+            Mesh indices to compute path length for. Can be in any order.
         
         Returns
         -------
-        TYPE
-            Description
+        float 
+            Path length in mesh units. 
         """
         inds = self._convert_to_meshindex(inds)
         return self.skeleton.path_length(inds.to_skel_mask)
 
-    ###########################
+    @OnlyIfSkeleton.exists
+    def linear_density(
+        self, inds, width, sample_inds=None, weight=None, exclude_root=False
+    ):
+        inds = self._convert_to_meshindex(inds)
+
+        if exclude_root:
+            # Cut root off from graph
+            g = self.skeleton.cut_graph(
+                self.skeleton.child_nodes([self.skeleton.root])[0], directed=False
+            )
+        else:
+            g = self.skeleton.csgraph_undirected
+
+        if sample_inds is not None:
+            ds = sparse.csgraph.dijkstra(g, indices=sample_inds, limit=width)
+        else:
+            ds = sparse.csgraph.dijkstra(g, limit=width)
+        valid = np.invert(np.isinf(ds))
+
+        # Get denominator
+        len_per = np.array(g.sum(axis=1) / 2).ravel()
+        len_for_index = np.array([len_per[r].sum() for r in valid])
+
+        if weight is not None:
+            valid = valid[:, inds.to_skel_index].astype(float) * weight.reshape(1, -1)
+        else:
+            valid = valid[:, inds.to_skel_index].astype(int)
+        count = np.sum(valid, axis=1)
+        return count, len_for_index, ds
+
+    def linear_density_new(self, inds, width, normalize=True, exclude_root=False):
+        W = window_matrix(self.skeleton, width)
+
+        inds = self._convert_to_meshindex(inds)
+        skinds, count = np.unique(inds.to_skel_index, return_counts=True)
+        has_inds = np.full(self.skeleton.n_vertices, 0)
+        has_inds[skinds] = count
+
+        item_count = W.dot(has_inds.reshape(-1, 1)).ravel()
+        if normalize:
+            if exclude_root:
+                g = self.skeleton.cut_graph(
+                    self.skeleton.child_nodes([self.skeleton.root])[0], directed=False
+                )
+                len_per = np.array(g.sum(axis=1) / 2).ravel()
+            else:
+                len_per = np.array(
+                    self.skeleton.csgraph_undirected.sum(axis=1) / 2
+                ).ravel()
+            norm = W.dot(len_per.reshape(-1, 1)).ravel()
+            rho = item_count / norm
+        else:
+            rho = item_count
+        return rho[self.skeleton.mesh_to_skel_map][self.mesh.node_mask]
+
+    ###k########################
     # Visualization functions #
     ###########################
 
