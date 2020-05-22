@@ -841,37 +841,7 @@ class Meshwork(object):
         return self.skeleton.path_length(inds.to_skel_mask)
 
     @OnlyIfSkeleton.exists
-    def linear_density(
-        self, inds, width, sample_inds=None, weight=None, exclude_root=False
-    ):
-        inds = self._convert_to_meshindex(inds)
-
-        if exclude_root:
-            # Cut root off from graph
-            g = self.skeleton.cut_graph(
-                self.skeleton.child_nodes([self.skeleton.root])[0], directed=False
-            )
-        else:
-            g = self.skeleton.csgraph_undirected
-
-        if sample_inds is not None:
-            ds = sparse.csgraph.dijkstra(g, indices=sample_inds, limit=width)
-        else:
-            ds = sparse.csgraph.dijkstra(g, limit=width)
-        valid = np.invert(np.isinf(ds))
-
-        # Get denominator
-        len_per = np.array(g.sum(axis=1) / 2).ravel()
-        len_for_index = np.array([len_per[r].sum() for r in valid])
-
-        if weight is not None:
-            valid = valid[:, inds.to_skel_index].astype(float) * weight.reshape(1, -1)
-        else:
-            valid = valid[:, inds.to_skel_index].astype(int)
-        count = np.sum(valid, axis=1)
-        return count, len_for_index, ds
-
-    def linear_density_new(self, inds, width, normalize=True, exclude_root=False):
+    def linear_density(self, inds, width, normalize=True, exclude_root=False):
         W = window_matrix(self.skeleton, width)
 
         inds = self._convert_to_meshindex(inds)
