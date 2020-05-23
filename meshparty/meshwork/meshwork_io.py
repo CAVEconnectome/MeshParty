@@ -134,7 +134,7 @@ def load_meshwork_annotations(filename):
     return annotation_dfs
 
 
-def _save_meshwork(filename, mw, overwrite=False, verbose=False):
+def _save_meshwork(filename, mw, overwrite=False):
     if os.path.exists(filename):
         if overwrite is False:
             raise FileExistsError()
