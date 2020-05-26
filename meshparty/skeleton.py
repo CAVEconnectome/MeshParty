@@ -444,6 +444,15 @@ class Skeleton():
             return self.filter_unmasked_indices_padded(self._rooted.mesh_to_skel_map)
 
     @property
+    def mesh_to_skel_map_base(self):
+        """ numpy.array : N_mesh length array giving the associated skeleton
+        vertex for each mesh vertex"""
+        if self._rooted.mesh_to_skel_map is None:
+            return None
+        else:
+            return self._rooted.mesh_to_skel_map
+
+    @property
     def radius(self):
         return self._rooted.radius[self.node_mask]
 

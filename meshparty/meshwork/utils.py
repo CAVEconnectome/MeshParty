@@ -189,48 +189,6 @@ def in1d_first_item(elements, test_vals):
     return out
 
 
-# @numba.njit
-# def _tree_density(
-#     inds,
-#     branch_points,
-#     bp_downstream,
-#     distance_to_root,
-#     cover_paths,
-#     width,
-#     len_per,
-#     weight,
-# ):
-#     norm = np.zeros(len(distance_to_root))
-#     count = np.zeros(len(distance_to_root))
-#     has_count = np.zeros(len(distance_to_root))
-#     has_count[inds] = weight
-#     has_bp = np.full(len(distance_to_root), -1)
-#     has_bp[branch_points] = branch_points 
-
-#     for path in cover_paths:
-#         path_d = distance_to_root[path]
-         
-#         for jj in path:
-#             dfrom = path_d - distance_to_root[jj]
-#             window = np.abs(dfrom) <= width
-
-#             norm[window] += len_per[jj]
-#             count[jj] = has_count[path[window]].sum()
-
-#             bps_in_window = has_bp[path[window]]
-#             bps_in_window = bps_in_window[bps_in_window>=0]
-#             for kk in bps_in_window:
-#                 init_dist = distance_to_root[jj]-distance_to_root[kk]
-#                 remaining_dist = width - init_dist
-#                 bp_dist = distance_to_root[kk]
-#                 inds_downstream = bp_downstream[kk] # Check if this is inclusive
-#                 upstream_dist = distance_to_root[inds_downstream] - bp_dist
-#                 inds_to_add = inds_downstream[upstream_dist <= remaining_dist]
-                
-#                 norm[inds_to_add] += len_per[jj]
-#                 count[jj] += has_count[inds_to_add].sum()
-#     return count, norm
-
 def _window_matrix(branch_points, bp_downstream, distance_to_root, end_paths_to_root, width):
     """ Generate matrix such that Aij is 1 if j is within width of i.
     """

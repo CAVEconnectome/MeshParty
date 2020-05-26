@@ -683,7 +683,7 @@ class Meshwork(object):
     def _mind_to_skind_padded(self, minds):
         minds_b = self.mesh.map_indices_to_unmasked(minds)
         skinds = self.skeleton.mesh_to_skel_map[minds_b]
-        return self.skeleton.filter_unmasked_indices_padded(skinds)
+        return skinds
 
     def _mind_to_skind(self, minds):
         mind_padded = self._mind_to_skind_padded(minds)
@@ -691,14 +691,14 @@ class Meshwork(object):
 
     def _mesh_mask_to_skel_mask(self, mesh_mask):
         mesh_mask = self.mesh.map_boolean_to_unmasked(mesh_mask)
-        skel_inds = np.unique(self.skeleton.mesh_to_skel_map[mesh_mask])
+        skel_inds = np.unique(self.skeleton.mesh_to_skel_map_base[mesh_mask])
         skel_mask = np.full(self.skeleton.unmasked_size, False)
         skel_mask[skel_inds] = True
         return skel_mask
 
     def _skind_to_mind_mask_base(self, skinds):
         skinds_b = self.skeleton.map_indices_to_unmasked(skinds)
-        minds_b_assoc = np.isin(self.skeleton.mesh_to_skel_map, skinds_b)
+        minds_b_assoc = np.isin(self.skeleton.mesh_to_skel_map_base, skinds_b)
         return minds_b_assoc
 
     def _skind_to_mind_mask(self, skinds):
@@ -712,12 +712,10 @@ class Meshwork(object):
         return sk_property[skinds]
 
     def _skind_regions(self, skinds):
-        skinds = self.skeleton.map_indices_to_unmasked(skinds)
         out = in1d_items(self.skeleton.mesh_to_skel_map[self.mesh.node_mask], skinds)
         return out
 
     def _skind_region_first(self, skinds):
-        skinds = self.skeleton.map_indices_to_unmasked(skinds)
         return in1d_first_item(
             self.skeleton.mesh_to_skel_map[self.mesh.node_mask], skinds
         )
@@ -748,7 +746,7 @@ class Meshwork(object):
     def end_points_skel(self):
         """Skeleton index of each end point
         """
-        return self.SkeletonIndex(self.skeleton.end_point)
+        return self.SkeletonIndex(self.skeleton.end_points)
 
     @property
     @OnlyIfSkeleton.exists
@@ -1058,7 +1056,7 @@ class Meshwork(object):
 
     @OnlyIfSkeleton.exists
     def path_length(self, inds):
-        """Get path length of collection of mesh index
+        """Get path length of collection of mesh indices
         
         Parameters
         ----------
@@ -1072,6 +1070,10 @@ class Meshwork(object):
         """
         inds = self._convert_to_meshindex(inds)
         return self.skeleton.path_length(inds.to_skel_mask)
+
+    @OnlyIfSkeleton.exists
+    def total_path_length(self):
+        return self.skeleton.csgraph.sum()
 
     @OnlyIfSkeleton.exists
     def linear_density(
@@ -1118,7 +1120,8 @@ class Meshwork(object):
                     self.skeleton.csgraph_undirected.sum(axis=1) / 2
                 ).ravel()
             norm = W.dot(len_per.reshape(-1, 1)).ravel()
-            rho = item_count / norm
+            with np.errstate(divide="ignore"):
+                rho = item_count / norm
         else:
             rho = item_count
         return rho[self.skeleton.mesh_to_skel_map][self.mesh.node_mask]
