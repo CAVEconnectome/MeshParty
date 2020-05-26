@@ -639,6 +639,7 @@ class Meshwork(object):
         soma_thresh_distance=7500,
         invalidation_distance=12000,
         compute_radius=True,
+        shape_function="single",
         overwrite=False,
     ):
         """Skeletonize the anchor mesh. Always uses the mesh as used to initialize the class instance.
@@ -653,6 +654,8 @@ class Meshwork(object):
             Invalidation distance for the TEASAR skeletonization. Default is 12000.
         compute_radius : bool, optional
             If True, computes the "shape distance function" giving the diameter of the mesh at the skeleton point.
+        shape_function: 'single' or 'cone', optional
+            Determines whether to use a single ray or a cone of rays to determine mesh diameter.
         overwrite : bool, optional
             If True, will run even if an existing skeletonization is present.
         """
@@ -673,6 +676,7 @@ class Meshwork(object):
                 invalidation_d=invalidation_distance,
                 compute_original_index=True,
                 compute_radius=compute_radius,
+                shape_function=shape_function,
             )
             self._reset_indices()
         else:
@@ -707,10 +711,6 @@ class Meshwork(object):
     def _skind_to_mind_index(self, skinds):
         return np.flatnonzero(self._skind_to_mind_mask(skinds))
 
-    def _skeleton_property_to_mesh(self, sk_property, minds):
-        skinds = self._mind_to_skind(minds)
-        return sk_property[skinds]
-
     def _skind_regions(self, skinds):
         out = in1d_items(self.skeleton.mesh_to_skel_map[self.mesh.node_mask], skinds)
         return out
@@ -719,6 +719,20 @@ class Meshwork(object):
         return in1d_first_item(
             self.skeleton.mesh_to_skel_map[self.mesh.node_mask], skinds
         )
+
+    @OnlyIfSkeleton.exists
+    def skeleton_property_to_mesh(
+        self, skeleton_property, mesh_inds=None, no_map_value=-1.0
+    ):
+        """Map a property at skeleton points to the mesh, converting nodes without a clear mapping to zero.
+        """
+        if mesh_inds is None:
+            mesh_inds = np.arange(self.mesh.n_vertices)
+        mesh_inds = self._convert_to_meshindex(mesh_inds)
+        mesh_property = np.full(len(mesh_inds), no_map_value)
+        skids = mesh_inds.to_skel_index_padded
+        mesh_property[skids >= 0] = skeleton_property[skids[skids >= 0]]
+        return mesh_property
 
     @property
     @OnlyIfSkeleton.exists
@@ -1077,7 +1091,13 @@ class Meshwork(object):
 
     @OnlyIfSkeleton.exists
     def linear_density(
-        self, inds, width, weight=None, normalize=True, exclude_root=False
+        self,
+        inds,
+        width,
+        weight=None,
+        normalize=True,
+        normalize_by="path",
+        exclude_root=False,
     ):
         """Compute a sliding window average linear density of points across the object
         
@@ -1151,6 +1171,11 @@ class Meshwork(object):
     def skeleton_actor(self, **kwargs):
         if self.skeleton is not None:
             return trimesh_vtk.skeleton_actor(self.skeleton, **kwargs)
+
+    @OnlyIfSkeleton.exists
+    def radius(self, inds):
+        inds = self._convert_to_meshindex(inds)
+        return self.skeleton.radius[inds.to_skel_index]
 
     ##########
     # Saving #

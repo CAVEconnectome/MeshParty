@@ -8,15 +8,14 @@ from tqdm import trange, tqdm
 from meshparty.trimesh_io import Mesh
 from meshparty.skeleton import Skeleton
 from collections import defaultdict
-import trimesh.ray
-from trimesh.ray import ray_pyembree
+from .ray_tracing import ray_trace_distance, shape_diameter_function
 import fastremap
 import logging
 
 
 def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True,
                      invalidation_d=12000, smooth_vertices=False, compute_radius=True,
-                     compute_original_index=True, verbose=True):
+                     shape_function='single', compute_original_index=True, verbose=True):
     '''
     Build skeleton object from mesh skeletonization
 
@@ -98,7 +97,10 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True,
             mesh_index = np.append(mesh_index, -1)
         props['mesh_index'] = mesh_index
     if compute_radius is True:
-        rs = ray_trace_distance(orig_skel_index[vert_filter], mesh)
+        if shape_function == 'single':
+            rs = ray_trace_distance(orig_skel_index[vert_filter], mesh)
+        elif shape_function =='cone':
+            rs = shape_diameter_function(orig_skel_index[vert_filter], mesh)
         if collapse_soma:
             rs = np.append(rs, soma_radius)
         props['rs'] = rs
@@ -645,60 +647,60 @@ def collapse_soma_skeleton(soma_pt, verts, edges, soma_d_thresh=12000, mesh_to_s
         return simple_verts, simple_edges
 
 
-def ray_trace_distance(vertex_inds, mesh, max_iter=10, rand_jitter=0.001, verbose=False, ray_inter=None):
-    '''
-    Compute distance to opposite side of the mesh for specified vertex indices on the mesh.
+# def ray_trace_distance(vertex_inds, mesh, max_iter=10, rand_jitter=0.001, verbose=False, ray_inter=None):
+#     '''
+#     Compute distance to opposite side of the mesh for specified vertex indices on the mesh.
 
-    Parameters
-    ----------
-    vertex_inds : np.array
-        a K long set of indices into the mesh.vertices that you want to perform ray tracing on
-    mesh : :obj:`meshparty.trimesh_io.Mesh`
-        mesh to perform ray tracing on
-    max_iter : int
-        maximum retries to attempt in order to get a proper sdf measure (default 10)
-    rand_jitter : float
-        the amplitude of gaussian jitter on the vertex normal to add on each iteration (default .001)
-    verbose : bool
-        whether to print debug statements (default False)
-    ray_inter: ray_pyembree.RayMeshIntersector
-        a ray intercept object pre-initialized with a mesh, in case y ou are doing this many times
-        and want to avoid paying initialization costs. (default None) will initialize it for you
+#     Parameters
+#     ----------
+#     vertex_inds : np.array
+#         a K long set of indices into the mesh.vertices that you want to perform ray tracing on
+#     mesh : :obj:`meshparty.trimesh_io.Mesh`
+#         mesh to perform ray tracing on
+#     max_iter : int
+#         maximum retries to attempt in order to get a proper sdf measure (default 10)
+#     rand_jitter : float
+#         the amplitude of gaussian jitter on the vertex normal to add on each iteration (default .001)
+#     verbose : bool
+#         whether to print debug statements (default False)
+#     ray_inter: ray_pyembree.RayMeshIntersector
+#         a ray intercept object pre-initialized with a mesh, in case y ou are doing this many times
+#         and want to avoid paying initialization costs. (default None) will initialize it for you
 
-    Returns
-    -------
-    np.array
-        rs, a K long array of sdf values. rays with no result after max_iters will contain zeros.
+#     Returns
+#     -------
+#     np.array
+#         rs, a K long array of sdf values. rays with no result after max_iters will contain zeros.
 
-    '''
-    if not trimesh.ray.has_embree:
-        logging.warning(
-            "calculating rays without pyembree, conda install pyembree for large speedup")
+#     '''
+#     if not trimesh.ray.has_embree:
+#         logging.warning(
+#             "calculating rays without pyembree, conda install pyembree for large speedup")
 
-    if ray_inter is None:
-        ray_inter = ray_pyembree.RayMeshIntersector(mesh)
+#     if ray_inter is None:
+#         ray_inter = ray_pyembree.RayMeshIntersector(mesh)
 
-    rs = np.zeros(len(vertex_inds))
-    good_rs = np.full(len(rs), False)
+#     rs = np.zeros(len(vertex_inds))
+#     good_rs = np.full(len(rs), False)
 
-    it = 0
-    while not np.all(good_rs):
-        if verbose:
-            print(np.sum(~good_rs))
-        blank_inds = np.where(~good_rs)[0]
-        starts = (mesh.vertices-mesh.vertex_normals)[vertex_inds, :][~good_rs, :]
-        vs = -mesh.vertex_normals[vertex_inds, :] \
-            + (1.2**it)*rand_jitter*np.random.rand(*mesh.vertex_normals[vertex_inds, :].shape)
-        vs = vs[~good_rs, :]
+#     it = 0
+#     while not np.all(good_rs):
+#         if verbose:
+#             print(np.sum(~good_rs))
+#         blank_inds = np.where(~good_rs)[0]
+#         starts = (mesh.vertices-mesh.vertex_normals)[vertex_inds, :][~good_rs, :]
+#         vs = -mesh.vertex_normals[vertex_inds, :] \
+#             + (1.2**it)*rand_jitter*np.random.rand(*mesh.vertex_normals[vertex_inds, :].shape)
+#         vs = vs[~good_rs, :]
 
-        rtrace = ray_inter.intersects_location(starts, vs, multiple_hits=False)
+#         rtrace = ray_inter.intersects_location(starts, vs, multiple_hits=False)
 
-        if len(rtrace[0] > 0):
-            # radius values
-            rs[blank_inds[rtrace[1]]] = np.linalg.norm(
-                mesh.vertices[vertex_inds, :][rtrace[1]]-rtrace[0], axis=1)
-            good_rs[blank_inds[rtrace[1]]] = True
-        it += 1
-        if it > max_iter:
-            break
-    return rs
+#         if len(rtrace[0] > 0):
+#             # radius values
+#             rs[blank_inds[rtrace[1]]] = np.linalg.norm(
+#                 mesh.vertices[vertex_inds, :][rtrace[1]]-rtrace[0], axis=1)
+#             good_rs[blank_inds[rtrace[1]]] = True
+#         it += 1
+#         if it > max_iter:
+#             break
+#     return rs

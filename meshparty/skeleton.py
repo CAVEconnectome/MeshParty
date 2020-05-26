@@ -474,7 +474,7 @@ class Skeleton():
 
     @property
     def csgraph_binary_undirected(self):
-        return self._rooted.csgraph_undirected[:, self.node_mask][self.node_mask]
+        return self._rooted.csgraph_binary_undirected[:, self.node_mask][self.node_mask]
 
     ##################
     # Voxel scalings #
