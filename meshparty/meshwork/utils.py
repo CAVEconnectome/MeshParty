@@ -33,6 +33,22 @@ def MeshworkIndexFactory(mw):
                 ret._mesh_indices_base = self._mesh_indices_base[k]
             return ret
 
+        def __eq__(self, other):
+            return np.array(self) == other
+
+        def __lt__(self, other):
+            return np.array(self) < other
+
+        def __le__(self, other):
+            return np.array(self) <= other
+
+        def __gt__(self, other):
+            return np.array(self) > other
+
+        def __ge__(self, other):
+            return np.array(self) >= other
+
+
         @property
         def to_array(self):
             return np.array(self)
@@ -67,7 +83,7 @@ def MeshworkIndexFactory(mw):
         def to_skel_index(self):
             if mw.skeleton is None:
                 return None
-            return JointSkeletonIndex(mw._mind_to_skind(self))
+            return JointSkeletonIndex(np.unique(mw._mind_to_skind(self)))
 
         @property
         def to_skel_index_padded(self):
@@ -109,6 +125,21 @@ def MeshworkIndexFactory(mw):
             if not isinstance(ret, np.integer):
                 ret._skel_indices_base = self._skel_indices_base[k]
             return ret
+
+        def __eq__(self, other):
+            return np.array(self) == other
+
+        def __lt__(self, other):
+            return np.array(self) < other
+
+        def __le__(self, other):
+            return np.array(self) <= other
+
+        def __gt__(self, other):
+            return np.array(self) > other
+
+        def __ge__(self, other):
+            return np.array(self) >= other
 
         @property
         def to_mesh_index(self):
