@@ -203,7 +203,8 @@ def shape_diameter_function(mesh_inds, mesh, num_points=30, cone_angle=np.pi/3):
     hit_rows = rtrace[1]
     ds = np.linalg.norm(rtrace[0] - starts[hit_rows], axis=1)
     angles = np.arccos(np.sum(mesh.face_normals[rtrace[2]] * vs[hit_rows], axis=1))
-    weights = 1/angles
+    with np.errstate(divide='ignore', invalid='ignore'):
+        weights = 1/angles
     good_rows = np.isfinite(weights)
     
     rs = all_angle_weighted_distances(ds[good_rows], angles[good_rows], weights[good_rows], rep_inds[hit_rows[good_rows]], mesh_inds)

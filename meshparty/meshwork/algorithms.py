@@ -1,7 +1,65 @@
 import numpy as np
 import numba
 
-def distribution_split_entropy( counts ):
+#####################
+# Split by synapses #
+#####################
+
+def split_axon_by_synapses(sk, pre_inds, post_inds, return_quality=True, extend_to_segment=True):
+    """Split a skeleton where the most paths flow between
+    pre and postsynaptic synapse points.
+    
+    Parameters
+    ----------
+    sk : skeleton.Skeleton 
+        Skeleton with N vertices to split
+    pre_inds : array
+        Indices of presynaptic sites
+    post_inds : array
+        Indices of postsynaptic sites
+    return_quality : bool, optional
+        If True (default), also returns the split quality
+    extend_to_segment : bool, optional
+        If True (default), places the cut at the base of the segment where the max flow occurs.
+    
+    Returns
+    -------
+    is_axon : N array
+        Boolean array that is True on the axon (presynaptic) side of the neuron.
+    split_quality : float
+        If return_quality is True, this is a number between 0 and 1 measuring how well the split
+        segregates inputs from outputs. 1 is fully segregated, 0 is fully mixed.
+    """
+    axon_split = _find_axon_split(sk, pre_inds, post_inds, return_quality=return_quality, extend_to_segment=True)
+    if return_quality:
+        axon_split_ind, split_quality = axon_split
+    else:
+        axon_split_ind = axon_split
+    is_axon = np.full(len(sk.vertices), False)
+    is_axon[ sk.downstream_nodes(axon_split_ind) ] = True
+    
+    if return_quality:
+        return is_axon, split_quality
+    else:
+        return is_axon
+
+
+
+def axon_split_quality(is_axon, pre_inds, post_inds):
+    axon_pre = sum(is_axon[pre_inds])
+    axon_post = sum(is_axon[post_inds])
+    dend_pre = sum(~is_axon[pre_inds])
+    dend_post = sum(~is_axon[post_inds])
+
+    counts = np.array([[axon_pre, axon_post],[dend_pre, dend_post]])
+    observed_ent = _distribution_split_entropy( counts )
+    
+    unsplit_ent = _distribution_split_entropy([[len(pre_inds), len(post_inds)]] )
+
+    return 1-observed_ent/unsplit_ent
+
+
+def _distribution_split_entropy( counts ):
     if np.sum(counts)==0:
         return 0
     ps = np.divide(counts, np.sum(counts, axis=1)[:,np.newaxis], where=np.sum(counts, axis=1)[:,np.newaxis]>0)
@@ -62,7 +120,8 @@ def _find_axon_split(sk, pre_inds, post_inds, return_quality=True, extend_to_seg
 
     if extend_to_segment:
         relseg = sk.segment_map[close_vind]
-        axon_split_ind = sk.segments[relseg][-1]
+        min_ind = np.argmin(sk.distance_to_root[sk.segments[relseg]])
+        axon_split_ind = sk.segments[relseg][min_ind]
     else:
         axon_split_ind = close_vind
     
@@ -71,32 +130,3 @@ def _find_axon_split(sk, pre_inds, post_inds, return_quality=True, extend_to_seg
     else:
         return axon_split_ind
 
-
-def split_axon_by_synapses(sk, pre_inds, post_inds, return_quality=True, extend_to_segment=True):
-    axon_split = _find_axon_split(sk, pre_inds, post_inds, return_quality=return_quality, extend_to_segment=True)
-    if return_quality:
-        axon_split_ind, split_quality = axon_split
-    else:
-        axon_split_ind = axon_split
-    is_axon = np.full(len(sk.vertices), False)
-    is_axon[ sk.downstream_nodes(axon_split_ind) ] = True
-    
-    if return_quality:
-        return is_axon, split_quality
-    else:
-        return is_axon
-
-
-
-def axon_split_quality(is_axon, pre_inds, post_inds):
-    axon_pre = sum(is_axon[pre_inds])
-    axon_post = sum(is_axon[post_inds])
-    dend_pre = sum(~is_axon[pre_inds])
-    dend_post = sum(~is_axon[post_inds])
-
-    counts = np.array([[axon_pre, axon_post],[dend_pre, dend_post]])
-    observed_ent = distribution_split_entropy( counts )
-    
-    unsplit_ent = distribution_split_entropy([[len(pre_inds), len(post_inds)]] )
-
-    return 1-observed_ent/unsplit_ent

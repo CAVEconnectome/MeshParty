@@ -724,7 +724,8 @@ class Meshwork(object):
     def skeleton_property_to_mesh(
         self, skeleton_property, mesh_inds=None, no_map_value=-1.0
     ):
-        """Map a property at skeleton points to the mesh, converting nodes without a clear mapping to zero.
+        """Map a property at skeleton points to the mesh, converting nodes
+        without a clear mapping to a specified value (default -1).
         """
         if mesh_inds is None:
             mesh_inds = np.arange(self.mesh.n_vertices)
@@ -908,6 +909,15 @@ class Meshwork(object):
             minds_downstream = minds_downstream[0]
         return minds_downstream
 
+    def _get_segment_list(self, seg_inds, return_as_skel):
+        segment_list = []
+        for seg in seg_inds:
+            if return_as_skel is False:
+                segment_list.append(self.skeleton.segments[seg].to_mesh_index)
+            else:
+                segment_list.append(self.skeleton.segments[seg])
+        return segment_list
+
     @OnlyIfSkeleton.exists
     def same_segment(self, mesh_inds, return_as_skel=False):
         """Get all indices within the same segment (region between branch/end points)
@@ -932,16 +942,29 @@ class Meshwork(object):
 
         mesh_inds = self._convert_to_meshindex(mesh_inds)
         segs = self.skeleton.segment_map[mesh_inds.to_skel_index]
-        segment_list = []
-        for seg in segs:
-            if return_as_skel is False:
-                segment_list.append(self.skeleton.segments[seg].to_mesh_index)
-            else:
-                segment_list.append(self.skeleton.segments[seg])
+        segment_list = self._get_segment_list(segs, return_as_skel)
 
         if return_scalar:
             segment_list = segment_list[0]
         return segment_list
+
+    @OnlyIfSkeleton.exists
+    def segments(self, return_as_skel=False):
+        """Get all segments (regions between topological points)
+        
+        Parameters
+        ----------
+        return_as_skel : bool, optional
+            Description
+        
+        Returns
+        -------
+        TYPE
+            Description
+        """
+        return self._get_segment_list(
+            np.arange(len(self.skeleton.segments)), return_as_skel
+        )
 
     def _distance_between(self, inds_source, inds_target, graph, squeeze):
         ds = sparse.csgraph.dijkstra(graph, directed=False, indices=inds_source)
@@ -977,6 +1000,7 @@ class Meshwork(object):
                 inds_source.to_skel_index_padded,
                 inds_target.to_skel_index_padded,
                 self.skeleton.csgraph,
+                squeeze=False,
             )
         else:
             return self._distance_between(
@@ -1069,7 +1093,7 @@ class Meshwork(object):
         return dmask
 
     @OnlyIfSkeleton.exists
-    def path_length(self, inds):
+    def path_length(self, inds=None):
         """Get path length of collection of mesh indices
         
         Parameters
@@ -1082,6 +1106,8 @@ class Meshwork(object):
         float 
             Path length in mesh units. 
         """
+        if inds is None:
+            return self.skeleton.path_length()
         inds = self._convert_to_meshindex(inds)
         return self.skeleton.path_length(inds.to_skel_mask)
 
@@ -1091,13 +1117,7 @@ class Meshwork(object):
 
     @OnlyIfSkeleton.exists
     def linear_density(
-        self,
-        inds,
-        width,
-        weight=None,
-        normalize=True,
-        normalize_by="path",
-        exclude_root=False,
+        self, inds, width, weight=None, normalize=True, exclude_root=False,
     ):
         """Compute a sliding window average linear density of points across the object
         
@@ -1139,6 +1159,7 @@ class Meshwork(object):
                 len_per = np.array(
                     self.skeleton.csgraph_undirected.sum(axis=1) / 2
                 ).ravel()
+
             norm = W.dot(len_per.reshape(-1, 1)).ravel()
             with np.errstate(divide="ignore"):
                 rho = item_count / norm

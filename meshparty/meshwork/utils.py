@@ -34,6 +34,10 @@ def MeshworkIndexFactory(mw):
             return ret
 
         @property
+        def to_array(self):
+            return np.array(self)
+
+        @property
         def to_mesh_index(self):
             return self
 
@@ -109,6 +113,10 @@ def MeshworkIndexFactory(mw):
         @property
         def to_mesh_index(self):
             return JointMeshIndex(mw._skind_to_mind_index(self[self >= 0]))
+
+        @property
+        def to_array(self):
+            return np.array(self)
 
         @property
         def to_mesh_index_base(self):

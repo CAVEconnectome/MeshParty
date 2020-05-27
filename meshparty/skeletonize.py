@@ -102,12 +102,35 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True,
         elif shape_function =='cone':
             rs = shape_diameter_function(orig_skel_index[vert_filter], mesh)
         if collapse_soma:
-            rs = np.append(rs, soma_radius)
+            rs = np.append(rs, soma_radius)      
         props['rs'] = rs
 
     sk = Skeleton(new_v, new_e, mesh_to_skel_map=skel_map_full_mesh,
                   mesh_index=props.get('mesh_index', None), radius=props.get('rs', None), root=root_ind)
+
+    if compute_radius is True:
+        _remove_nan_radius(sk)
     return sk
+
+
+def _remove_nan_radius(sk, set_unfixed_to_lowest=True):
+
+    last_numnans = np.inf
+    nanlocs = np.flatnonzero(np.isnan(sk.radius))
+    numnans = len(nanlocs)
+    while numnans > 0 and last_numnans > numnans:
+        for nanloc in nanlocs:
+            sparse_row = sk.csgraph_binary_undirected[nanloc].toarray().ravel()
+            prod = sparse_row * sk.radius
+            with np.errstate(divide='ignore', invalid='ignore'):
+                new_rad = np.nansum(prod) / np.nansum(prod>0)
+            sk._rooted.radius[nanloc] = new_rad
+        last_numnans = numnans
+        nanlocs = np.flatnonzero(np.isnan(sk.radius))
+        numnans = len(nanlocs)
+
+    if numnans > 0 and set_unfixed_to_lowest:
+        sk._rooted.radius[nanlocs] = np.nanmin(sk.radius)
 
 
 def calculate_skeleton_paths_on_mesh(mesh, soma_pt=None, soma_thresh=7500,
