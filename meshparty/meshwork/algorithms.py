@@ -38,10 +38,15 @@ def split_axon_by_synapses(
     if nrn.skeleton is None:
         raise ValueError("Meshwork must have skeleton")
 
+    pre_inds = nrn._convert_to_meshindex(pre_inds)
+    post_inds = nrn._convert_to_meshindex(post_inds)
+    pre_inds = pre_inds[pre_inds.to_skel_index_padded>=0]
+    post_inds = post_inds[post_inds.to_skel_index_padded>=0]
+
     axon_split = _find_axon_split(
         nrn.skeleton,
-        pre_inds,
-        post_inds,
+        pre_inds.to_skel_index_padded,
+        post_inds.to_skel_index_padded,
         return_quality=return_quality,
         extend_to_segment=extend_to_segment,
     )
@@ -50,9 +55,8 @@ def split_axon_by_synapses(
         axon_split_ind, split_quality = axon_split
     else:
         axon_split_ind = axon_split
-    is_axon_sk = np.full(len(sk.vertices), False)
-    is_axon_sk[sk.downstream_nodes(axon_split_ind)] = True
-
+    is_axon_sk = np.full(len(nrn.skeleton.vertices), False)
+    is_axon_sk[nrn.skeleton.downstream_nodes(axon_split_ind)] = True
     is_axon = nrn.SkeletonIndex(np.flatnonzero(is_axon_sk)).to_mesh_index
 
     if return_quality:
