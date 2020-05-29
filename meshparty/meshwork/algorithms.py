@@ -40,8 +40,8 @@ def split_axon_by_synapses(
 
     pre_inds = nrn._convert_to_meshindex(pre_inds)
     post_inds = nrn._convert_to_meshindex(post_inds)
-    pre_inds = pre_inds[pre_inds.to_skel_index_padded>=0]
-    post_inds = post_inds[post_inds.to_skel_index_padded>=0]
+    pre_inds = pre_inds[pre_inds.to_skel_index_padded >= 0]
+    post_inds = post_inds[post_inds.to_skel_index_padded >= 0]
 
     axon_split = _find_axon_split(
         nrn.skeleton,
@@ -167,3 +167,93 @@ def _find_axon_split(
         return axon_split_ind, split_quality
     else:
         return axon_split_ind
+
+        ############################
+        # Topological branch order #
+        ############################
+
+
+def branch_order(nrn, return_as_skel=False):
+    """Compute simple branch order, counting how many branch points are between a node and root.
+    
+    Parameters
+    ----------
+    nrn : Meshwork
+        Meshwork with skeleton
+    return_as_skel : bool, optional
+        If True, returns an array for the skeleton instead of the mesh. Default is False.
+    
+    Returns
+    -------
+    branch_order
+        N-length array containing the branch order for each mesh (or skeleton) vertex.
+    """
+    if nrn.skeleton is None:
+        raise ValueError("Meshwork must have skeleton")
+
+    has_bp = np.zeros(nrn.skeleton.n_vertices)
+    has_bp[nrn.skeleton.branch_points] = 1
+
+    covers = nrn.skeleton.cover_paths
+    branch_order = np.zeros(nrn.skeleton.n_vertices)
+    for cp in covers:
+        path = cp[::-1]
+        root_ind = nrn.skeleton.parent_nodes(path[0])
+        if root_ind != -1:
+            root_order = branch_order[root_ind]
+        else:
+            root_order = 0
+        branch_order[path] = np.cumsum(has_bp[path]) + root_order
+
+    if return_as_skel:
+        return branch_order
+    else:
+        return nrn.skeleton_property_to_mesh(branch_order, no_map_value=-1)
+
+
+@numba.njit
+def _strahler_path(baseline):
+    out = np.full(len(baseline), -1, dtype=np.int64)
+    last_val = 1
+    for ii in np.arange(len(out)):
+        if baseline[ii] > last_val:
+            last_val = baseline[ii]
+        elif baseline[ii] == last_val:
+            last_val += 1
+        out[ii] = last_val
+    return out
+
+
+def strahler_order(nrn, return_as_skel=False):
+    """Computes strahler number. Tips have strahler number 1, and strahler number increments
+    when a two branches with the same strahler number merge.
+    
+    Parameters
+    ----------
+    nrn : Meshwork
+        Meshwork neuron with skeleton
+    return_as_skel : bool, optional
+        Description
+    
+    Returns
+    -------
+    TYPE
+        Description
+    """
+    if nrn.skeleton is None:
+        raise ValueError("Meshwork must have skeleton")
+    covers = nrn.skeleton.cover_paths
+    strahler = np.full(nrn.skeleton.n_vertices, -1)
+    for cp in covers[::-1]:
+        new_vals = _strahler_path(strahler[cp])
+        strahler[cp] = new_vals
+        pind = nrn.skeleton.parent_nodes(cp[-1])
+        if pind >= 0:
+            if strahler[cp[-1]] > strahler[pind]:
+                strahler[pind] = strahler[cp[-1]]
+            elif strahler[cp[-1]] == strahler[pind]:
+                strahler[pind] += 1
+    if return_as_skel:
+        return strahler
+    else:
+        return nrn.skeleton_property_to_mesh(strahler, no_map_value=-1)

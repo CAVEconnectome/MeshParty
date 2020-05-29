@@ -774,11 +774,15 @@ class Skeleton():
         List of arrays
             A list whose ith element is the children of the ith element of vinds.
         """
+
+        return_single = False
         if np.isscalar(vinds):
             vinds = [vinds]
             return_single = True
-        else:
-            return_single = False
+        elif issubclass(type(vinds), np.ndarray):
+            if len(vinds.shape) == 0:
+                vinds = vinds.reshape(1)
+                return_single = True
 
         cinds = []
         for vind in vinds:

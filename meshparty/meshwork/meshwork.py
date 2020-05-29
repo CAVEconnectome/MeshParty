@@ -523,7 +523,8 @@ class Meshwork(object):
             Array with the same number of elements as mesh vertices. True elements are kept,
             False elements are masked out.
         """
-        self._original_mesh_data = compress_mesh_data(self.mesh)
+        if self._orginal_mesh_data is None:
+            self._original_mesh_data = compress_mesh_data(self.mesh)
 
         if self.skeleton is not None:
             sk_mask = self._mesh_mask_to_skel_mask(mask)
@@ -1103,7 +1104,7 @@ class Meshwork(object):
         
         Returns
         -------
-        float 
+        path_length : float 
             Path length in mesh units. 
         """
         if inds is None:
@@ -1137,6 +1138,12 @@ class Meshwork(object):
             well-approximated by a line (e.g. a cell body.). The density for those vertices
             will be infinite or nan.
             Default is False.
+
+
+        Returns
+        -------
+        density_estimate : array
+            N-length array of density at all mesh vertices.
         """
         W = window_matrix(self.skeleton, width)
 
@@ -1225,7 +1232,8 @@ def load_meshwork(filename):
     
     Returns
     -------
-    Meshwork
+    meshwork : Meshwork
+        Meshwork object from file
     """
     meta, mesh, skel, annos, mask = meshwork_io._load_meshwork(filename)
     mw = Meshwork(
