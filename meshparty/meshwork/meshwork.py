@@ -523,7 +523,7 @@ class Meshwork(object):
             Array with the same number of elements as mesh vertices. True elements are kept,
             False elements are masked out.
         """
-        if self._orginal_mesh_data is None:
+        if self._original_mesh_data is None:
             self._original_mesh_data = compress_mesh_data(self.mesh)
 
         if self.skeleton is not None:
