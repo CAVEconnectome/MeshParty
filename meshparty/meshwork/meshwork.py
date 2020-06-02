@@ -4,6 +4,7 @@ from ..skeleton import Skeleton
 import pandas as pd
 import numpy as np
 from scipy import sparse
+from functools import wraps
 from .utils import (
     DEFAULT_VOXEL_RESOLUTION,
     MeshworkIndexFactory,
@@ -231,7 +232,7 @@ class AnchoredAnnotation(object):
             self._anchor_points(mesh)
 
     def __repr__(self):
-        return self.df.head().__repr__()
+        return self.df.__repr__()
 
     def _repr_html_(self):
         return self.df.head()._repr_html_()
@@ -621,6 +622,7 @@ class Meshwork(object):
 
         @staticmethod
         def exists(func):
+            @wraps(func)
             def wrapper(self, *args, **kwargs):
                 if self.skeleton is not None:
                     return func(self, *args, **kwargs)
@@ -1078,8 +1080,8 @@ class Meshwork(object):
         if collapse:
             if (dmask.shape) == 1:
                 dmask = dmask.reshape(1, -1)
-            dmask = np.any(dmask, axis=0)
-
+            dmask = np.any(dmask, axis=0).reshape(1, -1)
+            return_scalar = True
         if return_as_skel:
             if return_scalar:
                 dmask = self.SkeletonIndex(np.flatnonzero(dmask))
@@ -1200,10 +1202,10 @@ class Meshwork(object):
         if self.skeleton is not None:
             return trimesh_vtk.skeleton_actor(self.skeleton, **kwargs)
 
+    @property
     @OnlyIfSkeleton.exists
-    def radius(self, inds):
-        inds = self._convert_to_meshindex(inds)
-        return self.skeleton.radius[inds.to_skel_index]
+    def radius(self):
+        return self.skeleton_property_to_mesh(self.skeleton.radius)
 
     ##########
     # Saving #

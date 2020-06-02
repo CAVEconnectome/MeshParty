@@ -48,7 +48,6 @@ def MeshworkIndexFactory(mw):
         def __ge__(self, other):
             return np.array(self) >= other
 
-
         @property
         def to_array(self):
             return np.array(self)
@@ -228,49 +227,77 @@ def in1d_first_item(elements, test_vals):
     return out
 
 
-def _window_matrix(branch_points, bp_downstream, distance_to_root, end_paths_to_root, width):
+def _window_matrix(
+    branch_points,
+    bp_downstream,
+    distance_to_root,
+    end_paths_to_root,
+    width,
+    dist_func=None,
+):
     """ Generate matrix such that Aij is 1 if j is within width of i.
     """
     has_bp = np.full(len(distance_to_root), -1)
-    has_bp[branch_points] = branch_points 
+    has_bp[branch_points] = branch_points
     seen = np.full(len(distance_to_root), False)
-    
+
     row_ind = []
     col_ind = []
-    
+    dist = []
+
     for path in end_paths_to_root:
         path_d = distance_to_root[path]
         for jj in path:
             dfrom = path_d - distance_to_root[jj]
             window = np.abs(dfrom) <= width
             bp_in_window = has_bp[path[window]]
-            bp_in_window = bp_in_window[bp_in_window>=0]
+            bp_in_window = bp_in_window[bp_in_window >= 0]
             ind_list = [path[window]]
+            dist_list = [dfrom[window]]
             for kk in bp_in_window:
-                init_dist = np.abs(distance_to_root[jj]-distance_to_root[kk])
+                init_dist = np.abs(distance_to_root[jj] - distance_to_root[kk])
                 remaining_dist = width - init_dist
                 inds_downstream = bp_downstream[kk]
-                upstream_dist = distance_to_root[inds_downstream] - distance_to_root[kk]
-                inds_to_add = inds_downstream[upstream_dist <= remaining_dist]
+                downstream_dist = (
+                    distance_to_root[inds_downstream] - distance_to_root[kk]
+                )
+                downstream_window = downstream_dist <= remaining_dist
+                inds_to_add = inds_downstream[downstream_window]
+                dist_to_add = init_dist + downstream_dist[downstream_window]
                 ind_list.append(inds_to_add)
-            all_inds = np.unique(np.concatenate(tuple(ind_list)))
-            for kk in all_inds:
+                dist_list.append(dist_to_add)
+            all_inds, indices = np.unique(np.concatenate(ind_list), return_index=True)
+            all_dist = np.concatenate(dist_list)[indices]
+            for kk, d in zip(all_inds, all_dist):
                 row_ind.append(jj)
                 col_ind.append(kk)
-            
+                dist.append(d)
             if seen[jj]:
                 break
             else:
                 seen[jj] = True
-    return np.array(row_ind), np.array(col_ind)
+        if dist_func is not None:
+            dist = dist_func(np.array(dist))
+            
+    return dist, (np.array(row_ind), np.array(col_ind))
 
-def window_matrix(sk, width):
+
+def window_matrix(sk, width, dist_func=None):
     """ Generate matrix such that Aij is 1 if j is within width of i.
     """
     bp_downstream = {bp: sk.downstream_nodes(bp) for bp in sk.branch_points}
-    end_paths_to_root = [sk.path_to_root(ep) for ep in sk.end_points]  
-    wm_inds = _window_matrix(sk.branch_points, bp_downstream, sk.distance_to_root, end_paths_to_root, width)
-    return sparse.csr_matrix((np.ones(len(wm_inds[0])), wm_inds), shape=((sk.n_vertices, sk.n_vertices)))
+    end_paths_to_root = [sk.path_to_root(ep) for ep in sk.end_points]
+    dist, wm_inds = _window_matrix(
+        sk.branch_points, bp_downstream, sk.distance_to_root, end_paths_to_root, width
+    )
+    if use_distance:
+        return sparse.csr_matrix(
+            (dist, wm_inds), shape=((sk.n_vertices, sk.n_vertices))
+        )
+    else:
+        return sparse.csr_matrix(
+            (np.ones(len(wm_inds[0])), wm_inds), shape=((sk.n_vertices, sk.n_vertices))
+        )
 
 
 def unique_column_name(base_name, suffix, df):
