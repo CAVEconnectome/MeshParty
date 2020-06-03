@@ -403,19 +403,24 @@ def collapse_zero_length_edges(vertices, edges, root, radius, mesh_to_skel_map, 
     "Remove zero length edges from a skeleton"
 
     zl = np.linalg.norm(vertices[edges[:, 0]]-vertices[edges[:, 1]], axis=1) == 0
+    if not np.any(zl):
+        return vertices, edges, root, radius, mesh_to_skel_map, mesh_index, node_mask, vertex_properties
+
     consolidate_dict = {x[0]: x[1] for x in edges[zl]}
-
-    # node_filter = np.full(len(vertices), True)
-    # node_filter[edges[zl, 0]] = False
-
-    #
-
-    # new_index = np.full(len(vertices), -1)
-    # new_index[node_filter] = np.arange(node_filter.sum())
-
-    # for k, v in consolidate_dict.items():
-    #     new_index[k] = new_index[v]
-    # new_index_dict = {ii: new_index[ii] for ii in range(len(new_index))}
+    # Compress multiple zero edges in a row
+    while np.any(
+                 np.isin(np.array(list(consolidate_dict.keys())),
+                         np.array(list(consolidate_dict.values()))
+                         )
+                 ):
+        all_keys = np.array(list(consolidate_dict.keys()))
+        dup_keys = np.flatnonzero(np.isin(all_keys,
+                                          np.array(list(consolidate_dict.values()))))
+        first_key = all_keys[dup_keys[0]]
+        first_val = consolidate_dict.pop(first_key)
+        for ii, jj in consolidate_dict.items():
+            if jj == first_key:
+                consolidate_dict[ii] = first_val
 
     new_index_dict, node_filter = remap_dict(len(vertices), consolidate_dict)
 
