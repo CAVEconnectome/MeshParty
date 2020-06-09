@@ -2,15 +2,24 @@ import numpy as np
 from meshparty import utils
 from scipy import spatial, sparse
 from pykdtree.kdtree import KDTree as pyKDTree
-from copy import copy
 import json
 from meshparty import skeleton_io
 from collections.abc import Iterable
 from meshparty.trimesh_io import Mesh
 
 
-class StaticSkeleton():
-    def __init__(self, vertices, edges, root=None, radius=None, mesh_to_skel_map=None, mesh_index=None, vertex_properties=None, voxel_scaling=None):
+class StaticSkeleton:
+    def __init__(
+        self,
+        vertices,
+        edges,
+        root=None,
+        radius=None,
+        mesh_to_skel_map=None,
+        mesh_index=None,
+        vertex_properties=None,
+        voxel_scaling=None,
+    ):
         self._vertices = vertices
         self._edges = edges
         self._root = None
@@ -61,7 +70,7 @@ class StaticSkeleton():
         if self.voxel_scaling is None:
             return np.array([1, 1, 1])
         else:
-            return 1/self.voxel_scaling
+            return 1 / self.voxel_scaling
 
     @property
     def n_vertices(self):
@@ -89,10 +98,9 @@ class StaticSkeleton():
         return self._mesh_index
 
     def _create_default_root(self):
-        temp_graph = utils.create_csgraph(self.vertices,
-                                          self.edges,
-                                          euclidean_weight=True,
-                                          directed=False)
+        temp_graph = utils.create_csgraph(
+            self.vertices, self.edges, euclidean_weight=True, directed=False
+        )
         r = utils.find_far_points_graph(temp_graph)
         self.reroot(int(r[0]), reset_other_components=True)
 
@@ -109,7 +117,7 @@ class StaticSkeleton():
             Should not often be set to True by a user.
         """
         if new_root > self.n_vertices:
-            raise ValueError('New root must correspond to a skeleton vertex index')
+            raise ValueError("New root must correspond to a skeleton vertex index")
         self._root = int(new_root)
         self._parent_node_array = np.full(self.n_vertices, None)
 
@@ -125,18 +133,22 @@ class StaticSkeleton():
             if comp == root_comp:
                 comp_root = new_root
             else:
-                comp_root = utils.find_far_points_graph(self.csgraph_binary,
-                                                        start_ind=np.flatnonzero(lbls == comp)[0],
-                                                        multicomponent=True)[0]
+                comp_root = utils.find_far_points_graph(
+                    self.csgraph_binary,
+                    start_ind=np.flatnonzero(lbls == comp)[0],
+                    multicomponent=True,
+                )[0]
 
-            d = sparse.csgraph.dijkstra(self.csgraph_binary,
-                                        directed=False,
-                                        indices=comp_root)
+            d = sparse.csgraph.dijkstra(
+                self.csgraph_binary, directed=False, indices=comp_root
+            )
 
             # Make edges in edge list orient as [child, parent]
             # Where each child only has one parent
             # And the root has no parent. (Thus parent is closer than child)
-            edge_slice = np.any(np.isin(self.edges, np.flatnonzero(lbls == comp)), axis=1)
+            edge_slice = np.any(
+                np.isin(self.edges, np.flatnonzero(lbls == comp)), axis=1
+            )
 
             edges = self.edges[edge_slice]
             is_ordered = d[edges[:, 0]] > d[edges[:, 1]]
@@ -159,19 +171,17 @@ class StaticSkeleton():
     @property
     def csgraph(self):
         if self._csgraph is None:
-            self._csgraph = utils.create_csgraph(self.vertices,
-                                                 self.edges,
-                                                 euclidean_weight=True,
-                                                 directed=True)
+            self._csgraph = utils.create_csgraph(
+                self.vertices, self.edges, euclidean_weight=True, directed=True
+            )
         return self._csgraph
 
     @property
     def csgraph_binary(self):
         if self._csgraph_binary is None:
-            self._csgraph_binary = utils.create_csgraph(self.vertices,
-                                                        self.edges,
-                                                        euclidean_weight=False,
-                                                        directed=True)
+            self._csgraph_binary = utils.create_csgraph(
+                self.vertices, self.edges, euclidean_weight=False, directed=True
+            )
         return self._csgraph_binary
 
     @property
@@ -205,11 +215,12 @@ class StaticSkeleton():
         """
         if self._distance_to_root is None:
             self._distance_to_root = sparse.csgraph.dijkstra(
-                self.csgraph, directed=False, indices=self.root)
+                self.csgraph, directed=False, indices=self.root
+            )
         return self._distance_to_root
 
     def path_to_root(self, v_ind):
-        '''
+        """
         Gives the path to root from a specified vertex.
 
         Parameters
@@ -220,7 +231,7 @@ class StaticSkeleton():
         Returns
         -------
         numpy.array : Ordered set of indices from v_ind to root, inclusive of both.
-        '''
+        """
         path = [v_ind]
         ind = v_ind
         ind = self._parent_node_array[ind]
@@ -230,22 +241,54 @@ class StaticSkeleton():
         return np.array(path)
 
 
-class Skeleton():
-    def __init__(self, vertices, edges, root=None, radius=None, mesh_to_skel_map=None, mesh_index=None, vertex_properties={},  node_mask=None, voxel_scaling=None, remove_zero_length_edges=True, skeleton_index=None):
+class Skeleton:
+    def __init__(
+        self,
+        vertices,
+        edges,
+        root=None,
+        radius=None,
+        mesh_to_skel_map=None,
+        mesh_index=None,
+        vertex_properties={},
+        node_mask=None,
+        voxel_scaling=None,
+        remove_zero_length_edges=True,
+        skeleton_index=None,
+    ):
 
         if remove_zero_length_edges:
             zlsk = utils.collapse_zero_length_edges(
-                vertices, edges, root, radius, mesh_to_skel_map, mesh_index, node_mask, vertex_properties)
-            vertices, edges, root, radius, mesh_to_skel_map, mesh_index, node_mask, vertex_properties = zlsk
+                vertices,
+                edges,
+                root,
+                radius,
+                mesh_to_skel_map,
+                mesh_index,
+                node_mask,
+                vertex_properties,
+            )
+            (
+                vertices,
+                edges,
+                root,
+                radius,
+                mesh_to_skel_map,
+                mesh_index,
+                node_mask,
+                vertex_properties,
+            ) = zlsk
 
-        self._rooted = StaticSkeleton(vertices,
-                                      edges,
-                                      radius=radius,
-                                      mesh_to_skel_map=mesh_to_skel_map,
-                                      mesh_index=mesh_index,
-                                      vertex_properties=vertex_properties,
-                                      root=root,
-                                      voxel_scaling=voxel_scaling)
+        self._rooted = StaticSkeleton(
+            vertices,
+            edges,
+            radius=radius,
+            mesh_to_skel_map=mesh_to_skel_map,
+            mesh_index=mesh_index,
+            vertex_properties=vertex_properties,
+            root=root,
+            voxel_scaling=voxel_scaling,
+        )
 
         self._node_mask = np.full(self._rooted.n_vertices, True)
         self._edges = None
@@ -281,8 +324,19 @@ class Skeleton():
         return self._node_mask
 
     def copy(self):
-        return Skeleton(self._rooted.vertices, self._rooted.edges, mesh_to_skel_map=self._rooted.mesh_to_skel_map, vertex_properties=self._rooted.vertex_properties,
-                        root=self._rooted.root, node_mask=self.node_mask, radius=self.radius, voxel_scaling=self.voxel_scaling, skeleton_index=self._SkeletonIndex, mesh_index=self.mesh_index)
+        return Skeleton(
+            self._rooted.vertices,
+            self._rooted.edges,
+            mesh_to_skel_map=self._rooted.mesh_to_skel_map,
+            vertex_properties=self._rooted.vertex_properties,
+            root=self._rooted.root,
+            node_mask=self.node_mask,
+            radius=self.radius,
+            voxel_scaling=self.voxel_scaling,
+            skeleton_index=self._SkeletonIndex,
+            mesh_index=self.mesh_index,
+            remove_zero_length_edges=False,
+        )
 
     def apply_mask(self, new_mask, in_place=False):
         if in_place:
@@ -302,7 +356,8 @@ class Skeleton():
             return sk
 
     def reset_mask(self, in_place=False):
-        out = self.apply_mask(np.full(self.unmasked_size, True), in_place=in_place)
+        true_mask = np.full(self.unmasked_size, True)
+        out = self.apply_mask(true_mask, in_place=in_place)
         if in_place is False:
             return out
 
@@ -313,17 +368,17 @@ class Skeleton():
 
     @property
     def indices_unmasked(self):
-        '''
+        """
         np.array: Gets the indices of nodes in the filtered mesh in the unmasked index array
-        '''
+        """
         return np.flatnonzero(self.node_mask)
 
     @property
     def unmasked_size(self):
-        return len(self.node_mask)
+        return len(self._rooted.vertices)
 
     def map_indices_to_unmasked(self, unmapped_indices):
-        '''
+        """
         For a set of masked indices, returns the corresponding unmasked indices
 
         Parameters
@@ -335,11 +390,11 @@ class Skeleton():
         -------
         np.array
             the indices mapped back to the original mesh index space
-        '''
+        """
         return utils.map_indices_to_unmasked(self.indices_unmasked, unmapped_indices)
 
     def map_boolean_to_unmasked(self, unmapped_boolean):
-        '''
+        """
         For a boolean index in the masked indices, returns the corresponding unmasked boolean index
 
         Parameters
@@ -351,11 +406,13 @@ class Skeleton():
         -------
         np.array
             a bool array in the original index space.  Is True if the unmapped_boolean suggests it should be.
-        '''
-        return utils.map_boolean_to_unmasked(self.unmasked_size, self.node_mask, unmapped_boolean)
+        """
+        return utils.map_boolean_to_unmasked(
+            self.unmasked_size, self.node_mask, unmapped_boolean
+        )
 
     def filter_unmasked_boolean(self, unmasked_boolean):
-        '''
+        """
         For an unmasked boolean slice, returns a boolean slice filtered to the masked mesh
 
         Parameters
@@ -367,7 +424,7 @@ class Skeleton():
         -------
         np.array
             returns the elements of unmasked_boolean that are still relevant in the masked index space
-        '''
+        """
         return utils.filter_unmasked_boolean(self.node_mask, unmasked_boolean)
 
     def filter_unmasked_indices(self, unmasked_shape, mask=None):
@@ -497,16 +554,20 @@ class Skeleton():
         self._rooted._reset_derived_properties()
 
     def _create_default_root(self):
-        temp_graph = utils.create_csgraph(self._rooted.vertices,
-                                          self._rooted.edges,
-                                          euclidean_weight=True,
-                                          directed=False)
+        temp_graph = utils.create_csgraph(
+            self._rooted.vertices,
+            self._rooted.edges,
+            euclidean_weight=True,
+            directed=False,
+        )
         r = utils.find_far_points_graph(temp_graph)
         self._rooted.reroot(int(r[0]))
 
     @property
     def root(self):
-        return self.SkeletonIndex(self.filter_unmasked_indices_padded(self._rooted.root))
+        return self.SkeletonIndex(
+            self.filter_unmasked_indices_padded(self._rooted.root)
+        )
 
     @property
     def root_position(self):
@@ -568,7 +629,7 @@ class Skeleton():
     def _single_path_length(self, path):
         """Compute the length of a single path (assumed to be correct)
         """
-        return np.sum(self.csgraph[:,path][path])
+        return np.sum(self.csgraph[:, path][path])
 
     def path_length(self, paths=None):
         """Returns the length of a path (described as an ordered collection of connected indices)
@@ -580,9 +641,9 @@ class Skeleton():
         -------
         Float or list of floats : The length of each path.
         """
-        if paths  is None:
+        if paths is None:
             paths = np.arange(self.n_vertices)
-            
+
         if len(paths) == 0:
             return 0
 
@@ -620,6 +681,12 @@ class Skeleton():
         return self.SkeletonIndex(self._end_points)
 
     @property
+    def topo_points(self):
+        return self.SkeletonIndex(
+            np.concatenate([self.end_points, self.branch_points, [self.root]])
+        )
+
+    @property
     def n_branch_points(self):
         return len(self.branch_points)
 
@@ -631,16 +698,20 @@ class Skeleton():
     def end_points_undirected(self):
         """End points without skeleton orientation, including root and disconnected components.
         """
-        return self.SkeletonIndex(np.flatnonzero(np.sum(self.csgraph_binary_undirected, axis=0) == 1))
+        return self.SkeletonIndex(
+            np.flatnonzero(np.sum(self.csgraph_binary_undirected, axis=0) == 1)
+        )
 
     @property
     def branch_points_undirected(self):
-        return self.SkeletonIndex(np.flatnonzero(np.sum(self.csgraph_binary_undirected, axis=0) > 2))
+        return self.SkeletonIndex(
+            np.flatnonzero(np.sum(self.csgraph_binary_undirected, axis=0) > 2)
+        )
 
     def _compute_segments(self):
         """Precompute segments between branches and end points"""
         segments = []
-        segment_map = np.zeros(len(self.vertices))-1
+        segment_map = np.zeros(len(self.vertices)) - 1
 
         if len(self.branch_points) > 0:
             ch_inds = np.concatenate(self.child_nodes(self.branch_points))
@@ -650,7 +721,9 @@ class Skeleton():
             _, ls = sparse.csgraph.connected_components(self.csgraph_binary)
 
         _, invs = np.unique(ls, return_inverse=True)
-        segments = [self.SkeletonIndex(np.flatnonzero(invs == ii)) for ii in np.unique(invs)]
+        segments = [
+            self.SkeletonIndex(np.flatnonzero(invs == ii)) for ii in np.unique(invs)
+        ]
         segment_map = invs
 
         return segments, segment_map.astype(int)
@@ -674,8 +747,12 @@ class Skeleton():
         return self._segment_map
 
     def path_between(self, s_ind, t_ind):
-        d, Ps = sparse.csgraph.dijkstra(self.csgraph_binary_undirected,
-                                        directed=False, indices=s_ind, return_predecessors=True)
+        d, Ps = sparse.csgraph.dijkstra(
+            self.csgraph_binary_undirected,
+            directed=False,
+            indices=s_ind,
+            return_predecessors=True,
+        )
         if not np.isinf(d[t_ind]):
             return self.SkeletonIndex(utils.path_from_predecessors(Ps, t_ind))
         else:
@@ -701,7 +778,9 @@ class Skeleton():
         vinds_b = self.map_indices_to_unmasked(vinds)
         if isinstance(vinds_b, int):
             vinds_b = np.array([vinds_b])
-        p_inds_filtered = self.filter_unmasked_indices_padded(self._rooted.parent_nodes(vinds_b))
+        p_inds_filtered = self.filter_unmasked_indices_padded(
+            self._rooted.parent_nodes(vinds_b)
+        )
         return self.SkeletonIndex(p_inds_filtered)
 
     def cut_graph(self, vinds, directed=True, euclidean_weight=True):
@@ -723,9 +802,9 @@ class Skeleton():
         """
         e_keep = ~np.isin(self.edges[:, 0], vinds)
         es_new = self.edges[e_keep]
-        return utils.create_csgraph(self.vertices, es_new,
-                                    euclidean_weight=euclidean_weight,
-                                    directed=directed)
+        return utils.create_csgraph(
+            self.vertices, es_new, euclidean_weight=euclidean_weight, directed=directed
+        )
 
     def downstream_nodes(self, vinds, inclusive=True):
         """Get a list of all nodes downstream of a collection of indices
@@ -786,11 +865,7 @@ class Skeleton():
 
         cinds = []
         for vind in vinds:
-            cinds.append(
-                self.SkeletonIndex(
-                    self.edges[self.edges[:, 1] == vind, 0]
-                )
-            )
+            cinds.append(self.SkeletonIndex(self.edges[self.edges[:, 1] == vind, 0]))
 
         if return_single:
             cinds = cinds[0]
@@ -801,8 +876,8 @@ class Skeleton():
     #####################
 
     def _compute_cover_paths(self):
-        '''Compute the list of cover paths along the skeleton
-        '''
+        """Compute the list of cover paths along the skeleton
+        """
         cover_paths = []
         seen = np.full(self.n_vertices, False)
         ep_order = np.argsort(self.distance_to_root[self.end_points])[::-1]
@@ -845,8 +920,10 @@ class Skeleton():
         skeleton_io.write_skeleton_h5(self, filename, overwrite=overwrite)
         self.voxel_scaling = existing_voxel_scaling
 
-    def export_to_swc(self, filename, node_labels=None, radius=None, header=None, xyz_scaling=1000):
-        '''
+    def export_to_swc(
+        self, filename, node_labels=None, radius=None, header=None, xyz_scaling=1000
+    ):
+        """
         Export a skeleton file to an swc file
         (see http://research.mssm.edu/cnic/swc.html for swc definition)
 
@@ -868,28 +945,35 @@ class Skeleton():
             default 1000. Down-scales spatial units from the skeleton's units to
             whatever is desired by the swc. E.g. nm to microns has scaling=1000.
 
-        '''
-        skeleton_io.export_to_swc(self, filename, node_labels=node_labels,
-                                  radius=radius, header=header, xyz_scaling=xyz_scaling)
+        """
+        skeleton_io.export_to_swc(
+            self,
+            filename,
+            node_labels=node_labels,
+            radius=radius,
+            header=header,
+            xyz_scaling=xyz_scaling,
+        )
 
 
 def SkeletonIndexFactory(sk):
     class SkeletonIndex(np.ndarray):
         def __new__(cls, skel_indices):
-            if np.array(skel_indices).dtype is np.dtype('bool') and len(skel_indices) == sk.n_vertices:
+            if (
+                np.array(skel_indices).dtype is np.dtype("bool")
+                and len(skel_indices) == sk.n_vertices
+            ):
                 skel_indices = np.flatnonzero(skel_indices)
 
             skel_inds = np.asarray(skel_indices, dtype=int)
             obj = skel_inds.view(cls)
-            obj._skel_indices_base = sk.map_indices_to_unmasked(
-                skel_inds)
+            obj._skel_indices_base = sk.map_indices_to_unmasked(skel_inds)
             return obj
 
         def __finalize_array__(self, obj):
             if obj is None:
                 return
-            obj._skel_indices_base = getattr(
-                obj, '_skel_indices_base', np.array([]))
+            obj._skel_indices_base = getattr(obj, "_skel_indices_base", np.array([]))
 
         @property
         def to_skel_index(self):
@@ -908,4 +992,5 @@ def SkeletonIndexFactory(sk):
         @property
         def to_skel_mask(self):
             return sk.filter_unmasked_boolean(self.to_skel_mask_base)
+
     return SkeletonIndex

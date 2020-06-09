@@ -205,7 +205,7 @@ def branch_order(nrn, return_as_skel=False):
         else:
             root_order = 0
         branch_order[path] = np.cumsum(has_bp[path]) + root_order
-
+    branch_order[nrn.skeleton.root] = 0
     if return_as_skel:
         return branch_order
     else:

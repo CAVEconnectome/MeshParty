@@ -61,6 +61,10 @@ def MeshworkIndexFactory(mw):
             return self._mesh_indices_base
 
         @property
+        def to_mesh_index_point(self):
+            return self.to_skel_index.to_mesh_region_point
+        
+        @property
         def to_mesh_mask_base(self):
             mask = np.full(len(mw.mesh.node_mask), False)
             mask[self.to_mesh_index_base] = True
@@ -290,7 +294,7 @@ def window_matrix(sk, width, dist_func=None):
     dist, wm_inds = _window_matrix(
         sk.branch_points, bp_downstream, sk.distance_to_root, end_paths_to_root, width
     )
-    if use_distance:
+    if dist_func is not None:
         return sparse.csr_matrix(
             (dist, wm_inds), shape=((sk.n_vertices, sk.n_vertices))
         )

@@ -110,7 +110,7 @@ class AnchoredAnnotationManager(object):
 
     def _add_attribute(self, key):
         if key in dir(self):
-            if not isinstance(self.key, AnchoredAnnotation):
+            if not isinstance(self.__getattribute__(key), AnchoredAnnotation):
                 return
         else:
             self.__dict__[key] = self._data_tables[key]
@@ -227,6 +227,7 @@ class AnchoredAnnotation(object):
         self._MeshIndex = None
 
         self._anchor_mesh = None
+        self._filter_mesh = None
         self._anchored = anchor_to_mesh
         if self._anchored and mesh is not None:
             self._anchor_points(mesh)
@@ -332,6 +333,7 @@ class AnchoredAnnotation(object):
         self._data[self._valid_column] = dist < self._max_distance
 
         self._anchor_mesh = MaskedMeshMemory(mesh, index_only=True)
+        self._filter_mesh = self._anchor_mesh
 
     def _filter_data(self, filter_mesh):
         """Get the subset of data points that are associated with the mesh
@@ -341,6 +343,7 @@ class AnchoredAnnotation(object):
             self._data[
                 self._index_column_filt
             ] = filter_mesh.filter_unmasked_indices_padded(self._mesh_index_base)
+            self._filter_mesh = MaskedMeshMemory(filter_mesh)
 
     def _filter_query_response(self, row_filter):
         _parent = self
@@ -378,17 +381,12 @@ class AnchoredAnnotation(object):
     def _filter_query(self, node_mask):
         """Returns the data contained with a given filter without changing any indexing.
         """
-        node_mask_base = self._anchor_mesh.map_boolean_to_unmasked(node_mask)
+        node_mask_base = self._filter_mesh.map_boolean_to_unmasked(node_mask)
         if self._anchored:
             keep_rows = node_mask_base[self._mesh_index_base]
-            return keep_rows[self._in_mask]
+            return keep_rows[self._is_included]
         else:
             return np.full(len(self.df), True)
-
-    def query(self, query_str):
-        filt_df = self.df.query(query_str)
-        row_filter = np.isin(self.df.index, filt_df.index)
-        return self._filter_query_response(row_filter)
 
     def filter_query(self, node_mask):
         row_filter = self._filter_query(node_mask)
@@ -400,6 +398,7 @@ class AnchoredAnnotation(object):
             self._data[
                 self._index_column_filt
             ] = self._anchor_mesh.filter_unmasked_indices(self._mesh_index_base)
+            self._filter_mesh = self._anchor_mesh
 
     def _anchor_to_mesh(self, anchor_mesh):
         self._anchored = True
@@ -428,10 +427,20 @@ class Meshwork(object):
         annotation point units (voxels) and mesh vertex units (e.g. nanometers).
     """
 
-    def __init__(self, mesh, skeleton=None, seg_id=None, voxel_resolution=None):
+    def __init__(
+        self,
+        mesh,
+        skeleton=None,
+        skeleton_only=False,
+        seg_id=None,
+        voxel_resolution=None,
+    ):
+        if skeleton_only:
+            mesh = skeleton
         self._seg_id = seg_id
         self._mesh = mesh
         self._skeleton = skeleton
+        self._mesh_is_skeleton = skeleton_only
 
         if voxel_resolution is None:
             voxel_resolution = DEFAULT_VOXEL_RESOLUTION
@@ -507,7 +516,10 @@ class Meshwork(object):
     def mesh(self):
         """Copy of the neuronal mesh
         """
-        return self._mesh
+        if self._mesh_is_skeleton:
+            return self._skeleton
+        else:
+            return self._mesh
 
     @property
     def mesh_mask(self):
@@ -538,16 +550,21 @@ class Meshwork(object):
     def reset_mask(self):
         """Remove mask and restore object to its original state.
         """
-        if self._original_mesh_data is not None:
-            self._anno.remove_filter()
+        if self._mesh_is_skeleton:
+            self._skeleton.reset_mask(in_place=True)
+        else:
+            if self._original_mesh_data is not None:
+                self._anno.remove_filter()
 
-            vs, fs, es, nm, vxsc = decompress_mesh_data(*self._original_mesh_data)
-            self._mesh = Mesh(vs, fs, link_edges=es, node_mask=nm, voxel_scaling=vxsc)
+                vs, fs, es, nm, vxsc = decompress_mesh_data(*self._original_mesh_data)
+                self._mesh = Mesh(
+                    vs, fs, link_edges=es, node_mask=nm, voxel_scaling=vxsc
+                )
 
-            self._original_mesh_data = None
-            if self.skeleton is not None:
-                self._skeleton.reset_mask(in_place=True)
-            self._reset_indices()
+                self._original_mesh_data = None
+                if self.skeleton is not None:
+                    self._skeleton.reset_mask(in_place=True)
+                self._reset_indices()
 
     ##################
     # Anno functions #
@@ -719,6 +736,11 @@ class Meshwork(object):
         return out
 
     def _skind_region_first(self, skinds):
+        if isinstance(skinds, int):
+            skinds = [skinds]
+        if issubclass(type(skinds), np.ndarray):
+            if len(skinds.shape) == 0:
+                skinds = skinds.reshape(1)
         return in1d_first_item(
             self.skeleton.mesh_to_skel_map[self.mesh.node_mask], skinds
         )
@@ -857,6 +879,28 @@ class Meshwork(object):
         if return_scalar:
             return child_index[0].to_mesh_region_point
         return [n.to_mesh_region_point for n in child_index]
+
+    @OnlyIfSkeleton.exists
+    def jump_proximal(self, ind):
+        ind = self._convert_to_meshindex(ind)
+        skind = ind.to_skel_index
+        d = sparse.csgraph.dijkstra(self.skeleton.csgraph, directed=True, indices=skind)
+        proximal_pt = self.skeleton.topo_points[
+            np.argmin(d[0, self.skeleton.topo_points])
+        ]
+        return self.SkeletonIndex(proximal_pt).to_mesh_region_point
+
+    @OnlyIfSkeleton.exists
+    def jump_distal(self, ind):
+        ind = self._convert_to_meshindex(ind)
+        skind = ind.to_skel_index
+        d = sparse.csgraph.dijkstra(
+            self.skeleton.csgraph.T, directed=True, indices=skind
+        )
+        proximal_pt = self.skeleton.topo_points[
+            np.argmin(d[0, self.skeleton.topo_points])
+        ]
+        return self.SkeletonIndex(proximal_pt).to_mesh_region_point
 
     @OnlyIfSkeleton.exists
     def distance_to_root(self, mesh_indices):
@@ -1112,7 +1156,7 @@ class Meshwork(object):
         if inds is None:
             return self.skeleton.path_length()
         inds = self._convert_to_meshindex(inds)
-        return self.skeleton.path_length(inds.to_skel_mask)
+        return self.skeleton.path_length(inds.to_skel_index)
 
     @OnlyIfSkeleton.exists
     def total_path_length(self):
