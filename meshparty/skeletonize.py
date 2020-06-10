@@ -715,14 +715,14 @@ def soma_via_branch_starts(sk,
         ptr = sk.path_to_root(ep)
         if np.all(is_close[ptr]):
             soma_vote = np.full(sk.n_vertices, np.nan)
-            soma_vote[ptr] = 1
+            soma_vote[ptr] = np.inf
             soma_votes.append(soma_vote)
 
     # Get soma region
     soma_votes = np.vstack(soma_votes)
-    num_votes = len(soma_votes) - np.sum(np.isnan(soma_votes), axis=0 )
+    num_votes = len(soma_votes) - np.sum(np.isnan(soma_votes), axis=0)
     num_yes = np.nansum(soma_votes, axis=0 )
-
+    print(f'num_yes: {num_yes.sum()}, num_votes: {num_votes.sum()}')
     with np.errstate(all='ignore'):
         is_soma = (num_yes / num_votes) > 0.5
 
