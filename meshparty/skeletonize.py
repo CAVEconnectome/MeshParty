@@ -722,7 +722,7 @@ def soma_via_branch_starts(sk,
     soma_votes = np.vstack(soma_votes)
     num_votes = len(soma_votes) - np.sum(np.isnan(soma_votes), axis=0)
     num_yes = np.nansum(soma_votes, axis=0 )
-    print(f'num_yes: {num_yes.sum()}, num_votes: {num_votes.sum()}')
+    
     with np.errstate(all='ignore'):
         is_soma = (num_yes / num_votes) > 0.5
 
