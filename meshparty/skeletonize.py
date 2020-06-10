@@ -69,11 +69,11 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True, c
         # skel_map[np.isnan(skel_map)] = len(skel_verts)
         temp_sk = Skeleton(skel_verts, skel_edges, mesh_index=mesh.map_indices_to_unmasked(orig_skel_index), 
                             mesh_to_skel_map=skel_map)
-        _, close_ind = temp_sk.kdtree.query(soma_pt)
+        _, close_ind = temp_sk.kdtree.query(soma_pt.reshape(1,3))
         temp_sk.reroot(close_ind[0])
 
         if collapse_function == 'sphere':
-            soma_verts, soma_r = soma_via_sphere(soma_pt, temp_sk.vertices, temp_sk.skel_edges, soma_radius)
+            soma_verts, soma_r = soma_via_sphere(soma_pt, temp_sk.vertices, temp_sk.edges, soma_radius)
         elif collapse_function == 'branch':
             soma_verts, soma_r = soma_via_branch_starts(temp_sk,
                                                 mesh,
@@ -81,6 +81,8 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True, c
                                                 search_radius=collapse_params.get('search_radius', 18000),
                                                 fallback_radius=collapse_params.get('fallback_radius', soma_radius),
                                                 cutoff_threshold=collapse_params.get('cutoff_threshold', 0.1),
+                                                min_cutoff=collapse_params.get('min_cutoff', 0.1),
+                                                dynamic_range=collapse_params.get('dynamic_range', 1),
                                                 dynamic_threshold=collapse_params.get('dynamic_threshold', False)
                                                 )
 
@@ -616,7 +618,9 @@ def soma_via_branch_starts(sk,
                            soma_pt,
                            search_radius=18000,
                            fallback_radius=10000,
-                           cutoff_threshold=0.1,
+                           cutoff_threshold=0.2,
+                           min_cutoff=0.1,
+                           dynamic_range=1,
                            dynamic_threshold=False,
                            ):
     """Runs down paths into the soma region and finds onset of each branch.
@@ -662,6 +666,9 @@ def soma_via_branch_starts(sk,
         path_inds = ptr[1:]
         xdata = sk.distance_to_root[path_inds] / 1000
         ydata = rs_long[path_inds] / 1000
+        good_rows = np.invert(np.logical_or(np.isnan(ydata), np.isinf(ydata)))
+        ydata = ydata[good_rows]
+        xdata = xdata[good_rows]
         ydata_filt = np.maximum.accumulate(signal.medfilt(ydata, 21))
 
         try: 
@@ -677,11 +684,10 @@ def soma_via_branch_starts(sk,
                                            method='trf')
             all_params.append(params)
             if dynamic_threshold:
-                cutoff_threshold_eff = np.min([cutoff_threshold, 0.1 + (cutoff_threshold-0.1) * np.max([0, (params[1]-0.5)/1])])
+                cutoff_threshold_eff = np.min([cutoff_threshold, min_cutoff + (cutoff_threshold-min_cutoff) * np.max([0, (params[1]-0.5)/dynamic_range])])
             else:
                 cutoff_threshold_eff = cutoff_threshold
-                
-            print('cutoff_th', cutoff_threshold)
+
             f = lambda x: log_func(x, *params) - (params[3] + cutoff_threshold_eff * (params[0] - params[3] ))
             opt_sol = optimize.root_scalar(f,  bracket=[0, xdata.max()])
             if opt_sol.converged:
@@ -701,6 +707,7 @@ def soma_via_branch_starts(sk,
 
         soma_vote = np.full(sk.n_vertices, np.nan)
         soma_vote[path_inds[base_path_ind:]] = 1
+        soma_vote[path_inds[:base_path_ind]] = 0
         soma_votes.append(soma_vote)
         
     # Any tips whose path to root is entirely in the close zone also vote as as 'somatic'
@@ -713,7 +720,7 @@ def soma_via_branch_starts(sk,
 
     # Get soma region
     soma_votes = np.vstack(soma_votes)
-    num_votes = np.sum(np.invert(np.isnan(soma_votes)), axis=0 )
+    num_votes = len(soma_votes) - np.sum(np.isnan(soma_votes), axis=0 )
     num_yes = np.nansum(soma_votes, axis=0 )
 
     with np.errstate(all='ignore'):
