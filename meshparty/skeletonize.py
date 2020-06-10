@@ -13,7 +13,7 @@ import fastremap
 import logging
 
 
-def skeletonize_mesh(mesh, soma_pt=None, soma_radius=15000, collapse_soma=True, collapse_function='sphere',
+def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True, collapse_function='sphere',
                      invalidation_d=12000, smooth_vertices=False, compute_radius=True,
                      shape_function='single', compute_original_index=True, verbose=True,
                      remove_zero_length_edges=True, collapse_params={}):
@@ -38,6 +38,10 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_radius=15000, collapse_soma=True, 
         is true. (default=7500 (nm))
     collapse_soma: bool
         whether to collapse the skeleton around the soma point (default True)
+    collapse_function: 'sphere' or 'branch'
+        Determines which soma collapse function to use. Sphere uses the soma_radius
+        and collapses all vertices within that radius to the soma. Branch is an experimental
+        approach that tries to compute the right boundary for each branch into soma.
     invalidation_d: float
         the distance along the mesh to invalidate when applying TEASAR
         like algorithm.  Controls how detailed a structure the skeleton
@@ -47,11 +51,15 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_radius=15000, collapse_soma=True, 
     compute_radius: bool
         whether to calculate the radius of the skeleton at each point on the skeleton
         (default True)
+    shape_function: 'single' or 'cone'
+        Selects how to compute the radius, either with a single ray or a cone of rays. Default is 'single'.
     compute_original_index: bool
         whether to calculate how each of the mesh nodes maps onto the skeleton
         (default True)
-    verbose: bool
-        whether to print verbose logging
+    remove_zero_length_edges: bool
+        If True, removes vertices involved in zero length edges, which can disrupt graph computations. Default True.
+    collapse_params: dict
+        Extra keyword arguments for the collapse function. See soma_via_sphere and soma_via_branch_starts for specifics.
 
     Returns
     -------
@@ -64,23 +72,33 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_radius=15000, collapse_soma=True, 
 
     if smooth_vertices is True:
         skel_verts = smooth_verts
+    
+    rs = None
 
     if collapse_soma is True and soma_pt is not None:
         # skel_map[np.isnan(skel_map)] = len(skel_verts)
-        temp_sk = Skeleton(skel_verts, skel_edges, mesh_index=mesh.map_indices_to_unmasked(orig_skel_index), 
-                            mesh_to_skel_map=skel_map)
+        temp_sk = Skeleton(skel_verts, skel_edges,
+                           mesh_index=mesh.map_indices_to_unmasked(orig_skel_index), 
+                           mesh_to_skel_map=skel_map)
         _, close_ind = temp_sk.kdtree.query(soma_pt.reshape(1,3))
         temp_sk.reroot(close_ind[0])
 
         if collapse_function == 'sphere':
             soma_verts, soma_r = soma_via_sphere(soma_pt, temp_sk.vertices, temp_sk.edges, soma_radius)
         elif collapse_function == 'branch':
+
+            if shape_function == 'single':
+                rs = ray_trace_distance(mesh.filter_unmasked_indices_padded(temp_sk.mesh_index), mesh)
+            elif shape_function =='cone':
+                rs = shape_diameter_function(mesh.filter_unmasked_indices_padded(temp_sk.mesh_index), mesh, num_points=30, cone_angle=np.pi/3 )
+
             soma_verts, soma_r = soma_via_branch_starts(temp_sk,
                                                 mesh,
                                                 soma_pt,
-                                                search_radius=collapse_params.get('search_radius', 18000),
+                                                rs,
+                                                search_radius=collapse_params.get('search_radius', 25000),
                                                 fallback_radius=collapse_params.get('fallback_radius', soma_radius),
-                                                cutoff_threshold=collapse_params.get('cutoff_threshold', 0.1),
+                                                cutoff_threshold=collapse_params.get('cutoff_threshold', 0.4),
                                                 min_cutoff=collapse_params.get('min_cutoff', 0.1),
                                                 dynamic_range=collapse_params.get('dynamic_range', 1),
                                                 dynamic_threshold=collapse_params.get('dynamic_threshold', False)
@@ -107,16 +125,21 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_radius=15000, collapse_soma=True, 
     skel_map_full_mesh[ind_to_fix] = -1
 
     props = {}
+
     if compute_original_index is True:
         mesh_index = mesh.map_indices_to_unmasked(orig_skel_index[vert_filter])
         if collapse_soma is True and soma_pt is not None:
             mesh_index = np.append(mesh_index, -1)
         props['mesh_index'] = mesh_index
+
     if compute_radius is True:
-        if shape_function == 'single':
-            rs = ray_trace_distance(orig_skel_index[vert_filter], mesh)
-        elif shape_function =='cone':
-            rs = shape_diameter_function(orig_skel_index[vert_filter], mesh)
+        if rs is None:
+            if shape_function == 'single':
+                rs = ray_trace_distance(orig_skel_index[vert_filter], mesh)
+            elif shape_function =='cone':
+                rs = shape_diameter_function(orig_skel_index[vert_filter], mesh)
+        else:
+            rs = rs[vert_filter]
         if collapse_soma is True and soma_pt is not None:
             rs = np.append(rs, soma_r)      
         props['rs'] = rs
@@ -127,6 +150,7 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_radius=15000, collapse_soma=True, 
 
     if compute_radius is True:
         _remove_nan_radius(sk)
+
     return sk
 
 
@@ -616,6 +640,7 @@ def soma_via_sphere(soma_pt, verts, edges, soma_d_thresh):
 def soma_via_branch_starts(sk,
                            mesh,
                            soma_pt,
+                           rs,
                            search_radius=20000,
                            fallback_radius=15000,
                            cutoff_threshold=0.2,
@@ -645,15 +670,10 @@ def soma_via_branch_starts(sk,
     close_parent_edges = sk.edges[is_close_specific[sk.edges[:,1]]]
     tip_inds = close_parent_edges[~is_close_specific[close_parent_edges[:,0]], 0]
 
-    rs = shape_diameter_function(mesh.filter_unmasked_indices_padded(sk.mesh_index[close_inds]), mesh, num_points=30, cone_angle=np.pi/3)
+    rs = rs[close_inds]
     rs_long = np.full(sk.n_vertices, np.nan)
     rs_long[close_inds] = rs
     sk.reroot(close_inds[np.argmin(np.abs(rs-np.percentile(rs, 98)))])
-
-    # Get a distance profile for these close indices
-    # rs = shape_diameter_function(mesh.filter_unmasked_indices(sk.mesh_index[close_inds]), mesh, num_points=30, cone_angle=np.pi/3)
-    # rs_long = np.full(sk.n_vertices, np.nan)
-    # rs_long[close_inds] = rs
 
     # Fit a logistic curve
     def log_func(x, h, k, xh, a):
