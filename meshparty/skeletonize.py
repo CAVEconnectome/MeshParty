@@ -13,7 +13,7 @@ import fastremap
 import logging
 
 
-def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True, collapse_function='sphere',
+def skeletonize_mesh(mesh, soma_pt=None, soma_radius=15000, collapse_soma=True, collapse_function='sphere',
                      invalidation_d=12000, smooth_vertices=False, compute_radius=True,
                      shape_function='single', compute_original_index=True, verbose=True,
                      remove_zero_length_edges=True, collapse_params={}):
@@ -616,8 +616,8 @@ def soma_via_sphere(soma_pt, verts, edges, soma_d_thresh):
 def soma_via_branch_starts(sk,
                            mesh,
                            soma_pt,
-                           search_radius=18000,
-                           fallback_radius=10000,
+                           search_radius=20000,
+                           fallback_radius=15000,
                            cutoff_threshold=0.2,
                            min_cutoff=0.1,
                            dynamic_range=1,
@@ -627,6 +627,7 @@ def soma_via_branch_starts(sk,
     """
 
     is_close = np.linalg.norm( sk.vertices - soma_pt, axis=1 ) < search_radius
+    is_close_fallback = np.linalg.norm(sk.vertices-soma_pt, axis=1) < fallback_radius
 
     # Find segments that emerge from the soma region
     close_segs = []
@@ -715,14 +716,15 @@ def soma_via_branch_starts(sk,
         ptr = sk.path_to_root(ep)
         if np.all(is_close[ptr]):
             soma_vote = np.full(sk.n_vertices, np.nan)
-            soma_vote[ptr] = np.inf
+            soma_vote[ptr] = 1
+            soma_vote[ptr[is_close_fallback[ptr]]] = np.inf
             soma_votes.append(soma_vote)
 
     # Get soma region
     soma_votes = np.vstack(soma_votes)
     num_votes = len(soma_votes) - np.sum(np.isnan(soma_votes), axis=0)
     num_yes = np.nansum(soma_votes, axis=0 )
-    
+
     with np.errstate(all='ignore'):
         is_soma = (num_yes / num_votes) > 0.5
 
