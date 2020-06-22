@@ -138,6 +138,40 @@ def filter_spatial_distance_from_points(mesh, pts, d_max, map_to_unmasked=True):
         is_close = mesh.map_boolean_to_unmasked(is_close)
     return is_close
 
+def filter_geodesic_distance(mesh, points, max_distance, max_valid_mapping=np.inf, map_to_unmasked=True):
+    '''
+    Returns a boolean array of mesh points within a max distance of points along the mesh graph.
+
+    Parameters
+    ----------
+    mesh : meshparty.trimesh_io.Mesh
+        A Trimesh-like mesh with N vertices
+    points: numpy.array
+        An Mx3 array of points in space or M-length array of mesh indices
+    max_distance : float
+        Max distance along the mesh graph to include in the filter.
+    max_valid_mapping : float
+        If points are used, sets the max distance for valid mesh point mapping.
+    map_to_unmasked : bool
+        If True, returns mask in indexing of the Nu-length unmasked mesh.
+
+    Returns
+    -------
+    mask : np.array
+        Boolean array with Nu (or N) entries, True where vertices are close to any of the points/indices provided.
+    '''
+    points = np.array(points)
+    if len(points.shape) == 2:
+        if points.shape[1] == 3:
+            ds, inds = mesh.kdtree.query(points, distance_upper_bound=max_valid_mapping)
+            inds = inds[~np.isinf(ds)]
+        else:
+            inds = points.ravel()
+    else:
+        inds = points
+    return np.invert(np.isinf(sparse.csgraph.dijkstra(mesh.csgraph, indices=inds, limit=max_distance, min_only=True)))
+
+
 
 def filter_two_point_distance(mesh, pts_foci, d_pad, indices=None, power=1, map_to_unmasked=True):
     '''
