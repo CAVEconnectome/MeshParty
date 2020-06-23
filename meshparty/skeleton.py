@@ -1,7 +1,10 @@
 import numpy as np
 from meshparty import utils
 from scipy import spatial, sparse
-from pykdtree.kdtree import KDTree as pyKDTree
+try:
+    from pykdtree.kdtree import KDTree as pyKDTree
+except:
+    pyKDTree = spatial.cKDTree
 import json
 from meshparty import skeleton_io
 from collections.abc import Iterable

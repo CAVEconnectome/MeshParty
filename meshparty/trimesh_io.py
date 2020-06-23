@@ -2,7 +2,10 @@ import numpy as np
 import h5py
 from scipy import spatial, sparse
 from sklearn import decomposition
-from pykdtree.kdtree import KDTree
+try:
+    from pykdtree.kdtree import KDTree
+except:
+    KDTree = spatial.cKDTree
 import os
 import networkx as nx
 import requests
