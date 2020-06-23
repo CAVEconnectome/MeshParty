@@ -22,7 +22,7 @@ def test_basic_components(simple_skeleton, simple_skeleton_with_properties):
     assert np.isclose(d, 4.2261093, atol=0.0001)
 
     skp = simple_skeleton_with_properties
-    assert np.all(skp.vertex_properties['test'] == np.arange(sk.n_vertices))
+    assert np.all(skp.vertex_properties['test'] == skp.mesh_index)
 
 
 def test_skeleton_creation(simple_skeleton):
