@@ -50,10 +50,15 @@ def simple_skeleton():
 def simple_skeleton_with_properties():
     verts = simple_verts
     edges = simple_edges
-    test_prop = np.arange(len(verts))
-    mesh_to_skel_map = np.arange(0, 10*len(verts), 10)
-    yield skeleton.Skeleton(verts, edges, mesh_to_skel_map=mesh_to_skel_map,
-                            vertex_properties={'test': test_prop}, root=0)
+    mesh_index = np.arange(0, 10*len(verts), 10)
+    mesh_to_skel_map = np.repeat(np.arange(0, len(verts)), 3)
+    test_prop = mesh_index.copy()
+    yield skeleton.Skeleton(verts,
+                            edges,
+                            mesh_index=mesh_index,
+                            mesh_to_skel_map=mesh_to_skel_map,
+                            vertex_properties={'test': test_prop},
+                            root=0)
 
 
 @pytest.mark.parametrize(

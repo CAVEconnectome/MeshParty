@@ -4,6 +4,26 @@ import networkx as nx
 import fastremap
 
 
+def array_if_scalar(values):
+    """If values is a single number or 0-dim array, make a shaped array"""
+    if values is None:
+        values = np.array([])
+        return_scalar = True
+    elif issubclass(type(values), np.ndarray):
+        if len(values.shape) == 0:
+            values = values.reshape(1)
+            return_scalar = True
+        else:
+            return_scalar = False
+    elif np.isscalar(values):
+        values = np.array([values])
+        return_scalar = True
+    else:
+        values = np.array(values)
+        return_scalar = False
+    return values, return_scalar
+
+
 def connected_component_slice(G, ind=None, return_boolean=False):
     '''
     Gets a numpy slice of the connected component corresponding to a
@@ -409,10 +429,10 @@ def collapse_zero_length_edges(vertices, edges, root, radius, mesh_to_skel_map, 
     consolidate_dict = {x[0]: x[1] for x in edges[zl]}
     # Compress multiple zero edges in a row
     while np.any(
-                 np.isin(np.array(list(consolidate_dict.keys())),
-                         np.array(list(consolidate_dict.values()))
-                         )
-                 ):
+        np.isin(np.array(list(consolidate_dict.keys())),
+                np.array(list(consolidate_dict.values()))
+                )
+    ):
         all_keys = np.array(list(consolidate_dict.keys()))
         dup_keys = np.flatnonzero(np.isin(all_keys,
                                           np.array(list(consolidate_dict.values()))))

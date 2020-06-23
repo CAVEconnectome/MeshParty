@@ -55,7 +55,10 @@ class StaticSkeleton:
 
     @property
     def voxel_scaling(self):
-        return self._voxel_scaling
+        if self._voxel_scaling is None:
+            return None
+        else:
+            return np.array(self._voxel_scaling)
 
     @voxel_scaling.setter
     def voxel_scaling(self, new_scaling):
@@ -819,14 +822,7 @@ class Skeleton:
         List of arrays
             List whose ith element is an array of all vertices downstream of the ith element of vinds.
         """
-        if vinds is None:
-            return np.array([])
-
-        if np.isscalar(vinds):
-            vinds = [vinds]
-            return_single = True
-        else:
-            return_single = False
+        vinds, return_single = utils.array_if_scalar(vinds)
 
         dns = []
         for vind in vinds:
@@ -853,15 +849,15 @@ class Skeleton:
         List of arrays
             A list whose ith element is the children of the ith element of vinds.
         """
-
-        return_single = False
-        if np.isscalar(vinds):
-            vinds = [vinds]
-            return_single = True
-        elif issubclass(type(vinds), np.ndarray):
-            if len(vinds.shape) == 0:
-                vinds = vinds.reshape(1)
-                return_single = True
+        vinds, return_single = utils.array_if_scalar(vinds)
+        # return_single = False
+        # if np.isscalar(vinds):
+        #     vinds = [vinds]
+        #     return_single = True
+        # elif issubclass(type(vinds), np.ndarray):
+        #     if len(vinds.shape) == 0:
+        #         vinds = vinds.reshape(1)
+        #         return_single = True
 
         cinds = []
         for vind in vinds:
