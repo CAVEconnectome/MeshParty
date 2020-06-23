@@ -10,7 +10,8 @@ from meshparty import meshwork, mesh_filters
 def basic_meshwork(full_cell_mesh):
     yield meshwork.load_meshwork('test/test_files/648518346349539862_meshwork.h5')
 
-def test_meshwork_creation(basic_meshwork): 
+
+def test_meshwork_creation(basic_meshwork):
     assert basic_meshwork.seg_id == 648518346349539862
     nrn = meshwork.Meshwork(basic_meshwork.mesh, seg_id=basic_meshwork.seg_id)
     syn_in_df = basic_meshwork.anno.syn_in.data_original
@@ -19,6 +20,7 @@ def test_meshwork_creation(basic_meshwork):
     assert len(nrn.anno.syn_in.df == nrn.anno['syn_in'].df)
     nrn.add_annotations('syn_in_100', syn_in_df, point_column='ctr_pt_position', max_distance=50)
     assert len(nrn.anno.syn_in_100.df) == 733
+
 
 def test_meshwork_masking(basic_meshwork):
     nrn = meshwork.Meshwork(basic_meshwork.mesh, seg_id=basic_meshwork.seg_id)
@@ -34,9 +36,17 @@ def test_meshwork_masking(basic_meshwork):
 
 
 def test_meshwork_skeleton(basic_meshwork):
-    nrn = meshwork.Meshwork(basic_meshwork.mesh, seg_id=basic_meshwork.seg_id, skeleton=basic_meshwork.skeleton)
-    assert basic_meshwork.skeleton.n_vertices == 11451
-    assert basic_meshwork.root == 332971
-    assert len(basic_meshwork.root_region) == 25701
-    assert len(basic_meshwork.downstream_of(287636)) == 43411
+    nrn = meshwork.Meshwork(basic_meshwork.mesh, seg_id=basic_meshwork.seg_id,
+                            skeleton=basic_meshwork.skeleton)
+    assert nrn.skeleton.n_vertices == 11451
+    assert nrn.root == 332971
+    assert len(nrn.root_region) == 25701
 
+    ds_pts = nrn.downstream_of(287636)
+    assert len(ds_pts) == 43411
+    assert len(ds_pts.to_skel_index) == 752
+
+    nrn.apply_mask(ds_pts.to_mesh_mask)
+    new_mesh = meshwork.Meshwork(nrn.mesh)
+    new_mesh.skeletonize_mesh()
+    assert np.isclose(new_mesh.path_length(), 119320.95)

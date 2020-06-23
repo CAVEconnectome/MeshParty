@@ -313,7 +313,7 @@ class Skeleton:
     @property
     def SkeletonIndex(self):
         if self._SkeletonIndex is None:
-            self._SkeletonIndex = SkeletonIndexFactory(self)
+            self._SkeletonIndex = np.array
         return self._SkeletonIndex
 
     def _register_skeleton_index(self, NewSkeletonIndex):
@@ -954,43 +954,3 @@ class Skeleton:
             header=header,
             xyz_scaling=xyz_scaling,
         )
-
-
-def SkeletonIndexFactory(sk):
-    class SkeletonIndex(np.ndarray):
-        def __new__(cls, skel_indices):
-            if (
-                np.array(skel_indices).dtype is np.dtype("bool")
-                and len(skel_indices) == sk.n_vertices
-            ):
-                skel_indices = np.flatnonzero(skel_indices)
-
-            skel_inds = np.asarray(skel_indices, dtype=int)
-            obj = skel_inds.view(cls)
-            obj._skel_indices_base = sk.map_indices_to_unmasked(skel_inds)
-            return obj
-
-        def __finalize_array__(self, obj):
-            if obj is None:
-                return
-            obj._skel_indices_base = getattr(obj, "_skel_indices_base", np.array([]))
-
-        @property
-        def to_skel_index(self):
-            return self
-
-        @property
-        def to_skel_index_padded(self):
-            return self
-
-        @property
-        def to_skel_mask_base(self):
-            mask = np.full(len(sk.node_mask), False)
-            mask[self.to_skel_index_base] = True
-            return mask
-
-        @property
-        def to_skel_mask(self):
-            return sk.filter_unmasked_boolean(self.to_skel_mask_base)
-
-    return SkeletonIndex
