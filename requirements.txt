@@ -13,3 +13,4 @@ shapely
 imageio
 pandas
 blosc
+numba
