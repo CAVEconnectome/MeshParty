@@ -5,6 +5,8 @@
     :target: https://travis-ci.com/sdorkenw/MeshParty
 .. image:: https://codecov.io/gh/sdorkenw/MeshParty/branch/master/graph/badge.svg
    :target: https://codecov.io/gh/sdorkenw/MeshParty
+.. image:: https://zenodo.org/badge/148393516.svg
+   :target: https://zenodo.org/badge/latestdoi/148393516
    
 MeshParty
 #########
@@ -43,7 +45,7 @@ Usage example
 
 ::
 
-    from mesh_party import trimesh_io
+    from meshparty import trimesh_io
 
     meshmeta = trimesh_io.MeshMeta()
     mesh = meshmeta.mesh(path_to_mesh) # mesh gets cached
