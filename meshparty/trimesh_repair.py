@@ -1,7 +1,6 @@
 
 from scipy import spatial, sparse
 from meshparty import utils
-import pykdtree
 import time
 import numpy as np
 from meshparty import trimesh_io

@@ -3,7 +3,10 @@ import numpy as np
 import time
 from meshparty import trimesh_vtk, utils, mesh_filters
 import pandas as pd
-from pykdtree.kdtree import KDTree
+try:
+    from pykdtree.kdtree import KDTree
+except:
+    KDTree = spatial.cKDTree
 from tqdm import trange, tqdm
 from meshparty.trimesh_io import Mesh
 from meshparty.skeleton import Skeleton
@@ -72,37 +75,46 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True, c
 
     if smooth_vertices is True:
         skel_verts = smooth_verts
-    
+
     rs = None
 
     if collapse_soma is True and soma_pt is not None:
         # skel_map[np.isnan(skel_map)] = len(skel_verts)
         temp_sk = Skeleton(skel_verts, skel_edges,
-                           mesh_index=mesh.map_indices_to_unmasked(orig_skel_index), 
+                           mesh_index=mesh.map_indices_to_unmasked(orig_skel_index),
                            mesh_to_skel_map=skel_map)
-        _, close_ind = temp_sk.kdtree.query(soma_pt.reshape(1,3))
+        _, close_ind = temp_sk.kdtree.query(soma_pt.reshape(1, 3))
         temp_sk.reroot(close_ind[0])
 
         if collapse_function == 'sphere':
-            soma_verts, soma_r = soma_via_sphere(soma_pt, temp_sk.vertices, temp_sk.edges, soma_radius)
+            soma_verts, soma_r = soma_via_sphere(
+                soma_pt, temp_sk.vertices, temp_sk.edges, soma_radius)
         elif collapse_function == 'branch':
 
             if shape_function == 'single':
-                rs = ray_trace_distance(mesh.filter_unmasked_indices_padded(temp_sk.mesh_index), mesh)
-            elif shape_function =='cone':
-                rs = shape_diameter_function(mesh.filter_unmasked_indices_padded(temp_sk.mesh_index), mesh, num_points=30, cone_angle=np.pi/3 )
+                rs = ray_trace_distance(
+                    mesh.filter_unmasked_indices_padded(temp_sk.mesh_index), mesh)
+            elif shape_function == 'cone':
+                rs = shape_diameter_function(mesh.filter_unmasked_indices_padded(
+                    temp_sk.mesh_index), mesh, num_points=30, cone_angle=np.pi/3)
 
             soma_verts, soma_r = soma_via_branch_starts(temp_sk,
-                                                mesh,
-                                                soma_pt,
-                                                rs,
-                                                search_radius=collapse_params.get('search_radius', 25000),
-                                                fallback_radius=collapse_params.get('fallback_radius', soma_radius),
-                                                cutoff_threshold=collapse_params.get('cutoff_threshold', 0.4),
-                                                min_cutoff=collapse_params.get('min_cutoff', 0.1),
-                                                dynamic_range=collapse_params.get('dynamic_range', 1),
-                                                dynamic_threshold=collapse_params.get('dynamic_threshold', False)
-                                                )
+                                                        mesh,
+                                                        soma_pt,
+                                                        rs,
+                                                        search_radius=collapse_params.get(
+                                                            'search_radius', 25000),
+                                                        fallback_radius=collapse_params.get(
+                                                            'fallback_radius', soma_radius),
+                                                        cutoff_threshold=collapse_params.get(
+                                                            'cutoff_threshold', 0.4),
+                                                        min_cutoff=collapse_params.get(
+                                                            'min_cutoff', 0.1),
+                                                        dynamic_range=collapse_params.get(
+                                                            'dynamic_range', 1),
+                                                        dynamic_threshold=collapse_params.get(
+                                                            'dynamic_threshold', False)
+                                                        )
 
         new_v, new_e, new_skel_map, vert_filter, root_ind = collapse_soma_skeleton(soma_verts, soma_pt, temp_sk.vertices, temp_sk.edges,
                                                                                    mesh_to_skeleton_map=temp_sk.mesh_to_skel_map,
@@ -136,12 +148,12 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True, c
         if rs is None:
             if shape_function == 'single':
                 rs = ray_trace_distance(orig_skel_index[vert_filter], mesh)
-            elif shape_function =='cone':
+            elif shape_function == 'cone':
                 rs = shape_diameter_function(orig_skel_index[vert_filter], mesh)
         else:
             rs = rs[vert_filter]
         if collapse_soma is True and soma_pt is not None:
-            rs = np.append(rs, soma_r)      
+            rs = np.append(rs, soma_r)
         props['rs'] = rs
 
     sk = Skeleton(new_v, new_e, mesh_to_skel_map=skel_map_full_mesh,
@@ -164,7 +176,7 @@ def _remove_nan_radius(sk, set_unfixed_to_lowest=True):
             sparse_row = sk.csgraph_binary_undirected[nanloc].toarray().ravel()
             prod = sparse_row * sk.radius
             with np.errstate(divide='ignore', invalid='ignore'):
-                new_rad = np.nansum(prod) / np.nansum(prod>0)
+                new_rad = np.nansum(prod) / np.nansum(prod > 0)
             sk._rooted.radius[nanloc] = new_rad
         last_numnans = numnans
         nanlocs = np.flatnonzero(np.isnan(sk.radius))
@@ -319,7 +331,7 @@ def skeletonize_components(mesh,
     tot_path_lengths = []
 
     if soma_pt is not None:
-        soma_d = mesh.vertices - soma_pt.reshape(1,3)
+        soma_d = mesh.vertices - soma_pt.reshape(1, 3)
         soma_d = np.linalg.norm(soma_d, axis=1)
         is_soma_pt = soma_d < soma_thresh
     else:
@@ -627,6 +639,7 @@ def smooth_graph(values, edges, mask=None, neighborhood=2, iterations=100, r=.1)
         new_values = A*new_values
     return new_values
 
+
 def soma_via_sphere(soma_pt, verts, edges, soma_d_thresh):
     """ Get indices within soma_d_thresh of a soma_pt. Exclude vertices that left and come back.
     """
@@ -636,6 +649,7 @@ def soma_via_sphere(soma_pt, verts, edges, soma_d_thresh):
     speye = sparse.diags(close_inds.astype(int))
     _, compids = sparse.csgraph.connected_components(orig_graph * speye)
     return np.flatnonzero(compids[closest_soma_ind] == compids), soma_d_thresh
+
 
 def soma_via_branch_starts(sk,
                            mesh,
@@ -651,14 +665,14 @@ def soma_via_branch_starts(sk,
     """Runs down paths into the soma region and finds onset of each branch.
     """
 
-    is_close = np.linalg.norm( sk.vertices - soma_pt, axis=1 ) < search_radius
+    is_close = np.linalg.norm(sk.vertices - soma_pt, axis=1) < search_radius
     is_close_fallback = np.linalg.norm(sk.vertices-soma_pt, axis=1) < fallback_radius
 
     # Find segments that emerge from the soma region
     close_segs = []
     for seg in sk.segments:
         seg = seg[np.argsort(sk.distance_to_root[seg])]
-        if is_close[ seg[0] ]:
+        if is_close[seg[0]]:
             if np.all(is_close[sk.path_to_root(seg[0])]):
                 close_segs.append(seg)
     close_seg_inds = np.concatenate(close_segs)
@@ -667,8 +681,8 @@ def soma_via_branch_starts(sk,
     # From those segments, find the tips that come out of the search_radius
     is_close_specific = np.full(sk.n_vertices, False)
     is_close_specific[close_inds] = True
-    close_parent_edges = sk.edges[is_close_specific[sk.edges[:,1]]]
-    tip_inds = close_parent_edges[~is_close_specific[close_parent_edges[:,0]], 0]
+    close_parent_edges = sk.edges[is_close_specific[sk.edges[:, 1]]]
+    tip_inds = close_parent_edges[~is_close_specific[close_parent_edges[:, 0]], 0]
 
     rs = rs[close_inds]
     rs_long = np.full(sk.n_vertices, np.nan)
@@ -692,24 +706,27 @@ def soma_via_branch_starts(sk,
         xdata = xdata[good_rows]
         ydata_filt = np.maximum.accumulate(signal.medfilt(ydata, 21))
 
-        try: 
+        try:
             # sig = ydata_filt * log_func( (np.max(xdata)-xdata), 1, 2, 3, 1)
-            sig = np.where(ydata_filt < 2, 2, ydata_filt) * log_func( (np.max(xdata)-xdata), 2, 1, 5, 1)
-            params, _ = optimize.curve_fit(log_func, 
-                                           xdata, 
+            sig = np.where(ydata_filt < 2, 2, ydata_filt) * \
+                log_func((np.max(xdata)-xdata), 2, 1, 5, 1)
+            params, _ = optimize.curve_fit(log_func,
+                                           xdata,
                                            ydata_filt,
-                                           sigma = sig,
+                                           sigma=sig,
                                            bounds=([0, 0.5, 0, 0],
                                                    [np.inf, 5, np.inf, np.inf]),
                                            p0=(10, 1, 10, 1),
                                            method='trf')
             all_params.append(params)
             if dynamic_threshold:
-                cutoff_threshold_eff = np.min([cutoff_threshold, min_cutoff + (cutoff_threshold-min_cutoff) * np.max([0, (params[1]-0.5)/dynamic_range])])
+                cutoff_threshold_eff = np.min(
+                    [cutoff_threshold, min_cutoff + (cutoff_threshold-min_cutoff) * np.max([0, (params[1]-0.5)/dynamic_range])])
             else:
                 cutoff_threshold_eff = cutoff_threshold
 
-            f = lambda x: log_func(x, *params) - (params[3] + cutoff_threshold_eff * (params[0] - params[3] ))
+            def f(x): return log_func(x, *params) - \
+                (params[3] + cutoff_threshold_eff * (params[0] - params[3]))
             opt_sol = optimize.root_scalar(f,  bracket=[0, xdata.max()])
             if opt_sol.converged:
                 root = opt_sol.root
@@ -723,14 +740,14 @@ def soma_via_branch_starts(sk,
         if not use_fallback:
             base_path_ind = np.argmin(np.abs(xdata-root))
         else:
-            d_to_soma_pt = np.linalg.norm(sk.vertices[path_inds] - soma_pt, axis=1 ) 
+            d_to_soma_pt = np.linalg.norm(sk.vertices[path_inds] - soma_pt, axis=1)
             base_path_ind = np.argmin(np.abs(d_to_soma_pt - fallback_radius))
 
         soma_vote = np.full(sk.n_vertices, np.nan)
         soma_vote[path_inds[base_path_ind:]] = 1
         soma_vote[path_inds[:base_path_ind]] = 0
         soma_votes.append(soma_vote)
-        
+
     # Any tips whose path to root is entirely in the close zone also vote as as 'somatic'
     for ep in sk.end_points[is_close[sk.end_points]]:
         ptr = sk.path_to_root(ep)
@@ -743,7 +760,7 @@ def soma_via_branch_starts(sk,
     # Get soma region
     soma_votes = np.vstack(soma_votes)
     num_votes = len(soma_votes) - np.sum(np.isnan(soma_votes), axis=0)
-    num_yes = np.nansum(soma_votes, axis=0 )
+    num_yes = np.nansum(soma_votes, axis=0)
 
     with np.errstate(all='ignore'):
         is_soma = (num_yes / num_votes) > 0.5
@@ -751,7 +768,7 @@ def soma_via_branch_starts(sk,
     last_nonsoma = []
     for tip_ind in tip_inds:
         ptr = sk.path_to_root(tip_ind)
-        last_nonsoma.append(ptr[np.flatnonzero(np.diff(is_soma[ptr])==1)[0]])
+        last_nonsoma.append(ptr[np.flatnonzero(np.diff(is_soma[ptr]) == 1)[0]])
     last_nonsoma = np.unique(last_nonsoma)
 
     keep_binds = []
@@ -766,7 +783,7 @@ def soma_via_branch_starts(sk,
     g = sk.cut_graph(last_nonsoma[keep_binds])
     _, comps = sparse.csgraph.connected_components(g)
     root_comp = comps[sk.root]
-    return np.flatnonzero(comps==root_comp), np.nanmedian(rs_long[comps==root_comp])
+    return np.flatnonzero(comps == root_comp), np.nanmedian(rs_long[comps == root_comp])
 
 
 def collapse_soma_skeleton(soma_verts, soma_pt, verts, edges, mesh_to_skeleton_map=None,
@@ -813,7 +830,7 @@ def collapse_soma_skeleton(soma_verts, soma_pt, verts, edges, mesh_to_skeleton_m
 
     """
     if soma_verts is not None:
-        soma_pt_m = soma_pt.reshape(1,3)
+        soma_pt_m = soma_pt.reshape(1, 3)
         new_verts = np.vstack((verts, soma_pt_m))
         soma_i = verts.shape[0]
         edges_m = edges.copy()
