@@ -34,7 +34,8 @@ install:
   - pip install -r test_requirements.txt
   - pip install -r optional_requirements.txt
 script:
-  - python setup.py test -a test # or py.test for Python versions 3.5 and below
+  - pytest test
+  # - python setup.py test -a test # or py.test for Python versions 3.5 and below
 after_success:
   - codecov -t 72712def-b073-4211-88e4-f7b4d5b0d1ba
 cache:
