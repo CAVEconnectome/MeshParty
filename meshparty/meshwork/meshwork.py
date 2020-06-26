@@ -235,9 +235,6 @@ class AnchoredAnnotation(object):
     def __repr__(self):
         return self.df.__repr__()
 
-    def _repr_html_(self):
-        return self.df.head()._repr_html_()
-
     def __getitem__(self, key):
         return self.df.__getitem__(key)
 
@@ -428,19 +425,21 @@ class Meshwork(object):
     """
 
     def __init__(
-        self,
-        mesh,
-        skeleton=None,
-        skeleton_only=False,
-        seg_id=None,
-        voxel_resolution=None,
+        self, mesh=None, skeleton=None, seg_id=None, voxel_resolution=None,
     ):
-        if skeleton_only:
-            mesh = skeleton
+        if mesh is None and skeleton is None:
+            raise ValueError("Must include at least one of mesh or skeleton")
+
+        if mesh is None and skeleton is not None:
+            mesh = Mesh(
+                vertices=skeleton.vertices,
+                faces=np.zeros((0, 3)),
+                link_edges=skeleton.edges,
+            )
+
         self._seg_id = seg_id
         self._mesh = mesh
         self._skeleton = skeleton
-        self._mesh_is_skeleton = skeleton_only
 
         if voxel_resolution is None:
             voxel_resolution = DEFAULT_VOXEL_RESOLUTION
@@ -516,10 +515,7 @@ class Meshwork(object):
     def mesh(self):
         """Copy of the neuronal mesh
         """
-        if self._mesh_is_skeleton:
-            return self._skeleton
-        else:
-            return self._mesh
+        return self._mesh
 
     @property
     def mesh_mask(self):
@@ -529,7 +525,7 @@ class Meshwork(object):
 
     def apply_mask(self, mask):
         """Apply a mesh mask to the meshwork object
-        
+
         Parameters
         ----------
         mask : array of booleans
@@ -550,21 +546,16 @@ class Meshwork(object):
     def reset_mask(self):
         """Remove mask and restore object to its original state.
         """
-        if self._mesh_is_skeleton:
-            self._skeleton.reset_mask(in_place=True)
-        else:
-            if self._original_mesh_data is not None:
-                self._anno.remove_filter()
+        if self._original_mesh_data is not None:
+            self._anno.remove_filter()
 
-                vs, fs, es, nm, vxsc = decompress_mesh_data(*self._original_mesh_data)
-                self._mesh = Mesh(
-                    vs, fs, link_edges=es, node_mask=nm, voxel_scaling=vxsc
-                )
+            vs, fs, es, nm, vxsc = decompress_mesh_data(*self._original_mesh_data)
+            self._mesh = Mesh(vs, fs, link_edges=es, node_mask=nm, voxel_scaling=vxsc)
 
-                self._original_mesh_data = None
-                if self.skeleton is not None:
-                    self._skeleton.reset_mask(in_place=True)
-                self._reset_indices()
+            self._original_mesh_data = None
+            if self.skeleton is not None:
+                self._skeleton.reset_mask(in_place=True)
+            self._reset_indices()
 
     ##################
     # Anno functions #
@@ -587,7 +578,7 @@ class Meshwork(object):
         overwrite=False,
     ):
         """Associate annotation data with the mesh
-        
+
         Parameters
         ----------
         name : str
@@ -612,7 +603,7 @@ class Meshwork(object):
 
     def remove_annotations(self, name):
         """Remove annotation from AnnotationManager
-        
+
         Parameters
         ----------
         name : str
@@ -622,7 +613,7 @@ class Meshwork(object):
 
     def anchor_annotations(self, name):
         """Set an unanchored annotation to an anchored one
-        
+
         Parameters
         ----------
         name : str
@@ -656,14 +647,17 @@ class Meshwork(object):
     def skeletonize_mesh(
         self,
         soma_pt=None,
+        collapse_soma=True,
         soma_thresh_distance=7500,
         invalidation_distance=12000,
         compute_radius=True,
         shape_function="single",
         overwrite=False,
+        collapse_function="sphere",
+        collapse_params={},
     ):
         """Skeletonize the anchor mesh. Always uses the mesh as used to initialize the class instance.
-        
+
         Parameters
         ----------
         soma_pt : arrary or None, optional
@@ -692,11 +686,13 @@ class Meshwork(object):
                 mesh_to_sk,
                 soma_pt=soma_pt,
                 soma_radius=soma_thresh_distance,
-                collapse_soma=True,
+                collapse_soma=collapse_soma,
                 invalidation_d=invalidation_distance,
                 compute_original_index=True,
                 compute_radius=compute_radius,
                 shape_function=shape_function,
+                collapse_function=collapse_function,
+                collapse_params=collapse_params,
             )
             self._reset_indices()
         else:
@@ -826,7 +822,7 @@ class Meshwork(object):
     @OnlyIfSkeleton.exists
     def parent_index(self, mesh_inds, include_parent_free=False, return_as_skel=False):
         """Given a list of mesh indicies, get mesh indices of parents.
-        
+
         Parameters
         ----------
         mesh_inds : array or int
@@ -837,7 +833,7 @@ class Meshwork(object):
             breaking a one-to-one correspondance with the inputs.
         return_as_skel : bool, optional
             Return as skeleton indices. This effectively includes parent-free nodes as well.
-        
+
         Returns
         -------
         array
@@ -855,14 +851,14 @@ class Meshwork(object):
     @OnlyIfSkeleton.exists
     def child_index(self, mesh_inds, return_as_skel=False):
         """Given a list of mesh indicies, get list of mesh indices of child nodes.
-        
+
         Parameters
         ----------
         mesh_inds : array or int
             Mesh indices to check
         return_as_skel : bool, optional
             Return as skeleton indices.
-        
+
         Returns
         -------
         list 
@@ -905,12 +901,12 @@ class Meshwork(object):
     @OnlyIfSkeleton.exists
     def distance_to_root(self, mesh_indices):
         """Distance to root for mesh indices along skeleton.
-        
+
         Parameters
         ----------
         mesh_indices : array-like
             Collection of mesh indices to look up
-        
+
         Returns
         -------
         array
@@ -926,14 +922,14 @@ class Meshwork(object):
     @OnlyIfSkeleton.exists
     def downstream_of(self, mesh_index, return_as_skel=False):
         """Get mesh indices distal to a collection of mesh indices
-        
+
         Parameters
         ----------
         mesh_index : int or array-like 
             Mesh index or collection of mesh indices
         return_as_skel : bool, optional
             If True, returns downstream indices as SkeletonIndex. Default is False.
-        
+
         Returns
         -------
         array or list
@@ -968,14 +964,14 @@ class Meshwork(object):
     @OnlyIfSkeleton.exists
     def same_segment(self, mesh_inds, return_as_skel=False):
         """Get all indices within the same segment (region between branch/end points)
-        
+
         Parameters
         ----------
         mesh_inds : int or array-like
             Mesh index or collection of mesh indices
         return_as_skel : bool, optional
             If True, return as SkeletonIndex. Default is False.
-        
+
         Returns
         -------
         array or list
@@ -998,12 +994,12 @@ class Meshwork(object):
     @OnlyIfSkeleton.exists
     def segments(self, return_as_skel=False):
         """Get all segments (regions between topological points)
-        
+
         Parameters
         ----------
         return_as_skel : bool, optional
             Description
-        
+
         Returns
         -------
         TYPE
@@ -1023,7 +1019,7 @@ class Meshwork(object):
     @OnlyIfSkeleton.exists
     def distance_between(self, inds_source, inds_target, along_path=True, squeeze=True):
         """Get distance matrix between source and target mesh indices along the object 
-        
+
         Parameters
         ----------
         inds_source : int or array
@@ -1057,7 +1053,7 @@ class Meshwork(object):
     @OnlyIfSkeleton.exists
     def path_between(self, source_index, target_index, return_as_skel=False):
         """Get indices of a path between a source and a target mesh index.
-        
+
         Parameters
         ----------
         source_index : int
@@ -1066,7 +1062,7 @@ class Meshwork(object):
             Mesh index of a target
         return_as_skel : bool, optional
             If True, return as skeleton indices. Default is False.
-        
+
         Returns
         -------
         array
@@ -1092,7 +1088,7 @@ class Meshwork(object):
         self, source_inds, distance, collapse=True, return_as_skel=False
     ):
         """Mesh indices within a distance along the object's skeleton
-        
+
         Parameters
         ----------
         source_inds : array or int
@@ -1142,12 +1138,12 @@ class Meshwork(object):
     @OnlyIfSkeleton.exists
     def path_length(self, inds=None):
         """Get path length of collection of mesh indices
-        
+
         Parameters
         ----------
         inds : array-like
             Mesh indices to compute path length for. Can be in any order.
-        
+
         Returns
         -------
         path_length : float 
@@ -1167,7 +1163,7 @@ class Meshwork(object):
         self, inds, width, weight=None, normalize=True, exclude_root=False,
     ):
         """Compute a sliding window average linear density of points across the object
-        
+
         Parameters
         ----------
         inds : array
@@ -1257,7 +1253,7 @@ class Meshwork(object):
 
     def save_meshwork(self, filename, overwrite=False):
         """Save meshwork to hdf5 file.
-        
+
         Parameters
         ----------
         filename : str
@@ -1270,12 +1266,12 @@ class Meshwork(object):
 
 def load_meshwork(filename):
     """Loads meshwork file from an hdf5 file.
-    
+
     Parameters
     ----------
     filename : str
         file location
-    
+
     Returns
     -------
     meshwork : Meshwork
