@@ -345,7 +345,6 @@ class Skeleton:
         )
 
 
-r
    def apply_mask(self, new_mask, in_place=False):
         if in_place:
             sk = self
