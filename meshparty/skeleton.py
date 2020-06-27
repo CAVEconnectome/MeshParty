@@ -337,14 +337,16 @@ class Skeleton:
             vertex_properties=self._rooted.vertex_properties,
             root=self._rooted.root,
             node_mask=self.node_mask,
-            radius=self.radius,
+            radius=self._rooted.radius,
             voxel_scaling=self.voxel_scaling,
             skeleton_index=self._SkeletonIndex,
-            mesh_index=self.mesh_index,
+            mesh_index=self._rooted.mesh_index,
             remove_zero_length_edges=False,
         )
 
-    def apply_mask(self, new_mask, in_place=False):
+
+r
+   def apply_mask(self, new_mask, in_place=False):
         if in_place:
             sk = self
         else:
