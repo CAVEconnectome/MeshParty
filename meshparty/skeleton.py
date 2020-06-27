@@ -344,8 +344,7 @@ class Skeleton:
             remove_zero_length_edges=False,
         )
 
-
-   def apply_mask(self, new_mask, in_place=False):
+    def apply_mask(self, new_mask, in_place=False):
         if in_place:
             sk = self
         else:
