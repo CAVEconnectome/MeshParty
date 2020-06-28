@@ -108,7 +108,8 @@ def save_meshwork_annotations(filename, mw):
             dset = f.create_group(f'annotations/{table_name}')
             anno = annos[table_name]
             dset.attrs['anchor_to_mesh'] = int(anno.anchored)
-            dset.attrs['point_column'] = anno.point_column
+            if anno.point_column is not None:
+                dset.attrs['point_column'] = anno.point_column
             dset.attrs['max_distance'] = anno._max_distance
             if anno._index_column_base in anno._original_columns:
                 dset.attrs['index_column'] = anno._index_column_base
@@ -130,7 +131,7 @@ def load_meshwork_annotations(filename):
             annotation_dfs[table_name]['anchor_to_mesh'] = bool(dset.attrs.get('anchor_to_mesh'))
             annotation_dfs[table_name]['point_column'] = dset.attrs.get('point_column', None)
             annotation_dfs[table_name]['max_distance'] = dset.attrs.get('max_distance')
-            annotation_dfs[table_name]['index_column'] = dset.attrs.get('index_column')
+            annotation_dfs[table_name]['index_column'] = dset.attrs.get('index_column', None)
     return annotation_dfs
 
 
