@@ -24,16 +24,20 @@ def _build_multicut_graph(nrn):
 
 
 def _multicut_partitions(G, nrn):
-    cutval, partition = nx.minimum_cut(G, 'source', 'target', capacity='weight')
+    _, partition = nx.minimum_cut(G, 'source', 'target', capacity='weight')
 
     part0 = list(partition[0].difference({'source', 'target'}))
-    part1 = list(partition[1].difference({'source', 'target'}))
+    part1 = list(partition[1].differenace({'source', 'target'}))
 
     return nrn.MeshIndex(part0).to_mesh_mask_base, nrn.MeshIndex(part1).to_mesh_mask_base
 
 
 def _build_nrn_with_st_annos(mesh, source_points, target_points):
-    nrn = meshwork.Meshwork(mesh, voxel_resolution=[1, 1, 1])
+    if isinstance(source_points, np.ndarray):
+        source_points = source_points.tolist()
+    if isinstance(target_points, np.ndarray):
+        target_points = target_points.tolist()
+    nrn = Meshwork(mesh, voxel_resolution=[1, 1, 1])
     source_df = pd.DataFrame(data={'pt_position': source_points})
     source_df['type'] = 's'
     target_df = pd.DataFrame(data={'pt_position': target_points})
@@ -62,12 +66,15 @@ def _build_local_mask(nrn, initial_window):
 
 
 def _faces_to_keep(p1mask, p2mask, nrn):
-    clip_faces1 = p1mask[nrn.mesh.faces[:, 0]] & (
-        p2mask[nrn.mesh.faces[:, 1]] | p2mask[nrn.mesh.faces[:, 2]])
-    clip_faces2 = p1mask[nrn.mesh.faces[:, 1]] & (
-        p2mask[nrn.mesh.faces[:, 0]] | p2mask[nrn.mesh.faces[:, 2]])
-    clip_faces3 = p1mask[nrn.mesh.faces[:, 2]] & (
-        p2mask[nrn.mesh.faces[:, 0]] | p2mask[nrn.mesh.faces[:, 1]])
+    p1mask_full = nrn.mesh.filter_unmasked_boolean(p1mask)
+    p2mask_full = nrn.mesh.filter_unmasked_boolean(p2mask)
+
+    clip_faces1 = p1mask_full[nrn.mesh.faces[:, 0]] & (
+        p2mask_full[nrn.mesh.faces[:, 1]] | p2mask_full[nrn.mesh.faces[:, 2]])
+    clip_faces2 = p1mask_full[nrn.mesh.faces[:, 1]] & (
+        p2mask_full[nrn.mesh.faces[:, 0]] | p2mask_full[nrn.mesh.faces[:, 2]])
+    clip_faces3 = p1mask_full[nrn.mesh.faces[:, 2]] & (
+        p2mask_full[nrn.mesh.faces[:, 0]] | p2mask_full[nrn.mesh.faces[:, 1]])
     clip_faces = np.logical_or(clip_faces1, np.logical_or(clip_faces2, clip_faces3))
     return np.invert(clip_faces)
 
