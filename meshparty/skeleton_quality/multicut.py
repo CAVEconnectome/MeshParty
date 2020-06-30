@@ -27,7 +27,7 @@ def _multicut_partitions(G, nrn):
     _, partition = nx.minimum_cut(G, 'source', 'target', capacity='weight')
 
     part0 = list(partition[0].difference({'source', 'target'}))
-    part1 = list(partition[1].differenace({'source', 'target'}))
+    part1 = list(partition[1].difference({'source', 'target'}))
 
     return nrn.MeshIndex(part0).to_mesh_mask_base, nrn.MeshIndex(part1).to_mesh_mask_base
 
@@ -67,19 +67,62 @@ def _build_local_mask(nrn, initial_window):
 
 def _faces_to_keep(p1mask, p2mask, nrn):
     p1mask_full = nrn.mesh.filter_unmasked_boolean(p1mask)
+    p1faces = np.all(p1mask_full[nrn.mesh.faces], axis=1)
+
     p2mask_full = nrn.mesh.filter_unmasked_boolean(p2mask)
+    p2faces = np.all(p2mask_full[nrn.mesh.faces], axis=1)
 
-    clip_faces1 = p1mask_full[nrn.mesh.faces[:, 0]] & (
-        p2mask_full[nrn.mesh.faces[:, 1]] | p2mask_full[nrn.mesh.faces[:, 2]])
-    clip_faces2 = p1mask_full[nrn.mesh.faces[:, 1]] & (
-        p2mask_full[nrn.mesh.faces[:, 0]] | p2mask_full[nrn.mesh.faces[:, 2]])
-    clip_faces3 = p1mask_full[nrn.mesh.faces[:, 2]] & (
-        p2mask_full[nrn.mesh.faces[:, 0]] | p2mask_full[nrn.mesh.faces[:, 1]])
-    clip_faces = np.logical_or(clip_faces1, np.logical_or(clip_faces2, clip_faces3))
-    return np.invert(clip_faces)
+    neither_mask = np.invert(np.logical_or(p1mask_full, p2mask_full))
+    nfaces = np.any(neither_mask[nrn.mesh.faces], axis=1)
+    good_faces = np.logical_or(np.logical_or(p1faces, p2faces), nfaces)
+    return good_faces
 
 
-def mesh_multicut(mesh, source_points, target_points, initial_window=10000):
+def _add_expected_edges(G, new_mesh, p1mask, p2mask, local_network_mask, test_split=True):
+    "Adds edges that were not included in the faces graph"
+    G.remove_node('source')
+    G.remove_node('target')
+
+    new_mesh_filt = new_mesh.apply_mask(local_network_mask)
+    p1s = new_mesh_filt.filter_unmasked_boolean(p1mask)
+    p2s = new_mesh_filt.filter_unmasked_boolean(p2mask)
+
+    # Make matrix without cross-partition edges
+    Gorig = nx.to_scipy_sparse_matrix(G)
+    ii, jj, dd = sparse.find(Gorig)
+    keep11 = p1s[ii] & p1s[jj]
+    keep22 = p2s[ii] & p2s[jj]
+    keep_all = keep11 | keep22
+
+    GsplitB = sparse.csr_matrix((dd[keep_all], (ii[keep_all], jj[keep_all]))).toarray() > 0
+
+    Gnew = new_mesh_filt.csgraph.toarray()
+    GnewB = Gnew > 0
+
+    # Places where edge in expected Gmat but not in new mesh
+    link_edges_to_add_rough = np.vstack(np.where(np.logical_and(GsplitB == True, GnewB == False))).T
+    if len(link_edges_to_add_rough) > 0:
+        link_edges_to_add = np.unique(
+            [tuple(x) for x in np.sort(link_edges_to_add_rough, axis=1)], axis=0)
+
+        link_edges_unmasked = new_mesh_filt.map_indices_to_unmasked(link_edges_to_add)
+        new_mesh.link_edges = np.vstack(
+            (new_mesh.link_edges, new_mesh.filter_unmasked_indices(link_edges_unmasked)))
+
+    if test_split:
+        if len(link_edges_to_add_rough) > 0:
+            new_mesh_filt.link_edges = np.vstack((new_mesh_filt.link_edges, link_edges_to_add))
+
+        ncomp = sparse.csgraph.connected_components(new_mesh_filt.csgraph)[0]
+        if ncomp > 2:
+            print('Warning: more than 2 local components after split')
+        if ncomp == 1:
+            print('Warning: Only 1 local component after split')
+
+    return new_mesh
+
+
+def mesh_multicut(mesh, source_points, target_points, initial_window=10000, return_masks=False):
     """Use multi-point source/target split to cut a minimal set of faces from a mesh
 
     Parameters
@@ -113,4 +156,12 @@ def mesh_multicut(mesh, source_points, target_points, initial_window=10000):
 
     keep_faces = _faces_to_keep(p1mask, p2mask, nrn)
 
-    return Mesh(vertices=nrn.mesh.vertices, faces=nrn.mesh.faces[keep_faces], node_mask=nrn.mesh_mask, link_edges=nrn.mesh.link_edges)
+    new_mesh = Mesh(vertices=nrn.mesh.vertices,
+                    faces=nrn.mesh.faces[keep_faces], node_mask=nrn.mesh_mask, link_edges=nrn.mesh.link_edges)
+
+    new_mesh = _add_expected_edges(G, new_mesh, p1mask, p2mask, local_network_mask)
+
+    if return_masks:
+        return new_mesh, p1mask, p2mask
+    else:
+        return new_mesh

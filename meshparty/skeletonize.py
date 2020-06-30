@@ -139,9 +139,11 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True, c
     props = {}
 
     if compute_original_index is True:
-        mesh_index = temp_sk.mesh_index[vert_filter]
         if collapse_soma is True and soma_pt is not None:
+            mesh_index = temp_sk.mesh_index[vert_filter]
             mesh_index = np.append(mesh_index, -1)
+        else:
+            mesh_index = orig_skel_index[vert_filter]
         props['mesh_index'] = mesh_index
 
     if compute_radius is True:
