@@ -123,7 +123,9 @@ def _add_expected_edges(G, new_mesh, p1mask, p2mask, local_network_mask, test_sp
 
 
 def mesh_multicut(mesh, source_points, target_points, initial_window=10000, return_masks=False):
-    """Use multi-point source/target split to cut a minimal set of faces from a mesh
+    """Use multi-point source/target split to cut a minimal set of faces from a mesh.
+    Warns if the split produces more than 2 graph components in a local cutout, although
+    the end result may still be suitable.
 
     Parameters
     ----------
@@ -135,11 +137,19 @@ def mesh_multicut(mesh, source_points, target_points, initial_window=10000, retu
         Mx3 numpy array of Euclidean points on the other side of the desired partition
     initial_window : int or float, optional
         Search window for a point-to-point distance matrix, needs to be larger than the max distance between source and/or target points along the mesh, by default 10000
+    return_masks : bool, optional
+        If True, returns vertex masks that denote each partition. Default is False
 
     Returns
     -------
-    split_mesh
+    split_mesh : Mesh object
         Mesh with the same vertices as the original, but faces split per the multicut.
+    partition_mask_source : np.array
+        Boolean mask with True for mesh nodes in source partition. Returned if return_masks
+        is True.
+    partition_mask_target : np.array
+        Boolean mask with True for mesh nodes in source partition. Returned if return_masks
+        is True.
     """
     nrn = _build_nrn_with_st_annos(mesh, source_points, target_points)
 
