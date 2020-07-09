@@ -124,6 +124,7 @@ class AnchoredAnnotationManager(object):
         max_distance=np.inf,
         index_column=None,
         overwrite=False,
+        voxel_resolution=None
     ):
         "Add a dataframe to the manager"
 
@@ -131,6 +132,15 @@ class AnchoredAnnotationManager(object):
             raise ValueError(
                 "Table name already taken. Overwrite or choose a different name."
             )
+        if voxel_resolution is None:
+            voxel_resolution = self.voxel_resolution
+
+        if issubclass(type(data), np.ndarray):
+            if data.shape[1] == 3:
+                data = pd.DataFrame(data={'pt': data.tolist()})
+                point_column = 'pt'
+            else:
+                raise ValueError("Arrays must be of size Nx3")
 
         self._data_tables[name] = AnchoredAnnotation(
             name,
@@ -140,7 +150,7 @@ class AnchoredAnnotationManager(object):
             anchor_to_mesh=anchored,
             max_distance=max_distance,
             index_column=index_column,
-            voxel_resolution=self.voxel_resolution,
+            voxel_resolution=voxel_resolution,
         )
         self._data_tables[name]._register_MeshIndex(self._MeshIndex)
         self._add_attribute(name)
@@ -523,6 +533,18 @@ class Meshwork(object):
         """
         return self.mesh.node_mask
 
+    @property
+    def vertices(self):
+        return self.mesh.vertices
+
+    @property
+    def edges(self):
+        return self.mesh.edges
+
+    @property
+    def faces(self):
+        return self.mesh.faces
+
     def apply_mask(self, mask):
         """Apply a mesh mask to the meshwork object
 
@@ -878,13 +900,22 @@ class Meshwork(object):
 
     @OnlyIfSkeleton.exists
     def jump_proximal(self, ind):
+        """
+        Parameters
+        ----------
+        ind : 
+            [description]
+
+        Returns
+        -------
+        [type]
+            [description]
+        """
         ind = self._convert_to_meshindex(ind)
         skind = ind.to_skel_index
-        d = sparse.csgraph.dijkstra(self.skeleton.csgraph, directed=True, indices=skind)
-        proximal_pt = self.skeleton.topo_points[
-            np.argmin(d[0, self.skeleton.topo_points])
-        ]
-        return self.SkeletonIndex(proximal_pt).to_mesh_region_point
+        ptr = self._skeleton.path_to_root(skind[0])
+        is_topo = np.isin(ptr, self.skeleton.topo_points)
+        return self.SkeletonIndex(ptr[np.flatnonzero(is_topo)[0]]).to_mesh_region_point
 
     @OnlyIfSkeleton.exists
     def jump_distal(self, ind):
