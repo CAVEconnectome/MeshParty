@@ -124,7 +124,7 @@ class AnchoredAnnotationManager(object):
         max_distance=np.inf,
         index_column=None,
         overwrite=False,
-        voxel_resolution=None
+        voxel_resolution=None,
     ):
         "Add a dataframe to the manager"
 
@@ -137,8 +137,8 @@ class AnchoredAnnotationManager(object):
 
         if issubclass(type(data), np.ndarray):
             if data.shape[1] == 3:
-                data = pd.DataFrame(data={'pt': data.tolist()})
-                point_column = 'pt'
+                data = pd.DataFrame(data={"pt": data.tolist()})
+                point_column = "pt"
             else:
                 raise ValueError("Arrays must be of size Nx3")
 
@@ -200,6 +200,7 @@ class AnchoredAnnotation(object):
         max_distance=np.inf,
         index_column=None,
         voxel_resolution=None,
+        voxel_scaling=None,
     ):
 
         self._name = name
@@ -435,7 +436,12 @@ class Meshwork(object):
     """
 
     def __init__(
-        self, mesh=None, skeleton=None, seg_id=None, voxel_resolution=None,
+        self,
+        mesh=None,
+        skeleton=None,
+        seg_id=None,
+        voxel_resolution=None,
+        voxel_scaling=None,
     ):
         if mesh is None and skeleton is None:
             raise ValueError("Must include at least one of mesh or skeleton")
@@ -457,6 +463,11 @@ class Meshwork(object):
             self._mesh, voxel_resolution=voxel_resolution
         )
 
+        self._voxel_scaling = voxel_scaling
+        self._mesh.voxel_scaling = voxel_scaling
+        if skeleton is not None:
+            self._skeleton.voxel_scaling = voxel_scaling
+
         self._original_mesh_data = None
         self._MeshIndex = None
         self._SkeletonIndex = None
@@ -467,6 +478,17 @@ class Meshwork(object):
         """Segmentation id for the object
         """
         return self._seg_id
+
+    @property
+    def voxel_scaling(self):
+        return self._voxel_scaling
+
+    @voxel_scaling.setter
+    def voxel_scaling(self, new_scaling):
+        self._mesh.voxel_scaling = new_scaling
+        if self.skeleton is not None:
+            self._skeleton.voxel_scaling = new_scaling
+        self._recompute_indices()
 
     ##################
     # Mesh functions #
@@ -565,19 +587,29 @@ class Meshwork(object):
         self._anno.filter_annotations(self.mesh)
         self._reset_indices()
 
-    def reset_mask(self):
+    def reset_mask(self, to=None):
         """Remove mask and restore object to its original state.
+
+        Parameters
+        ----------
+        to : array, optional
+            Mask array of booleans to apply after resetting the mask. Equivalent to reset_mask followed by apply_mask.
         """
         if self._original_mesh_data is not None:
             self._anno.remove_filter()
 
-            vs, fs, es, nm, vxsc = decompress_mesh_data(*self._original_mesh_data)
-            self._mesh = Mesh(vs, fs, link_edges=es, node_mask=nm, voxel_scaling=vxsc)
+            vs, fs, es, nm, vxsc = decompress_mesh_data(
+                *self._original_mesh_data)
+            self._mesh = Mesh(vs, fs, link_edges=es,
+                              node_mask=nm, voxel_scaling=vxsc)
 
             self._original_mesh_data = None
             if self.skeleton is not None:
                 self._skeleton.reset_mask(in_place=True)
             self._reset_indices()
+
+            if to is not None:
+                self.apply_mask(to)
 
     ##################
     # Anno functions #
@@ -698,8 +730,10 @@ class Meshwork(object):
         from meshparty.skeletonize import skeletonize_mesh
 
         if self._original_mesh_data is not None:
-            vs, fs, es, nm, vxsc = decompress_mesh_data(*self._original_mesh_data)
-            mesh_to_sk = Mesh(vs, fs, link_edges=es, node_mask=nm, voxel_scaling=vxsc)
+            vs, fs, es, nm, vxsc = decompress_mesh_data(
+                *self._original_mesh_data)
+            mesh_to_sk = Mesh(vs, fs, link_edges=es,
+                              node_mask=nm, voxel_scaling=vxsc)
         else:
             mesh_to_sk = self.mesh
 
@@ -750,7 +784,8 @@ class Meshwork(object):
         return np.flatnonzero(self._skind_to_mind_mask(skinds))
 
     def _skind_regions(self, skinds):
-        out = in1d_items(self.skeleton.mesh_to_skel_map[self.mesh.node_mask], skinds)
+        out = in1d_items(
+            self.skeleton.mesh_to_skel_map[self.mesh.node_mask], skinds)
         return out
 
     def _skind_region_first(self, skinds):
@@ -899,7 +934,7 @@ class Meshwork(object):
         return [n.to_mesh_region_point for n in child_index]
 
     @OnlyIfSkeleton.exists
-    def jump_proximal(self, ind):
+    def jump_proximal(self, ind, include_initial=False, hops=1):
         """
         Parameters
         ----------
@@ -912,10 +947,19 @@ class Meshwork(object):
             [description]
         """
         ind = self._convert_to_meshindex(ind)
-        skind = ind.to_skel_index
-        ptr = self._skeleton.path_to_root(skind[0])
+        skind = ind.to_skel_index[0]
+
+        topo_points = self.skeleton.topo_points
+        if include_initial == False:
+            if ind != self.skeleton.root:
+                topo_points = topo_points[topo_points != ind]
+
+        ptr = self.skeleton.path_to_root(skind)
         is_topo = np.isin(ptr, self.skeleton.topo_points)
-        return self.SkeletonIndex(ptr[np.flatnonzero(is_topo)[0]]).to_mesh_region_point
+        topo_pts_on_path = ptr[np.flatnonzero(is_topo)]
+        hop_ind = np.min((len(topo_pts_on_path), hops)) - 1
+        skind_out = self.SkeletonIndex(topo_pts_on_path[int(hop_ind)])
+        return skind_out.to_mesh_region_point
 
     @OnlyIfSkeleton.exists
     def jump_distal(self, ind):
@@ -973,7 +1017,8 @@ class Meshwork(object):
         else:
             use_scalar = False
         mesh_index = self._convert_to_meshindex(mesh_index)
-        skinds_downstream = self.skeleton.downstream_nodes(mesh_index.to_skel_index)
+        skinds_downstream = self.skeleton.downstream_nodes(
+            mesh_index.to_skel_index)
         if return_as_skel:
             return skinds_downstream
         minds_downstream = []
@@ -1041,7 +1086,8 @@ class Meshwork(object):
         )
 
     def _distance_between(self, inds_source, inds_target, graph, squeeze):
-        ds = sparse.csgraph.dijkstra(graph, directed=False, indices=inds_source)
+        ds = sparse.csgraph.dijkstra(
+            graph, directed=False, indices=inds_source)
         if squeeze:
             return ds[:, inds_target].squeeze()
         else:
@@ -1232,7 +1278,8 @@ class Meshwork(object):
         if normalize:
             if exclude_root:
                 g = self.skeleton.cut_graph(
-                    self.skeleton.child_nodes([self.skeleton.root])[0], directed=False
+                    self.skeleton.child_nodes([self.skeleton.root])[
+                        0], directed=False
                 )
                 len_per = np.array(g.sum(axis=1) / 2).ravel()
             else:
@@ -1313,7 +1360,8 @@ def load_meshwork(filename):
         mesh,
         skeleton=skel,
         seg_id=meta.get("seg_id", None),
-        voxel_resolution=meta.get("voxel_resolution", DEFAULT_VOXEL_RESOLUTION),
+        voxel_resolution=meta.get(
+            "voxel_resolution", DEFAULT_VOXEL_RESOLUTION),
     )
     for name, data in annos.items():
         mw.add_annotations(

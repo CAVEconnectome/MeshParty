@@ -259,35 +259,37 @@ def strahler_order(nrn, return_as_skel=False):
     else:
         return nrn.skeleton_property_to_mesh(strahler, no_map_value=-1)
 
-
-
-
         ######################
         # Density estimation #
         ######################
 
     def _gaussian_kernel(x, sigma):
         def func(x):
-            return np.exp(-x*x / (2*sigma*sigma))
+            return np.exp(-x * x / (2 * sigma * sigma))
+
         return func
 
     def _normalize_flat(W, nrn, exclude_root):
         if exclude_root:
-                g = nrn.skeleton.cut_graph(
-                    nrn.skeleton.child_nodes([nrn.skeleton.root])[0], directed=False
-                )
-                len_per = np.array(g.sum(axis=1) / 2).ravel()
+            g = nrn.skeleton.cut_graph(
+                nrn.skeleton.child_nodes([nrn.skeleton.root])[0], directed=False
+            )
+            len_per = np.array(g.sum(axis=1) / 2).ravel()
         else:
-            len_per = np.array(
-                nrn.skeleton.csgraph_undirected.sum(axis=1) / 2
-            ).ravel()
-        return W.dot(len_per.reshape(-1, 1)).ravel()    
+            len_per = np.array(nrn.skeleton.csgraph_undirected.sum(axis=1) / 2).ravel()
+        return W.dot(len_per.reshape(-1, 1)).ravel()
 
     def _normalize_gausssian(W):
         return W.sum(axis=1).squeeze()
 
     def linear_density(
-        nrn, inds, width, weight=None, kernel='flat', normalize=True, exclude_root=False,
+        nrn,
+        inds,
+        width,
+        weight=None,
+        kernel="flat",
+        normalize=True,
+        exclude_root=False,
     ):
         """Compute a sliding window average linear density of points across the object
         
@@ -314,11 +316,11 @@ def strahler_order(nrn, return_as_skel=False):
         density_estimate : array
             N-length array of density at all mesh vertices.
         """
-        if kernel == 'flat':
+        if kernel == "flat":
             W = window_matrix(nrn.skeleton, width)
-        elif kernel == 'gaussian':
+        elif kernel == "gaussian":
             dist_func = _gaussian_kernel(width)
-            W = window_matrix(nrn.skeleton, 4*width, dist_func)
+            W = window_matrix(nrn.skeleton, 4 * width, dist_func)
         inds = nrn._convert_to_meshindex(inds)
         has_inds = np.full(nrn.skeleton.n_vertices, 0)
         if weight is None:
@@ -329,11 +331,11 @@ def strahler_order(nrn, return_as_skel=False):
                 has_inds[skind] += w
         item_count = W.dot(has_inds.reshape(-1, 1)).ravel()
         if normalize:
-            if kernel == 'flat':
+            if kernel == "flat":
                 norm = _normalize_flat(W, nrn, exclude_root)
-            elif kernel == 'gaussian':
+            elif kernel == "gaussian":
                 norm = _normalize_gausssian(W)
-            
+
             with np.errstate(divide="ignore"):
                 rho = item_count / norm
         else:
