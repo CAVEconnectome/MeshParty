@@ -3,7 +3,7 @@ from vtk.util.numpy_support import numpy_to_vtk, numpy_to_vtkIdTypeArray, vtk_to
 import numpy as np
 import os
 import logging
-from utils import remove_unused_verts
+from meshparty.utils import remove_unused_verts
 
 def numpy_to_vtk_cells(mat):
     """function to convert a numpy array of integers to a vtkCellArray
