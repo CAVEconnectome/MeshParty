@@ -27,7 +27,7 @@ except ImportError:
 
 from pymeshfix import _meshfix
 from tqdm import trange
-
+import DracoPy
 from meshparty import utils, trimesh_repair
 
 try:
@@ -97,8 +97,16 @@ def read_mesh_h5(filename):
     assert os.path.isfile(filename)
 
     with h5py.File(filename, "r") as f:
-        vertices = f["vertices"][()]
-        faces = f["faces"][()]
+        if "draco" in f.keys():
+            mesh_object = DracoPy.decode_buffer_to_mesh(f["draco"][()].tostring())
+            vertices = np.array(mesh_object.points).astype(np.float32)
+            if len(vertices.shape)==1:
+                N=len(vertices)
+                vertices=vertices.reshape((N//3,3))
+            faces = np.array(mesh_object.faces).astype(np.uint32)
+        else:
+            vertices = f["vertices"][()]
+            faces = f["faces"][()]
 
         if len(faces.shape) == 1:
             faces = faces.reshape(-1, 3)
@@ -121,7 +129,8 @@ def read_mesh_h5(filename):
 
 
 def write_mesh_h5(filename, vertices, faces,
-                  normals=None, link_edges=None, node_mask=None, overwrite=False):
+                  normals=None, link_edges=None, node_mask=None,
+                  draco=False, overwrite=False):
     """Writes a mesh's vertices, faces (and normals) to an hdf5 file
 
     Parameters
@@ -153,8 +162,14 @@ def write_mesh_h5(filename, vertices, faces,
             return
 
     with h5py.File(filename, "w") as f:
-        f.create_dataset("vertices", data=vertices, compression="gzip")
-        f.create_dataset("faces", data=faces, compression="gzip")
+        if draco:
+
+            buf = DracoPy.encode_mesh_to_buffer(vertices.flatten('C'),
+                                                faces.flatten('C'))
+            f.create_dataset("draco", data=np.void(buf))                        
+        else:
+            f.create_dataset("vertices", data=vertices, compression="gzip")
+            f.create_dataset("faces", data=faces, compression="gzip")
 
         if normals is not None:
             f.create_dataset("normals", data=normals, compression="gzip")
@@ -234,12 +249,17 @@ def _download_meshes_thread_graphene(args):
             a private bucket and have ~/.cloudvolume/secrets setup properly
         remove_duplicate_vertices: bool
             whether to bluntly merge duplicate vertices (probably should be False)
+        chunk_size: tuple
+            size of chunks when deduplicating
+        save_draco: bool
+            whether to save meshes as draco compressed
         progress: bool
             show progress bars
 
      """
     seg_ids, cv_path, target_dir, fmt, overwrite, \
-        merge_large_components, stitch_mesh_chunks, map_gs_to_https, remove_duplicate_vertices, progress = args
+        merge_large_components, stitch_mesh_chunks, map_gs_to_https, \
+            remove_duplicate_vertices, progress, chunk_size, save_draco = args
 
     cv = cloudvolume.CloudVolume(cv_path, use_https=map_gs_to_https)
 
@@ -271,6 +291,7 @@ def _download_meshes_thread_graphene(args):
                               mesh.vertices,
                               mesh.faces.flatten(),
                               link_edges=mesh.link_edges,
+                              draco=save_draco,
                               overwrite=overwrite)
             else:
                 mesh.write_to_file(f"{target_dir}/{seg_id}.{fmt}")
@@ -305,12 +326,15 @@ def _download_meshes_thread_precomputed(args):
             a private bucket and have ~/.cloudvolume/secrets setup properly
         remove_duplicate_vertices: bool
             whether to bluntly merge duplicate vertices (probably should be False)
+        chunk_size: tuple
+            chuck size for deduplification
         progress: bool
             show progress bars
      """
     seg_ids, cv_path, target_dir, fmt, overwrite, \
         merge_large_components, stitch_mesh_chunks, \
-        map_gs_to_https, remove_duplicate_vertices, progress = args
+        map_gs_to_https, remove_duplicate_vertices, \
+        progress, chunk_size, save_draco = args
 
     cv = cloudvolume.CloudVolume(
         cv_path, use_https=map_gs_to_https,
@@ -356,7 +380,8 @@ def _download_meshes_thread_precomputed(args):
                               mesh.vertices,
                               mesh.faces.flatten(),
                               link_edges=mesh.link_edges,
-                              overwrite=overwrite)
+                              draco=save_draco,
+                              overwrite=overwrite)            
             else:
                 mesh.write_to_file(f"{target_dir}/{segid}.{fmt}")
 
@@ -367,6 +392,8 @@ def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
                     merge_large_components=False,
                     remove_duplicate_vertices=False,
                     map_gs_to_https=True, fmt="hdf5",
+                    save_draco=False,
+                    chunk_size=None,
                     progress=False):
     """ Downloads meshes in target directory (in parallel)
     will break up the seg_ids into n_threads*3 job blocks or fewer and download them all
@@ -394,6 +421,8 @@ def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
     map_gs_to_https: bool
         whether to trigger cloudvolume.CloudVolume use_https option. Probably should be true unless you have
         a private bucket and have ~/.cloudvolume/secrets setup properly (default True)
+    chunk_size: np.array
+        chunk size in nm to use in deduplification (default None)
     fmt: str
         'hdf5', 'obj', 'stl' or any format supported by :func:`meshparty.trimesh_io.Mesh.write_to_file` (default 'hdf5')
     progress: bool
@@ -419,7 +448,7 @@ def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
     for seg_id_block in seg_id_blocks:
         multi_args.append([seg_id_block, cv_path, target_dir, fmt,
                            overwrite, merge_large_components, stitch_mesh_chunks,
-                           map_gs_to_https, remove_duplicate_vertices, progress])
+                            map_gs_to_https, remove_duplicate_vertices, progress, chunk_size, save_draco])
 
     if n_jobs == 1:
         mu.multiprocess_func(_download_meshes_thread,
@@ -845,8 +874,13 @@ class Mesh(trimesh.Trimesh):
 
     @caching.cache_decorator
     def graph_edges(self):
-        """np.array : a Nx2 of the edges from triangle faces, plus the link_edges"""
-        return np.vstack([self.edges, self.link_edges])
+        # mesh.edges has bidirectional edges, so we need to pass bidirectional link_edges.
+        if len(self.link_edges)>0:
+            link_edges_sym = np.vstack((self.link_edges, self.link_edges[:,[1,0]]))
+            link_edges_sym_unique = np.unique(link_edges_sym, axis=1)
+        else:
+            link_edges_sym_unique = self.link_edges
+        return np.vstack([self.edges, link_edges_sym_unique])
 
     def fix_mesh(self, wiggle_vertices=False, verbose=False):
         """ Executes rudimentary fixing function from pymeshfix
@@ -1269,7 +1303,7 @@ class Mesh(trimesh.Trimesh):
         """ Computes scipy.sparse.csgraph with weights equal to euclidean distance
         with directed=False"""
         return utils.create_csgraph(self.vertices, self.graph_edges, euclidean_weight=True,
-                                    directed=False)
+                                    directed=True)
 
     @property
     def node_mask(self):
@@ -1445,7 +1479,7 @@ class Mesh(trimesh.Trimesh):
         return utils.filter_unmasked_indices_padded(mask, unmasked_shape)
 
     @ScalingManagement.original_scaling
-    def write_to_file(self, filename, overwrite=True):
+    def write_to_file(self, filename, overwrite=True, draco=False):
         """ Exports the mesh to any format supported by trimesh
 
         Parameters
@@ -1463,6 +1497,7 @@ class Mesh(trimesh.Trimesh):
                           normals=self.face_normals,
                           link_edges=self.link_edges,
                           node_mask=self.node_mask,
+                          draco=draco,
                           overwrite=overwrite)
         else:
             exchange.export.export_mesh(self, filename)

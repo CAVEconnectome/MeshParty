@@ -23,6 +23,32 @@ def array_if_scalar(values):
         return_scalar = False
     return values, return_scalar
 
+def remove_unused_verts(verts, faces):
+    """removes unused vertices from a graph or mesh
+
+    Parameters
+    ----------
+    verts : np.array
+        NxD numpy array of vertex locations
+    faces : np.array
+        MxK numpy array of connected shapes (i.e. edges or tris)
+        (entries are indices into verts)
+
+    Returns
+    -------
+    np.array
+        new_verts a filtered set of vertices s
+    new_face
+        a reindexed set of faces
+
+    """
+    used_verts = np.unique(faces.ravel())
+    new_verts = verts[used_verts, :]
+    new_face = np.zeros(faces.shape, dtype=faces.dtype)
+    for i in range(faces.shape[1]):
+        new_face[:, i] = np.searchsorted(used_verts, faces[:, i])
+    return new_verts, new_face
+
 
 def connected_component_slice(G, ind=None, return_boolean=False):
     '''

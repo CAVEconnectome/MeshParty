@@ -1,7 +1,7 @@
 from scipy import sparse, spatial, optimize, signal
 import numpy as np
 import time
-from meshparty import trimesh_vtk, utils, mesh_filters
+from meshparty import  utils, mesh_filters
 import pandas as pd
 try:
     from pykdtree.kdtree import KDTree
@@ -837,8 +837,8 @@ def collapse_soma_skeleton(soma_verts, soma_pt, verts, edges, mesh_to_skeleton_m
         soma_i = verts.shape[0]
         edges_m = edges.copy()
         edges_m[np.isin(edges, soma_verts)] = soma_i
-
-        simple_verts, simple_edges = trimesh_vtk.remove_unused_verts(new_verts, edges_m)
+        
+        simple_verts, simple_edges = utils.remove_unused_verts(new_verts, edges_m)
         good_edges = ~(simple_edges[:, 0] == simple_edges[:, 1])
 
         if mesh_to_skeleton_map is not None:
@@ -860,7 +860,7 @@ def collapse_soma_skeleton(soma_verts, soma_pt, verts, edges, mesh_to_skeleton_m
         return output
 
     else:
-        simple_verts, simple_edges = trimesh_vtk.remove_unused_verts(verts, edges)
+        simple_verts, simple_edges = utils.remove_unused_verts(verts, edges)
         return simple_verts, simple_edges
 
 

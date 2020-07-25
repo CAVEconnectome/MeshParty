@@ -1,7 +1,8 @@
 import numpy as np
-from meshparty import skeleton
+from meshparty import skeleton, skeleton_quality
 import pytest
 from skeleton_io_test import full_cell_skeleton, simple_skeleton, simple_skeleton_with_properties, simple_verts, simple_edges
+from basic_test import full_cell_mesh, mesh_link_edges
 from scipy.sparse import csgraph
 from copy import deepcopy
 
@@ -79,10 +80,10 @@ def test_sk_csgraph(simple_skeleton):
 def test_branch_and_endpoints(full_cell_skeleton):
     sk = full_cell_skeleton
 
-    assert len(sk.end_points) == 80
-    assert sk.n_end_points == 80
-    assert len(sk.branch_points) == 73
-    assert sk.n_branch_points == 73
+    assert len(sk.end_points) == 73 
+    assert sk.n_end_points == 73
+    assert len(sk.branch_points) == 66
+    assert sk.n_branch_points == 66
 
     path = sk.path_to_root(sk.end_points[1])
     assert np.isclose(sk.path_length(path), 156245.865, atol=0.01)
@@ -93,7 +94,7 @@ def test_cover_paths(full_cell_skeleton):
     cover_paths = sk.cover_paths
     assert len(np.unique(np.concatenate(cover_paths))) == len(sk.vertices)
     assert cover_paths[0][-1] == sk.root
-    assert len(cover_paths) == 80
+    assert len(cover_paths) == sk.n_end_points
 
 
 def test_cut_graph(full_cell_skeleton):
@@ -118,3 +119,14 @@ def test_downstream_nodes(full_cell_skeleton):
     sk = full_cell_skeleton
     assert len(sk.downstream_nodes(sk.root)) == sk.n_vertices
     assert len(sk.downstream_nodes(300)) == 135
+
+def test_skeleton_quality(full_cell_skeleton, full_cell_mesh, mesh_link_edges):
+    sk = full_cell_skeleton
+    mesh = deepcopy(full_cell_mesh)
+    mesh.link_edges = mesh_link_edges
+    pscore, sk_paths, ms_paths, sk_inds_list, mesh_inds_list, path_distances = \
+                                        skeleton_quality.skeleton_path_quality(sk, mesh, return_path_info=True)
+    assert len(pscore) == len(sk.cover_paths)
+    assert np.isclose(pscore.sum(), 9.9216, 0.001)
+
+

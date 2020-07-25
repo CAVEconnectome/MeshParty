@@ -78,6 +78,11 @@ def full_cell_mesh():
     with build_full_cell_mesh() as m:
         yield m
 
+@pytest.fixture(scope='session')
+def mesh_link_edges():
+    filepath = 'test/test_files/link_edges_for_mesh.npy'
+    link_edges = np.load(filepath)
+    yield link_edges
 
 @contextlib.contextmanager
 def build_basic_cube_mesh():
@@ -266,6 +271,7 @@ def test_masked_mesh(cv_path, full_cell_mesh_id, full_cell_soma_pt, tmpdir):
     double_soma_mesh.write_to_file(fname)
 
     double_soma_read = mm.mesh(filename=fname)
+
 
 
 def test_link_edges(full_cell_mesh, full_cell_merge_log, full_cell_soma_pt, monkeypatch):
