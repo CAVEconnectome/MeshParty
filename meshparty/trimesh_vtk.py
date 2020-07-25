@@ -3,6 +3,7 @@ from vtk.util.numpy_support import numpy_to_vtk, numpy_to_vtkIdTypeArray, vtk_to
 import numpy as np
 import os
 import logging
+from utils import remove_unused_verts
 
 def numpy_to_vtk_cells(mat):
     """function to convert a numpy array of integers to a vtkCellArray
@@ -197,32 +198,6 @@ def decimate_trimesh(trimesh, reduction=.1):
     tris = vtk_cellarray_to_shape(out_poly.GetPolys().GetData(), ntris)
     return points, tris
 
-
-def remove_unused_verts(verts, faces):
-    """removes unused vertices from a graph or mesh
-
-    Parameters
-    ----------
-    verts : np.array
-        NxD numpy array of vertex locations
-    faces : np.array
-        MxK numpy array of connected shapes (i.e. edges or tris)
-        (entries are indices into verts)
-
-    Returns
-    -------
-    np.array
-        new_verts a filtered set of vertices s
-    new_face
-        a reindexed set of faces
-
-    """
-    used_verts = np.unique(faces.ravel())
-    new_verts = verts[used_verts, :]
-    new_face = np.zeros(faces.shape, dtype=faces.dtype)
-    for i in range(faces.shape[1]):
-        new_face[:, i] = np.searchsorted(used_verts, faces[:, i])
-    return new_verts, new_face
 
 
 def poly_to_mesh_components(poly):
@@ -864,6 +839,8 @@ def render_actors_360(actors, directory, nframes, camera_start=None, start_frame
     for k, angle in enumerate(np.linspace(0, 360, nframes)):
         angle_cam = vtk.vtkCamera()
         angle_cam.ShallowCopy(camera_start)
+        angle_cam.SetParallelProjection(camera_start.GetParallelProjection())
+        angle_cam.SetParallelScale(camera_start.GetParallelScale())
         angle_cam.Azimuth(angle)
         cameras.append(angle_cam)
         times.append(k)
@@ -896,16 +873,18 @@ def _setup_renderer(video_width, video_height, back_color, camera=None):
 
     return ren, renWin, iren
 
-def make_camera_interpolator(times, cameras):
+def make_camera_interpolator(times, cameras, linear=False):
     assert(len(times) == len(cameras))
     camera_interp = vtk.vtkCameraInterpolator()
     for t, cam in zip(times, cameras):
         camera_interp.AddCamera(t, cam)
+    if linear:
+        camera_interp.SetInterpolationTypeToLinear()
     return camera_interp
 
 def render_movie(actors, directory, times, cameras, start_frame=0,
                  video_width=1280, video_height=720, scale=4,
-                 do_save=True, back_color=(1, 1, 1)):
+                 do_save=True, back_color=(1, 1, 1), linear=False):
     """
     Function to create a series of png frames based upon a defining 
     a set of cameras at a set of times.
@@ -963,7 +942,7 @@ def render_movie(actors, directory, times, cameras, start_frame=0,
                 times,
                 cameras)
     """
-    camera_interp=make_camera_interpolator(times, cameras)
+    camera_interp=make_camera_interpolator(times, cameras, linear=linear)
 
     def interpolate_camera(actors, camera, t):
         camera_interp.InterpolateCamera(t, camera)

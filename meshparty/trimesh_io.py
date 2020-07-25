@@ -326,8 +326,7 @@ def _download_meshes_thread_precomputed(args):
         cv_meshes = cv.mesh.get(
             download_now, 
             remove_duplicate_vertices=remove_duplicate_vertices, 
-            fuse=False,
-            chunk_size=chunk_size
+            fuse=False
         )
 
         for segid, cv_mesh in cv_meshes.items():
@@ -570,8 +569,7 @@ class MeshMeta(object):
             assert (seg_id is not None and self.cv is not None)
             if seg_id not in self._mesh_cache or force_download is True:
                 cv_mesh_d = self.cv.mesh.get(seg_id,
-                    remove_duplicate_vertices=remove_duplicate_vertices,
-                    chunk_size=chunk_size)
+                    remove_duplicate_vertices=remove_duplicate_vertices)
                 if type(cv_mesh_d)==dict:
                     cv_mesh = cv_mesh_d[seg_id]
                 else:
