@@ -935,16 +935,22 @@ class Meshwork(object):
 
     @OnlyIfSkeleton.exists
     def jump_proximal(self, ind, include_initial=False, hops=1):
-        """
+        """ Find the next branch point (or root) towards root from a given index.
+
         Parameters
         ----------
-        ind : 
-            [description]
+        ind : int or MeshIndex
+            Mesh index t
+        include_initial : bool, optional
+            If False, ind is never included in the list of branch points toward root.
+            Default is False.
+        hops : int, optional
+            Number of hops toward root to take. Default is 1.
 
         Returns
         -------
-        [type]
-            [description]
+        mesh_index
+            Index of the proximal branch point/root after the desired number of hops.
         """
         ind = self._convert_to_meshindex(ind)
         skind = ind.to_skel_index[0]
@@ -962,14 +968,36 @@ class Meshwork(object):
         return skind_out.to_mesh_region_point
 
     @OnlyIfSkeleton.exists
-    def jump_distal(self, ind):
+    def jump_distal(self, ind, include_initial=False):
+        """Finds the next topologically interesting (branch or end point) away from root starting from an initial mesh index. 
+
+        Parameters
+        ----------
+        ind : Mesh index
+            Index of the initial mesh to use for 
+        include_initial : bool, optional
+            If True, returns the initial index if it's already a branch or root point. By default False
+
+        Returns
+        -------
+        mesh_index
+            Index of a mesh point corresponding to the jump.
+        """
         ind = self._convert_to_meshindex(ind)
         skind = ind.to_skel_index
+        if skind in self.skeleton.end_points:
+            return ind  # If it's an end point, return immediately
+
         d = sparse.csgraph.dijkstra(
             self.skeleton.csgraph.T, directed=True, indices=skind
         )
-        proximal_pt = self.skeleton.topo_points[
-            np.argmin(d[0, self.skeleton.topo_points])
+
+        topo_pts = self.skeleton.topo_points
+        if include_initial is False:
+            topo_pts = topo_pts[topo_pts != skind]
+
+        proximal_pt = topo_pts[
+            np.argmin(d[0, topo_pts])
         ]
         return self.SkeletonIndex(proximal_pt).to_mesh_region_point
 
