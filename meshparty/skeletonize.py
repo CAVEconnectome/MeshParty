@@ -50,6 +50,8 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True,
     compute_original_index: bool
         whether to calculate how each of the mesh nodes maps onto the skeleton
         (default True)
+    cc_vertex_thresh : int, optional
+        Smallest number of vertices in a connected component to skeletonize.
     verbose: bool
         whether to print verbose logging
 
