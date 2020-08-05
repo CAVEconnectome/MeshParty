@@ -123,7 +123,8 @@ class StaticSkeleton:
             Should not often be set to True by a user.
         """
         if new_root > self.n_vertices:
-            raise ValueError("New root must correspond to a skeleton vertex index")
+            raise ValueError(
+                "New root must correspond to a skeleton vertex index")
         self._root = int(new_root)
         self._parent_node_array = np.full(self.n_vertices, None)
 
@@ -864,7 +865,8 @@ class Skeleton:
 
         cinds = []
         for vind in vinds:
-            cinds.append(self.SkeletonIndex(self.edges[self.edges[:, 1] == vind, 0]))
+            cinds.append(self.SkeletonIndex(
+                self.edges[self.edges[:, 1] == vind, 0]))
 
         if return_single:
             cinds = cinds[0]

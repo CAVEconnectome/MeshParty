@@ -119,12 +119,14 @@ class AnchoredAnnotationManager(object):
         self,
         name,
         data,
+        mask=False,
+        point_array=False,
         anchored=True,
         point_column=None,
         max_distance=np.inf,
         index_column=None,
         overwrite=False,
-        voxel_resolution=None
+        voxel_resolution=None,
     ):
         "Add a dataframe to the manager"
 
@@ -137,8 +139,8 @@ class AnchoredAnnotationManager(object):
 
         if issubclass(type(data), np.ndarray):
             if data.shape[1] == 3:
-                data = pd.DataFrame(data={'pt': data.tolist()})
-                point_column = 'pt'
+                data = pd.DataFrame(data={"pt": data.tolist()})
+                point_column = "pt"
             else:
                 raise ValueError("Arrays must be of size Nx3")
 
@@ -147,6 +149,8 @@ class AnchoredAnnotationManager(object):
             data,
             self._anchor_mesh,
             point_column=point_column,
+            mask=mask,
+            point_array=point_array,
             anchor_to_mesh=anchored,
             max_distance=max_distance,
             index_column=index_column,
@@ -195,12 +199,24 @@ class AnchoredAnnotation(object):
         name,
         data,
         mesh=None,
+        mask=False,
+        point_array=False,
         anchor_to_mesh=True,
         point_column=None,
         max_distance=np.inf,
         index_column=None,
         voxel_resolution=None,
+        voxel_scaling=None,
     ):
+        if point_array == True:
+            if isinstance(data, np.ndarray):
+                data = data.tolist()
+            if point_column is None:
+                point_column = 'position'
+            data = pd.DataFrame({point_column: data})
+        elif mask == True:
+            data = pd.DataFrame({'index': np.in1d(data)})
+            index_column = 'index'
 
         self._name = name
         self._data = data.reset_index()
@@ -210,15 +226,26 @@ class AnchoredAnnotation(object):
         self._point_column = point_column
         if index_column is None:
             index_column = unique_column_name(None, "mesh_index_base", data)
+            defined_index = False
+        else:
+            defined_index = True
+        self._defined_index = defined_index
         self._index_column_base = index_column
         self._index_column_filt = unique_column_name(None, "mesh_index", data)
+
+        # Initalize to -1 so the column exists
+        self._data[self._index_column_base] = -1
+        self._data[self._index_column_filt] = -1
+
+        if self._defined_index:
+            if mesh is not None and anchor_to_mesh is True:
+                self._data[self._index_column_base] = mesh.map_indices_to_unmasked(
+                    data[index_column])
+                self._data[self._index_column_filt] = data[index_column]
 
         self._orig_col_plus_index = list(self._original_columns) + [
             self._index_column_filt
         ]
-        # Initalize to -1 so the column exists
-        self._data[self._index_column_base] = -1
-        self._data[self._index_column_filt] = -1
 
         valid_column = unique_column_name(index_column, "valid", data)
         self._data[valid_column] = True
@@ -331,13 +358,15 @@ class AnchoredAnnotation(object):
         return self._data[self._original_columns]
 
     def _anchor_points(self, mesh):
-        dist, minds_filt = mesh.kdtree.query(self.points)
-        self._data[self._index_column_filt] = minds_filt
+        if self._defined_index is False:
+            dist, minds_filt = mesh.kdtree.query(self.points)
+            self._data[self._index_column_filt] = minds_filt
 
-        minds_base = mesh.map_indices_to_unmasked(minds_filt)
-        self._data[self._index_column_base] = minds_base
-
-        self._data[self._valid_column] = dist < self._max_distance
+            minds_base = mesh.map_indices_to_unmasked(minds_filt)
+            self._data[self._index_column_base] = minds_base
+            self._data[self._valid_column] = dist < self._max_distance
+        else:
+            self._data[self._valid_column] = True
 
         self._anchor_mesh = MaskedMeshMemory(mesh, index_only=True)
         self._filter_mesh = self._anchor_mesh
@@ -435,7 +464,12 @@ class Meshwork(object):
     """
 
     def __init__(
-        self, mesh=None, skeleton=None, seg_id=None, voxel_resolution=None,
+        self,
+        mesh=None,
+        skeleton=None,
+        seg_id=None,
+        voxel_resolution=None,
+        voxel_scaling=None,
     ):
         if mesh is None and skeleton is None:
             raise ValueError("Must include at least one of mesh or skeleton")
@@ -457,6 +491,11 @@ class Meshwork(object):
             self._mesh, voxel_resolution=voxel_resolution
         )
 
+        self._voxel_scaling = voxel_scaling
+        self._mesh.voxel_scaling = voxel_scaling
+        if skeleton is not None:
+            self._skeleton.voxel_scaling = voxel_scaling
+
         self._original_mesh_data = None
         self._MeshIndex = None
         self._SkeletonIndex = None
@@ -467,6 +506,17 @@ class Meshwork(object):
         """Segmentation id for the object
         """
         return self._seg_id
+
+    @property
+    def voxel_scaling(self):
+        return self._voxel_scaling
+
+    @voxel_scaling.setter
+    def voxel_scaling(self, new_scaling):
+        self._mesh.voxel_scaling = new_scaling
+        if self.skeleton is not None:
+            self._skeleton.voxel_scaling = new_scaling
+        self._recompute_indices()
 
     ##################
     # Mesh functions #
@@ -565,19 +615,29 @@ class Meshwork(object):
         self._anno.filter_annotations(self.mesh)
         self._reset_indices()
 
-    def reset_mask(self):
+    def reset_mask(self, to=None):
         """Remove mask and restore object to its original state.
+
+        Parameters
+        ----------
+        to : array, optional
+            Mask array of booleans to apply after resetting the mask. Equivalent to reset_mask followed by apply_mask.
         """
         if self._original_mesh_data is not None:
             self._anno.remove_filter()
 
-            vs, fs, es, nm, vxsc = decompress_mesh_data(*self._original_mesh_data)
-            self._mesh = Mesh(vs, fs, link_edges=es, node_mask=nm, voxel_scaling=vxsc)
+            vs, fs, es, nm, vxsc = decompress_mesh_data(
+                *self._original_mesh_data)
+            self._mesh = Mesh(vs, fs, link_edges=es,
+                              node_mask=nm, voxel_scaling=vxsc)
 
             self._original_mesh_data = None
             if self.skeleton is not None:
                 self._skeleton.reset_mask(in_place=True)
             self._reset_indices()
+
+            if to is not None:
+                self.apply_mask(to)
 
     ##################
     # Anno functions #
@@ -594,6 +654,8 @@ class Meshwork(object):
         name,
         data,
         anchored=True,
+        mask=False,
+        point_array=False,
         point_column=None,
         max_distance=np.inf,
         index_column=None,
@@ -609,6 +671,10 @@ class Meshwork(object):
             DataFrame containing annotation data.
         anchored : bool, optional
             If True, associates locations in a specified point column with mesh vertices.
+        mask : bool, optional
+            If True, assumes the data is a boolean with the same length as the mesh vertices and converts True values to mesh indices. The resulting annotation does not keep track of points, only indices.
+        point_array : bool, optional
+            If True, assumes the data is a list or array of 3d points and constructs a basic dataframe to hold them (using the point_column value if provided).
         point_column : str or None, optional
             Column name holding 3-element point position in voxel units. Must be specified for anchored annotations.
         max_distance : numeric, optional
@@ -620,7 +686,7 @@ class Meshwork(object):
             If True, overwrite an existing annotation with the same name.
         """
         self._anno.add_annotations(
-            name, data, anchored, point_column, max_distance, index_column, overwrite
+            name, data, anchored, mask, point_column, max_distance, index_column, overwrite
         )
 
     def remove_annotations(self, name):
@@ -698,8 +764,10 @@ class Meshwork(object):
         from meshparty.skeletonize import skeletonize_mesh
 
         if self._original_mesh_data is not None:
-            vs, fs, es, nm, vxsc = decompress_mesh_data(*self._original_mesh_data)
-            mesh_to_sk = Mesh(vs, fs, link_edges=es, node_mask=nm, voxel_scaling=vxsc)
+            vs, fs, es, nm, vxsc = decompress_mesh_data(
+                *self._original_mesh_data)
+            mesh_to_sk = Mesh(vs, fs, link_edges=es,
+                              node_mask=nm, voxel_scaling=vxsc)
         else:
             mesh_to_sk = self.mesh
 
@@ -750,7 +818,8 @@ class Meshwork(object):
         return np.flatnonzero(self._skind_to_mind_mask(skinds))
 
     def _skind_regions(self, skinds):
-        out = in1d_items(self.skeleton.mesh_to_skel_map[self.mesh.node_mask], skinds)
+        out = in1d_items(
+            self.skeleton.mesh_to_skel_map[self.mesh.node_mask], skinds)
         return out
 
     def _skind_region_first(self, skinds):
@@ -899,33 +968,70 @@ class Meshwork(object):
         return [n.to_mesh_region_point for n in child_index]
 
     @OnlyIfSkeleton.exists
-    def jump_proximal(self, ind):
-        """
+    def jump_proximal(self, ind, include_initial=False, hops=1):
+        """ Find the next branch point (or root) towards root from a given index.
+
         Parameters
         ----------
-        ind : 
-            [description]
+        ind : int or MeshIndex
+            Mesh index t
+        include_initial : bool, optional
+            If False, ind is never included in the list of branch points toward root.
+            Default is False.
+        hops : int, optional
+            Number of hops toward root to take. Default is 1.
 
         Returns
         -------
-        [type]
-            [description]
+        mesh_index
+            Index of the proximal branch point/root after the desired number of hops.
+        """
+        ind = self._convert_to_meshindex(ind)
+        skind = ind.to_skel_index[0]
+
+        topo_points = self.skeleton.topo_points
+        if include_initial == False:
+            if ind != self.skeleton.root:
+                topo_points = topo_points[topo_points != ind]
+
+        ptr = self.skeleton.path_to_root(skind)
+        is_topo = np.isin(ptr, self.skeleton.topo_points)
+        topo_pts_on_path = ptr[np.flatnonzero(is_topo)]
+        hop_ind = np.min((len(topo_pts_on_path), hops)) - 1
+        skind_out = self.SkeletonIndex(topo_pts_on_path[int(hop_ind)])
+        return skind_out.to_mesh_region_point
+
+    @OnlyIfSkeleton.exists
+    def jump_distal(self, ind, include_initial=False):
+        """Finds the next topologically interesting (branch or end point) away from root starting from an initial mesh index. 
+
+        Parameters
+        ----------
+        ind : Mesh index
+            Index of the initial mesh to use for 
+        include_initial : bool, optional
+            If True, returns the initial index if it's already a branch or root point. By default False
+
+        Returns
+        -------
+        mesh_index
+            Index of a mesh point corresponding to the jump.
         """
         ind = self._convert_to_meshindex(ind)
         skind = ind.to_skel_index
-        ptr = self._skeleton.path_to_root(skind[0])
-        is_topo = np.isin(ptr, self.skeleton.topo_points)
-        return self.SkeletonIndex(ptr[np.flatnonzero(is_topo)[0]]).to_mesh_region_point
+        if skind in self.skeleton.end_points:
+            return ind  # If it's an end point, return immediately
 
-    @OnlyIfSkeleton.exists
-    def jump_distal(self, ind):
-        ind = self._convert_to_meshindex(ind)
-        skind = ind.to_skel_index
         d = sparse.csgraph.dijkstra(
             self.skeleton.csgraph.T, directed=True, indices=skind
         )
-        proximal_pt = self.skeleton.topo_points[
-            np.argmin(d[0, self.skeleton.topo_points])
+
+        topo_pts = self.skeleton.topo_points
+        if include_initial is False:
+            topo_pts = topo_pts[topo_pts != skind]
+
+        proximal_pt = topo_pts[
+            np.argmin(d[0, topo_pts])
         ]
         return self.SkeletonIndex(proximal_pt).to_mesh_region_point
 
@@ -973,7 +1079,8 @@ class Meshwork(object):
         else:
             use_scalar = False
         mesh_index = self._convert_to_meshindex(mesh_index)
-        skinds_downstream = self.skeleton.downstream_nodes(mesh_index.to_skel_index)
+        skinds_downstream = self.skeleton.downstream_nodes(
+            mesh_index.to_skel_index)
         if return_as_skel:
             return skinds_downstream
         minds_downstream = []
@@ -1040,8 +1147,45 @@ class Meshwork(object):
             np.arange(len(self.skeleton.segments)), return_as_skel
         )
 
+    @OnlyIfSkeleton.exists
+    def same_branch(self, ind, hops=1, extend_to_root=False, return_as_skel=False):
+        """Get all indices on the same segment (or, optionally, primary branch)
+        and all downstream nodes.
+
+        Parameters
+        ----------
+        inds : int or SkeletonIndex or MeshIndex
+            Mesh index to base branch index off of. Must not be an index of the root.
+        hops : int, optional
+            Number of branch points to hop towards root before finding downstream vertices, by default 1.
+        extend_to_root : bool, optional
+            If True, starts the branch at the root intead of a branch point, by default False
+        return_as_skel : bool, optional
+            If True, returns skeleton indices instead of mesh indices, by default False
+
+        Returns
+        -------
+        branch_inds : MeshIndex or SkeletonIndex
+            Indices on the same branch (SkeletonIndex if return_as_skel==True)
+        """
+        ind = self._convert_to_meshindex(ind)
+
+        if ind in self.root_region:
+            raise ValueError('Index is in root, branch is not defined')
+
+        skind = ind.to_skel_index
+        if extend_to_root:
+            base_ind = self.root
+        else:
+            base_ind = self.jump_proximal(ind, hops=hops)
+
+        ptb = self.path_between(ind, base_ind, return_as_skel=True)
+        source_ind = ptb[-2]
+        return self.downstream_of(source_ind, return_ask_skel=return_as_skel)
+
     def _distance_between(self, inds_source, inds_target, graph, squeeze):
-        ds = sparse.csgraph.dijkstra(graph, directed=False, indices=inds_source)
+        ds = sparse.csgraph.dijkstra(
+            graph, directed=False, indices=inds_source)
         if squeeze:
             return ds[:, inds_target].squeeze()
         else:
@@ -1232,7 +1376,8 @@ class Meshwork(object):
         if normalize:
             if exclude_root:
                 g = self.skeleton.cut_graph(
-                    self.skeleton.child_nodes([self.skeleton.root])[0], directed=False
+                    self.skeleton.child_nodes([self.skeleton.root])[
+                        0], directed=False
                 )
                 len_per = np.array(g.sum(axis=1) / 2).ravel()
             else:
@@ -1313,7 +1458,8 @@ def load_meshwork(filename):
         mesh,
         skeleton=skel,
         seg_id=meta.get("seg_id", None),
-        voxel_resolution=meta.get("voxel_resolution", DEFAULT_VOXEL_RESOLUTION),
+        voxel_resolution=meta.get(
+            "voxel_resolution", DEFAULT_VOXEL_RESOLUTION),
     )
     for name, data in annos.items():
         mw.add_annotations(

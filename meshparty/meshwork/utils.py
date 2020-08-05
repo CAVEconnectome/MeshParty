@@ -25,7 +25,8 @@ def MeshworkIndexFactory(mw):
         def __array_finalize__(self, obj):
             if obj is None:
                 return
-            self._mesh_indices_base = getattr(obj, "_mesh_indices_base", np.array([]))
+            self._mesh_indices_base = getattr(
+                obj, "_mesh_indices_base", np.array([]))
 
         def __getitem__(self, k):
             ret = super(JointMeshIndex, self).__getitem__(k)
@@ -63,7 +64,7 @@ def MeshworkIndexFactory(mw):
         @property
         def to_mesh_index_point(self):
             return self.to_skel_index.to_mesh_region_point
-        
+
         @property
         def to_mesh_mask_base(self):
             mask = np.full(len(mw.mesh.node_mask), False)
@@ -121,7 +122,8 @@ def MeshworkIndexFactory(mw):
         def __array_finalize__(self, obj):
             if obj is None:
                 return
-            self._skel_indices_base = getattr(obj, "_skel_indices_base", np.array([]))
+            self._skel_indices_base = getattr(
+                obj, "_skel_indices_base", np.array([]))
 
         def __getitem__(self, k):
             ret = super(JointSkeletonIndex, self).__getitem__(k)
@@ -226,7 +228,8 @@ def in1d_first_item(elements, test_vals):
     el_mask = np.isin(elements, test_vals)
     vals, ind_mask = np.unique(elements[el_mask], return_index=True)
     out = np.full(len(test_vals), -1)
-    _, slots = np.unique(test_vals[np.isin(test_vals, vals)], return_inverse=True)
+    _, slots = np.unique(
+        test_vals[np.isin(test_vals, vals)], return_inverse=True)
     out[slots] = np.flatnonzero(el_mask)[ind_mask]
     return out
 
@@ -270,7 +273,8 @@ def _window_matrix(
                 dist_to_add = init_dist + downstream_dist[downstream_window]
                 ind_list.append(inds_to_add)
                 dist_list.append(dist_to_add)
-            all_inds, indices = np.unique(np.concatenate(ind_list), return_index=True)
+            all_inds, indices = np.unique(
+                np.concatenate(ind_list), return_index=True)
             all_dist = np.concatenate(dist_list)[indices]
             for kk, d in zip(all_inds, all_dist):
                 row_ind.append(jj)
@@ -282,7 +286,7 @@ def _window_matrix(
                 seen[jj] = True
         if dist_func is not None:
             dist = dist_func(np.array(dist))
-            
+
     return dist, (np.array(row_ind), np.array(col_ind))
 
 
