@@ -35,9 +35,11 @@ def save_meshwork_mesh(filename, mw):
 
     with h5py.File(filename, "a") as f:
         f.create_group("mesh")
-        f.create_dataset("mesh/vertices", data=mesh.vertices, compression="gzip")
+        f.create_dataset("mesh/vertices", data=mesh.vertices,
+                         compression="gzip")
         f.create_dataset("mesh/faces", data=mesh.faces, compression="gzip")
-        f.create_dataset("mesh/node_mask", data=mesh.node_mask, compression="gzip")
+        f.create_dataset("mesh/node_mask",
+                         data=mesh.node_mask, compression="gzip")
         if mesh.voxel_scaling is not None:
             f["mesh"].attrs["voxel_scaling"] = mesh.voxel_scaling
         if mesh.link_edges is not None:
@@ -81,14 +83,16 @@ def save_meshwork_skeleton(filename, mw):
     sk = mw.skeleton.reset_mask()
     with h5py.File(filename, "a") as f:
         f.create_group("skeleton")
-        f.create_dataset("skeleton/vertices", data=sk.vertices, compression="gzip")
+        f.create_dataset("skeleton/vertices",
+                         data=sk.vertices, compression="gzip")
         f.create_dataset("skeleton/edges", data=sk.edges, compression="gzip")
         f.create_dataset("skeleton/root", data=sk.root)
         f.create_dataset(
             "skeleton/mesh_to_skel_map", data=sk.mesh_to_skel_map, compression="gzip"
         )
         if sk.radius is not None:
-            f.create_dataset("skeleton/radius", data=sk.radius, compression="gzip")
+            f.create_dataset("skeleton/radius",
+                             data=sk.radius, compression="gzip")
         if sk.mesh_index is not None:
             f.create_dataset(
                 "skeleton/mesh_index", data=sk.mesh_index, compression="gzip"
@@ -137,7 +141,8 @@ def save_meshwork_annotations(filename, mw):
             if anno.point_column is not None:
                 dset.attrs["point_column"] = anno.point_column
             dset.attrs["max_distance"] = anno._max_distance
-            if anno._index_column_base in anno._original_columns:
+            dset.attrs["defined_index"] = anno._defined_index
+            if anno._index_column_base in anno._original_columns and mw._defined_index is True:
                 dset.attrs["index_column"] = anno._index_column_base
         annos[table_name].data_original.to_hdf(
             filename, f"annotations/{table_name}/data", complib="blosc", complevel=5
@@ -161,10 +166,12 @@ def load_meshwork_annotations(filename):
             annotation_dfs[table_name]["point_column"] = dset.attrs.get(
                 "point_column", None
             )
-            annotation_dfs[table_name]["max_distance"] = dset.attrs.get("max_distance")
-            annotation_dfs[table_name]["index_column"] = dset.attrs.get(
-                "index_column", None
-            )
+            annotation_dfs[table_name]["max_distance"] = dset.attrs.get(
+                "max_distance")
+            if bool(dset.attrs.get("defined_index", False)):
+                annotation_dfs[table_name]["index_column"] = dset.attrs.get(
+                    "index_column", None
+                )
     return annotation_dfs
 
 
