@@ -686,7 +686,15 @@ class Meshwork(object):
             If True, overwrite an existing annotation with the same name.
         """
         self._anno.add_annotations(
-            name, data, anchored, mask, point_column, max_distance, index_column, overwrite
+            name=name,
+            data=data,
+            point_array=point_array,
+            mask=mask,
+            anchored=anchored,
+            point_column=point_column,
+            max_distance=max_distance,
+            index_column=index_column,
+            overwrite=overwrite,
         )
 
     def remove_annotations(self, name):
