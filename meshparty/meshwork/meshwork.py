@@ -208,7 +208,7 @@ class AnchoredAnnotation(object):
         voxel_resolution=None,
         voxel_scaling=None,
     ):
-        if point_array == True:
+        if point_array is True:
             if isinstance(data, np.ndarray):
                 data = data.tolist()
             if point_column is None:
@@ -225,13 +225,14 @@ class AnchoredAnnotation(object):
 
         self._point_column = point_column
         if index_column is None:
-            index_column = unique_column_name(None, "mesh_index_base", data)
+            index_column = unique_column_name(None, "mesh_index", data)
             defined_index = False
         else:
             defined_index = True
         self._defined_index = defined_index
-        self._index_column_base = index_column
-        self._index_column_filt = unique_column_name(None, "mesh_index", data)
+        self._index_column_base = unique_column_name(
+            None, "mesh_index_base", data)
+        self._index_column_filt = index_column
 
         # Initalize to -1 so the column exists
         self._data[self._index_column_base] = -1
@@ -688,13 +689,13 @@ class Meshwork(object):
         self._anno.add_annotations(
             name=name,
             data=data,
-            point_array=point_array,
-            mask=mask,
             anchored=anchored,
+            mask=mask,
+            point_array=point_array,
             point_column=point_column,
             max_distance=max_distance,
             index_column=index_column,
-            overwrite=overwrite,
+            overwrite=overwrite
         )
 
     def remove_annotations(self, name):
