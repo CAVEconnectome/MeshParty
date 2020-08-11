@@ -141,7 +141,7 @@ def save_meshwork_annotations(filename, mw):
             if anno.point_column is not None:
                 dset.attrs["point_column"] = anno.point_column
             dset.attrs["max_distance"] = anno._max_distance
-            dset.attrs["defined_index"] = anno._defined_index
+            dset.attrs["defined_index"] = int(anno._defined_index)
             if anno._index_column_base in anno._original_columns and mw._defined_index is True:
                 dset.attrs["index_column"] = anno._index_column_base
         annos[table_name].data_original.to_hdf(

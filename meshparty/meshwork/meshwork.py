@@ -1189,8 +1189,8 @@ class Meshwork(object):
             base_ind = self.jump_proximal(ind, hops=hops)
 
         ptb = self.path_between(ind, base_ind, return_as_skel=True)
-        source_ind = ptb[-2]
-        return self.downstream_of(source_ind, return_ask_skel=return_as_skel)
+        source_ind = self.SkeletonIndex(ptb[-2])
+        return self.downstream_of(source_ind.to_mesh_region_point[0], return_as_skel=return_as_skel)
 
     def _distance_between(self, inds_source, inds_target, graph, squeeze):
         ds = sparse.csgraph.dijkstra(
