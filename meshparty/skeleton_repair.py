@@ -34,7 +34,7 @@ def remove_duplicates(skel):
     vertexinds = np.flatnonzero(vertexmask)
 
     newverts = skel.vertices[vertexinds]
-    newvertprops = {k: type(v)(np.array(v)[vertexinds])
+    newvertprops = {k: np.array(v)[vertexinds]
                     for (k, v) in skel.vertex_properties.items()}
 
     # remapping vertex ids across other attributes
