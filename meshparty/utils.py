@@ -146,14 +146,8 @@ def create_csgraph(vertices, edges, euclidean_weight=True, directed=False):
     Builds a csr graph from vertices and edges, with optional control
     over weights as boolean or based on Euclidean distance.
     '''
-    if euclidean_weight:
-        xs = vertices[edges[:,0]]
-        ys = vertices[edges[:,1]]
-        weights = np.linalg.norm(xs-ys, axis=1)
-        use_dtype = np.float32
-    else:   
-        weights = np.ones((len(edges),)).astype(np.int8)
-        use_dtype = np.int8 
+    weights = edge_weights(vertices, edges, euclidean_weight=euclidean_weight)
+    use_dtype = np.float32 if euclidean_weight else np.int8
 
     if directed:
         edges = edges.T
@@ -169,19 +163,14 @@ def create_csgraph(vertices, edges, euclidean_weight=True, directed=False):
 
 
 def create_nxgraph(vertices, edges, euclidean_weight=True, directed=False):
-    if euclidean_weight:
-        xs = vertices[edges[:,0]]
-        ys = vertices[edges[:,1]]
-        weights = np.linalg.norm(xs-ys, axis=1)
-        use_dtype = np.float32
-    else:
-        weights = np.ones((len(edges),)).astype(bool)
-        use_dtype = bool
+    weights = edge_weights(vertices, edges, euclidean_weight=euclidean_weight)
+    use_dtype = np.float32 if euclidean_weight else bool
 
     if directed:
         edges = edges.T
     else:
-        edges = np.concatenate([edges.T, edges.T[[1, 0]]], axis=1)
+        #edges = np.concatenate([edges.T, edges.T[[1, 0]]], axis=1)
+        edges = np.concatenate([edges, edges[[1, 0]]], axis=0)
         weights = np.concatenate([weights, weights]).astype(dtype=use_dtype)
 
     weighted_graph = nx.Graph()
@@ -192,6 +181,20 @@ def create_nxgraph(vertices, edges, euclidean_weight=True, directed=False):
         weighted_graph[edge[1]][edge[0]]['weight'] = weights[i_edge]
 
     return weighted_graph
+
+
+def edge_weights(vertices, edges, euclidean_weight=True):
+    '''
+    Computes the edge weights of the passed vertices and edges.
+    '''
+    if euclidean_weight:
+        xs = vertices[edges[:, 0]]
+        ys = vertices[edges[:, 1]]
+        weights = np.linalg.norm(xs-ys, axis=1)
+    else:
+        weights = np.ones((len(edges),)).astype(bool)
+
+    return weights
 
 
 def get_path(root, target, pred):
