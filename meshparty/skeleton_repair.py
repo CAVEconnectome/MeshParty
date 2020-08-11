@@ -60,6 +60,9 @@ def smooth_skeleton(skel, mask=None, neighborhood=2, iterations=100, r=0.1,
     Smoothing skeleton vertices. Adds a few extra controls on top of
     skeletonize.smooth_graph.
 
+    NOTE: some vertex_properties may be invalidated by this function, as
+    vertex locations change without modifying these properties.
+
     Parameters
     ----------
     skel: meshparty.skeleton.Skeleton
