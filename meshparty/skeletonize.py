@@ -485,36 +485,36 @@ def mesh_teasar(mesh, root=None, valid=None, root_ds=None, root_pred=None, soma_
 
 
 def smooth_graph(values, edges, mask=None, neighborhood=2, iterations=100, r=.1):
-    """ smooths a spatial graph via iterative local averaging
-        calculates the average value of neighboring values
-        and relaxes the values toward that average
+    """ Smooths a spatial graph via iterative local averaging.
+        Calculates the local average of neighboring vertices
+        and relaxes each vertex toward its local average.
 
         Parameters
         ----------
         values : numpy.array
-            a NxK numpy array of values, for example xyz positions
+            A NxK numpy array of values, for example xyz positions
         edges : numpy.array
-            a Mx2 numpy array of indices into values that are edges
+            A Mx2 numpy array of indices into values that are edges
         mask : numpy.array
-            NOT yet implemented
-            optional N boolean vector of values to mask
-            the vert locations.  the result will return a result at every vert
-            but the values that are false in this mask will be ignored and not
-            factored into the smoothing.
+            Optional N boolean vector of values to mask
+            the vert locations. The function will return a result at every
+            vertex, though the vertex indices that map to False in this mask
+            will remain fixed throughout smoothing.
         neighborhood : int
-            an integer of how far in the graph to relax over
+            An integer of how far in the graph to relax over
             as being local to any vertex (default = 2)
         iterations : int
-            number of relaxation iterations (default = 100)
+            Number of relaxation iterations (default = 100)
         r : float
-            relaxation factor at each iteration
-            new_vertex = (1-r)*old_vertex*mask + (r+(1-r)*(1-mask))*(local_avg)
-            default = .1
+            Relaxation factor at each iteration
+            v_{t+1} = r*(local_avg) + (1-r)*v_{t}  [mask == True]
+            v_{t+1} = v_{t}                        [mask == False]
+            default = 0.1
 
         Returns
         -------
         np.array
-            new_verts, a Nx3 list of new smoothed vertex positions
+            New vertices, an Nx3 array of new smoothed vertex positions
 
     """
     N = len(values)
@@ -525,20 +525,21 @@ def smooth_graph(values, edges, mask=None, neighborhood=2, iterations=100, r=.1)
         (np.ones(E), (edges[:, 0], edges[:, 1])), shape=(N, N))
 
     # an identity matrix
-    eye = sparse.csc_matrix((np.ones(N, dtype=np.float32),
-                             (np.arange(0, N), np.arange(0, N))),
-                            shape=(N, N))
+    eye = sparse.eye(N).tocsc()
+
     # for undirected graphs we want it symettric
     sm = sm + sm.T
 
-    # this will store our relaxation matrix
-    C = sparse.csc_matrix(eye)
-    # multiple the matrix and add to itself
+    # neighborhood connectivity matrix, will use this to create
+    # our relaxation matrix
+    C = sparse.csc_matrix(eye, copy=True)
+    # multiply the matrix and add to itself
     # to spread connectivity along the graph
     for i in range(neighborhood):
         C = C + sm @ C
     # zero out the diagonal elements
     C.setdiag(np.zeros(N))
+
     # don't overweight things that are connected in more than one way
     C = C.sign()
     # measure total effective neighbors per node
@@ -556,12 +557,17 @@ def smooth_graph(values, edges, mask=None, neighborhood=2, iterations=100, r=.1)
     # construct relaxation matrix, adding on identity with complementary weight
     A = C + (1-r)*eye
 
-    # make a copy of original vertices to no destroy inpuyt
+    # making rows of fixed vertices the identity transformation
+    if mask is not None:
+        A[~mask] = eye[~mask]
+
+    # make a copy of original vertices to not destroy inpuyt
     new_values = np.copy(values)
 
     # iteratively relax the vertices
     for i in range(iterations):
-        new_values = A*new_values
+        new_values = A @ new_values
+
     return new_values
 
 
