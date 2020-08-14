@@ -1000,7 +1000,7 @@ class Meshwork(object):
 
         topo_points = self.skeleton.topo_points
         if include_initial == False:
-            if ind != self.skeleton.root:
+            if skind != self.skeleton.root:
                 topo_points = topo_points[topo_points != ind]
 
         ptr = self.skeleton.path_to_root(skind)
