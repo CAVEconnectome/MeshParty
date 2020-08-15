@@ -22,11 +22,10 @@ def write_skeleton_h5(sk, filename, overwrite=False):
     write_skeleton_h5_by_part(filename,
                               vertices=sk.vertices,
                               edges=sk.edges,
-                              mesh_to_skel_map=sk.mesh_to_skel_map, 
+                              mesh_to_skel_map=sk.mesh_to_skel_map,
                               vertex_properties=sk.vertex_properties,
                               root=sk.root,
                               overwrite=overwrite)
-
 
 
 def write_skeleton_h5_by_part(filename, vertices, edges, mesh_to_skel_map=None,
@@ -80,7 +79,9 @@ def _write_dict_to_group(f, group_name, data_dict):
     d_grp = f.create_group(group_name)
     for d_name, d_data in data_dict.items():
         is_np = type(d_data) is np.ndarray
-        d_grp.create_dataset(d_name, data=json.dumps(d_data, cls=_NumpyEncoder))
+        d_grp.create_dataset(
+            d_name, data=json.dumps(d_data, cls=_NumpyEncoder))
+
 
 def read_skeleton_h5_by_part(filename):
     '''
@@ -152,9 +153,10 @@ def read_skeleton_h5(filename):
     -------
     :obj:`meshparty.skeleton.Skeleton`
         skeleton object loaded from the h5 file
-    
+
     '''
-    vertices, edges, mesh_to_skel_map, vertex_properties, root = read_skeleton_h5_by_part(filename)
+    vertices, edges, mesh_to_skel_map, vertex_properties, root = read_skeleton_h5_by_part(
+        filename)
     return skeleton.Skeleton(vertices=vertices,
                              edges=edges,
                              mesh_to_skel_map=mesh_to_skel_map,
@@ -178,8 +180,8 @@ def export_to_swc(skel, filename, node_labels=None, radius=None, header=None, xy
     radius : iterable
         None (default) or an iterable of floats. This should be co-indexed with vertices.
         Radius values are assumed to be in the same units as the node vertices.
-    header : dict, default None. Each key value pair in the dict becomes
-                   a parameter line in the swc header.
+    header : str or list, default None.
+        An optional header string for the file. Each element of the list 
     xyz_scaling: Number, default 1000. Down-scales spatial units from the skeleton's units to
                         whatever is desired by the swc. E.g. nm to microns has scaling=1000.
     '''
@@ -187,8 +189,10 @@ def export_to_swc(skel, filename, node_labels=None, radius=None, header=None, xy
     if header is None:
         header_string = ''
     else:
-        header_string = '\n'.join(['{}: {}'.format(k, v)
-                                   for k, v in header.items()])
+        if isinstance(header, str):
+            header = [header]
+        header[0] = ' '.join(['#', header[0]])
+        header_string = '\n# '.join(header)
 
     if radius is None:
         radius = np.full(len(skel.vertices), 1000)
@@ -209,7 +213,7 @@ def _build_swc_array(skel, node_labels, radius, xyz_scaling):
     '''
     Helper function for producing the numpy table for an swc.
     '''
-    order_old = np.concatenate([p[::-1] for p in skel.cover_paths]) 
+    order_old = np.concatenate([p[::-1] for p in skel.cover_paths])
     new_ids = np.arange(skel.n_vertices)
     order_map = dict(zip(order_old, new_ids))
 
@@ -230,18 +234,19 @@ def _build_swc_array(skel, node_labels, radius, xyz_scaling):
 class _NumpyEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, (np.int_, np.intc, np.intp, np.int8,
-            np.int16, np.int32, np.int64, np.uint8,
-            np.uint16, np.uint32, np.uint64)):
+                            np.int16, np.int32, np.int64, np.uint8,
+                            np.uint16, np.uint32, np.uint64)):
             return int(obj)
-        elif isinstance(obj, (np.float_, np.float16, np.float32, 
-            np.float64)):
+        elif isinstance(obj, (np.float_, np.float16, np.float32,
+                              np.float64)):
             return float(obj)
-        elif isinstance(obj,(np.ndarray,)):
+        elif isinstance(obj, (np.ndarray,)):
             return obj.tolist()
         return json.JSONEncoder.default(self, obj)
 
+
 def _convert_keys_to_int(x):
     if type(x) is dict:
-        return {int(k):v for k,v in x.items()}
+        return {int(k): v for k, v in x.items()}
     else:
         return x
