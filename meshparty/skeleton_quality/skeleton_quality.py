@@ -45,11 +45,16 @@ def skeleton_path_quality(sk, mesh, skind_to_mind_map=None, sk_norm=None, max_gr
     '''
     if skind_to_mind_map is None:
         ds, inds = mesh.kdtree.query(sk.vertices, distance_upper_bound=1)
-        skind_to_mind_map = mesh.map_indices_to_unmasked(np.where(ds == 0, inds, -1))
+        skind_to_mind_map = mesh.map_indices_to_unmasked(
+            np.where(ds == 0, inds, -1))
     if sk_norm is None:
-        sk_norm = sk.radius
+        if sk.radius is not None:
+            sk_norm = sk.radius
+        else:
+            sk_norm = np.ones(sk.n_vertices)
     elif p_ratio is not None:
-        print('Warning: If sk_norm is not the radius, the default calibration does not apply!')
+        print(
+            'Warning: If sk_norm is not the radius, the default calibration does not apply!')
 
     if p_ratio is None:
         p_ratio = DEFAULT_P_RATIO
@@ -102,7 +107,8 @@ def compute_path_pairs(sk, mesh, skind_to_mind_map=None, return_indices=True):
     mesh_vec = np.zeros((len(mesh.vertices), 1))
     mesh_vec[root_minds] = 1
     meshgraph = mesh.csgraph > 0
-    soma_boundary_plus_vec = (((meshgraph * mesh_vec) > 0).astype(int) - mesh_vec).astype(int)
+    soma_boundary_plus_vec = (
+        ((meshgraph * mesh_vec) > 0).astype(int) - mesh_vec).astype(int)
     soma_boundary_inds = np.flatnonzero(np.logical_and(
         (meshgraph * soma_boundary_plus_vec > 0), mesh_vec > 0))
 
@@ -173,7 +179,8 @@ def matched_path_distances_mesh(sk_inds_list, mesh_inds_list, skind_to_mind_map,
 
 
 def closest_graph_distance_paths(path_A, path_B, mesh, norm=None, norm_min=50, max_dist=10000):
-    ds = csgraph.dijkstra(mesh.csgraph, indices=path_B, min_only=True, limit=max_dist)
+    ds = csgraph.dijkstra(mesh.csgraph, indices=path_B,
+                          min_only=True, limit=max_dist)
     if norm is None:
         return ds[path_A]
     else:

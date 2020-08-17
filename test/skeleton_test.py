@@ -14,7 +14,8 @@ def test_basic_components(simple_skeleton, simple_skeleton_with_properties):
     assert sk.n_vertices == len(simple_verts)
     for sk_edge, base_edge in zip(sk.edges, simple_edges):
         assert np.all(np.sort(sk_edge) == np.sort(base_edge))
-        assert sk.distance_to_root[sk_edge[0]] > sk.distance_to_root[sk_edge[1]]
+        assert sk.distance_to_root[sk_edge[0]
+                                   ] > sk.distance_to_root[sk_edge[1]]
 
     d, _ = sk.kdtree.query([0.3, 0.4, 0.1])
     assert np.isclose(d, 4.2261093, atol=0.0001)
@@ -56,14 +57,16 @@ def test_reroot(simple_skeleton):
     sk.reroot(6)
     assert sk.root == 6
     for sk_edge in sk.edges:
-        assert sk.distance_to_root[sk_edge[0]] > sk.distance_to_root[sk_edge[1]]
+        assert sk.distance_to_root[sk_edge[0]
+                                   ] > sk.distance_to_root[sk_edge[1]]
 
 
 def test_sk_csgraph(simple_skeleton):
     sk = simple_skeleton
     graph = sk.csgraph
     gdist = csgraph.dijkstra(graph, indices=[6])
-    assert np.all(gdist[0] == np.array([4.,  3.,  2., np.inf, np.inf,  1.,  0.]))
+    assert np.all(gdist[0] == np.array(
+        [4.,  3.,  2., np.inf, np.inf,  1.,  0.]))
 
     ugdist = csgraph.dijkstra(sk.csgraph_undirected, indices=[6])
     assert np.all(ugdist[0] == np.array([4., 3., 2., 3., 4., 1., 0.]))
@@ -80,13 +83,13 @@ def test_sk_csgraph(simple_skeleton):
 def test_branch_and_endpoints(full_cell_skeleton):
     sk = full_cell_skeleton
 
-    assert len(sk.end_points) == 73 
+    assert len(sk.end_points) == 73
     assert sk.n_end_points == 73
     assert len(sk.branch_points) == 66
     assert sk.n_branch_points == 66
 
     path = sk.path_to_root(sk.end_points[1])
-    assert np.isclose(sk.path_length(path), 156245.865, atol=0.01)
+    assert np.isclose(sk.path_length(path), 156869.06, atol=0.01)
 
 
 def test_cover_paths(full_cell_skeleton):
@@ -120,13 +123,12 @@ def test_downstream_nodes(full_cell_skeleton):
     assert len(sk.downstream_nodes(sk.root)) == sk.n_vertices
     assert len(sk.downstream_nodes(300)) == 135
 
+
 def test_skeleton_quality(full_cell_skeleton, full_cell_mesh, mesh_link_edges):
     sk = full_cell_skeleton
-    mesh = deepcopy(full_cell_mesh)
+    mesh = full_cell_mesh
     mesh.link_edges = mesh_link_edges
     pscore, sk_paths, ms_paths, sk_inds_list, mesh_inds_list, path_distances = \
-                                        skeleton_quality.skeleton_path_quality(sk, mesh, return_path_info=True)
+        skeleton_quality.skeleton_path_quality(sk, mesh, return_path_info=True)
     assert len(pscore) == len(sk.cover_paths)
-    assert np.isclose(pscore.sum(), 9.9216, 0.001)
-
-
+    assert np.isclose(pscore.sum(), -151.377, 0.001)

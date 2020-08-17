@@ -140,7 +140,8 @@ def read_skeleton_h5_by_part(filename):
     return vertices, edges, mesh_to_skel_map, vertex_properties, root
 
 
-def read_skeleton_h5(filename):
+def read_skeleton_h5(filename,
+                     remove_zero_length_edges=False):
     '''
     Reads a skeleton and its properties from an hdf5 file.
 
@@ -148,7 +149,9 @@ def read_skeleton_h5(filename):
     ----------
     filename: str
         path to skeleton file
-
+    remove_zero_length_edges: bool, optional
+        If True, post-processes the skeleton data to removes any zero
+        length edges. Default is False.
     Returns
     -------
     :obj:`meshparty.skeleton.Skeleton`
@@ -161,7 +164,8 @@ def read_skeleton_h5(filename):
                              edges=edges,
                              mesh_to_skel_map=mesh_to_skel_map,
                              vertex_properties=vertex_properties,
-                             root=root)
+                             root=root,
+                             remove_zero_length_edges=remove_zero_length_edges)
 
 
 def export_to_swc(skel, filename, node_labels=None, radius=None, header=None, xyz_scaling=1000):

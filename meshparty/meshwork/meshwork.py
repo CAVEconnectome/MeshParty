@@ -1011,15 +1011,13 @@ class Meshwork(object):
         return skind_out.to_mesh_region_point
 
     @OnlyIfSkeleton.exists
-    def jump_distal(self, ind, include_initial=False):
+    def jump_distal(self, ind):
         """Finds the next topologically interesting (branch or end point) away from root starting from an initial mesh index. 
 
         Parameters
         ----------
         ind : Mesh index
             Index of the initial mesh to use for 
-        include_initial : bool, optional
-            If True, returns the initial index if it's already a branch or root point. By default False
 
         Returns
         -------
@@ -1028,7 +1026,7 @@ class Meshwork(object):
         """
         ind = self._convert_to_meshindex(ind)
         skind = ind.to_skel_index
-        if skind in self.skeleton.end_points:
+        if skind in np.concatenate((self.skeleton.end_points, self.skeleton.branch_points)):
             return ind  # If it's an end point, return immediately
 
         d = sparse.csgraph.dijkstra(
@@ -1036,9 +1034,6 @@ class Meshwork(object):
         )
 
         topo_pts = self.skeleton.topo_points
-        if include_initial is False:
-            topo_pts = topo_pts[topo_pts != skind]
-
         proximal_pt = topo_pts[
             np.argmin(d[0, topo_pts])
         ]

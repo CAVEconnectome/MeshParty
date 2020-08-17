@@ -92,7 +92,10 @@ class StaticSkeleton:
 
     @property
     def radius(self):
-        return self._radius
+        if self._radius is None:
+            return None
+        else:
+            return self._radius
 
     @radius.setter
     def radius(self, new_values):
@@ -518,10 +521,14 @@ class Skeleton:
 
     @property
     def radius(self):
+        if self._rooted.radius is None:
+            return None
         return self._rooted.radius[self.node_mask]
 
     @property
     def mesh_index(self):
+        if self._rooted.mesh_index is None:
+            return None
         return self._rooted.mesh_index[self.node_mask]
 
     @property

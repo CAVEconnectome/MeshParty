@@ -29,7 +29,8 @@ simple_edges = np.array([[0, 1],
 @contextlib.contextmanager
 def build_full_cell_skeleton():
     filepath = 'test/test_files/sk_648518346349499581.h5'
-    sk = skeleton_io.read_skeleton_h5(filepath)
+    sk = skeleton_io.read_skeleton_h5(filepath, remove_zero_length_edges=False)
+    sk._rooted._mesh_index = np.array(sk.vertex_properties['mesh_index'])
     yield sk
 
 
@@ -88,7 +89,8 @@ def test_skeleton_read_write_with_props(simple_skeleton_with_properties, tmp_pat
     fname = os.path.join(tmp_path, 'test.swc')
     skeleton_io.write_skeleton_h5(sk, fname, overwrite=True)
     skback = skeleton_io.read_skeleton_h5(fname)
-    assert np.all(skback.vertex_properties['test'] == sk.vertex_properties['test'])
+    assert np.all(
+        skback.vertex_properties['test'] == sk.vertex_properties['test'])
     assert np.all(skback.mesh_to_skel_map == sk.mesh_to_skel_map)
 
 
@@ -103,7 +105,8 @@ def test_swc_write(simple_skeleton_with_properties, tmp_path):
                         'index', 'type', 'x', 'y', 'z', 'r', 'parent'])
     assert sk_pd.loc[3].parent == 2
 
-    sk.export_to_swc(fname, radius=sk.vertex_properties['test'], node_labels=labels, xyz_scaling=1)
+    sk.export_to_swc(
+        fname, radius=sk.vertex_properties['test'], node_labels=labels, xyz_scaling=1)
     sk_pd = pd.read_csv(fname, sep=' ', header=None, names=[
                         'index', 'type', 'x', 'y', 'z', 'r', 'parent'])
     assert sk_pd.loc[3].parent == 2
@@ -112,7 +115,7 @@ def test_swc_write(simple_skeleton_with_properties, tmp_path):
 def test_skeleton_h5_read(full_cell_skeleton):
     print(full_cell_skeleton.root)
     assert type(full_cell_skeleton) is skeleton.Skeleton
-    assert full_cell_skeleton.root == 42591
+    assert full_cell_skeleton.root == 42197
 
 
 def test_skeleton_rescale(full_cell_skeleton):
@@ -122,7 +125,7 @@ def test_skeleton_rescale(full_cell_skeleton):
     full_cell_skeleton.voxel_scaling = [2, 2, 1]
     new_dist = full_cell_skeleton.distance_to_root[end_points[10]]
     assert not np.isclose(new_dist, orig_dist)
-    assert np.isclose(new_dist, 251222.009984970, atol=0.001)
+    assert np.isclose(new_dist, 249974.84, atol=0.01)
 
     full_cell_skeleton.voxel_scaling = None
     reset_dist = full_cell_skeleton.distance_to_root[end_points[10]]

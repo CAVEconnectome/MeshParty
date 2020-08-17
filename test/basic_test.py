@@ -33,7 +33,8 @@ def basic_mesh():
 @contextlib.contextmanager
 def build_full_cell_mesh():
     filepath = 'test/test_files/648518346349499581.h5'
-    vertices, faces, normals, link_edges, node_mask = trimesh_io.read_mesh_h5(filepath)
+    vertices, faces, normals, link_edges, node_mask = trimesh_io.read_mesh_h5(
+        filepath)
     mesh = trimesh_io.Mesh(vertices, faces)
     yield mesh
 
@@ -78,11 +79,13 @@ def full_cell_mesh():
     with build_full_cell_mesh() as m:
         yield m
 
+
 @pytest.fixture(scope='session')
 def mesh_link_edges():
     filepath = 'test/test_files/link_edges_for_mesh.npy'
     link_edges = np.load(filepath)
     yield link_edges
+
 
 @contextlib.contextmanager
 def build_basic_cube_mesh():
@@ -273,7 +276,6 @@ def test_masked_mesh(cv_path, full_cell_mesh_id, full_cell_soma_pt, tmpdir):
     double_soma_read = mm.mesh(filename=fname)
 
 
-
 def test_link_edges(full_cell_mesh, full_cell_merge_log, full_cell_soma_pt, monkeypatch):
 
     class MyChunkedGraph(object):
@@ -300,9 +302,11 @@ def test_link_edges(full_cell_mesh, full_cell_merge_log, full_cell_soma_pt, monk
 
 def test_local_mesh(full_cell_mesh):
     vertex = 30000
-    local_mesh = full_cell_mesh.get_local_mesh(n_points=500, max_dist=5000, center_node_id=vertex)
+    local_mesh = full_cell_mesh.get_local_mesh(
+        n_points=500, max_dist=5000, center_node_id=vertex)
     assert(len(local_mesh.vertices) == 500)
-    local_view = full_cell_mesh.get_local_view(n_points=500, max_dist=5000, center_node_id=vertex)
+    local_view = full_cell_mesh.get_local_view(
+        n_points=500, max_dist=5000, center_node_id=vertex)
     assert(len(local_view[0][0]) == 500)
 
 
@@ -321,7 +325,8 @@ def test_mesh_rescale(full_cell_mesh):
 def test_mesh_meta_rescale(cv_path, full_cell_mesh_id, tmpdir):
     mm = trimesh_io.MeshMeta(cv_path=cv_path,
                              cache_size=0,
-                             disk_cache_path=os.path.join(tmpdir, 'mesh_cache'),
+                             disk_cache_path=os.path.join(
+                                 tmpdir, 'mesh_cache'),
                              voxel_scaling=[2, 2, 1])
     mmesh = mm.mesh(seg_id=full_cell_mesh_id)
     assert np.isclose(51309567968.120735, mmesh.area, atol=1)
