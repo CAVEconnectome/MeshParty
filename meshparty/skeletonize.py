@@ -20,6 +20,7 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True, c
                      invalidation_d=12000, smooth_vertices=False, compute_radius=True,
                      shape_function='single', compute_original_index=True, verbose=True,
                      smooth_iterations=12, smooth_neighborhood=2, smooth_r=0.1,
+                     cc_vertex_thresh=100,
                      remove_zero_length_edges=True, collapse_params={}):
     '''
     Build skeleton object from mesh skeletonization
@@ -70,6 +71,10 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True, c
         If True, removes vertices involved in zero length edges, which can disrupt graph computations. Default True.
     collapse_params: dict
         Extra keyword arguments for the collapse function. See soma_via_sphere and soma_via_branch_starts for specifics.
+    cc_vertex_thresh : int, optional
+        Smallest number of vertices in a connected component to skeletonize.
+    verbose: bool
+        whether to print verbose logging
 
     Returns
     -------
@@ -78,6 +83,7 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True, c
     '''
     skel_verts, skel_edges, _, orig_skel_index, skel_map = calculate_skeleton_paths_on_mesh(mesh,
                                                                                             invalidation_d=invalidation_d,
+                                                                                            cc_vertex_thresh=cc_vertex_thresh,
                                                                                             return_map=True)
 
     if smooth_vertices is True:
@@ -206,8 +212,8 @@ def calculate_skeleton_paths_on_mesh(mesh,
                                      invalidation_d=10000,
                                      smooth_neighborhood=2,
                                      smooth_iterations=12,
-                                     large_skel_path_threshold=5000,
                                      cc_vertex_thresh=100,
+                                     large_skel_path_threshold=5000,
                                      return_map=False):
     """ function to turn a trimesh object of a neuron into a skeleton, without running soma collapse,
     or recasting result into a Skeleton.  Used by :func:`meshparty.skeletonize.skeletonize_mesh` and
@@ -279,7 +285,10 @@ def calculate_skeleton_paths_on_mesh(mesh,
     all_edges = []
     for comp_paths in all_paths:
         all_edges.append(utils.paths_to_edges(comp_paths))
-    tot_edges = np.vstack(all_edges)
+    if len(all_edges) > 0:
+        tot_edges = np.vstack(all_edges)
+    else:
+        tot_edges = np.zeros((3, 0))
 
     skel_verts, skel_edges, skel_verts_orig = reduce_verts(
         mesh.vertices, tot_edges)
