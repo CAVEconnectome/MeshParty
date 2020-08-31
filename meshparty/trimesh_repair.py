@@ -157,7 +157,8 @@ def find_edges_to_link(mesh, vert_ind_a, vert_ind_b, distance_upper_bound=2500, 
     start_time = time.time()
 
     # find the distance between the merge points and their center
-    d = np.linalg.norm(mesh.vertices[vert_ind_a, :] - mesh.vertices[vert_ind_b, :])
+    d = np.linalg.norm(
+        mesh.vertices[vert_ind_a, :] - mesh.vertices[vert_ind_b, :])
     c = np.mean(mesh.vertices[[vert_ind_a, vert_ind_b], :], axis=0)
     # cut down the mesh to only include mesh vertices near the center of this
     # merge edge and within 2x the euclidean length of the edge
@@ -173,10 +174,12 @@ def find_edges_to_link(mesh, vert_ind_a, vert_ind_b, distance_upper_bound=2500, 
 
     timings['apply_mask'] = time.time()-start_time
     start_time = time.time()
-    ccs, labels = sparse.csgraph.connected_components(mask_mesh.csgraph, return_labels=True)
+    ccs, labels = sparse.csgraph.connected_components(
+        mask_mesh.csgraph, return_labels=True)
 
     # map the original indices into this masked space
-    mask_inds = mask_mesh.filter_unmasked_indices(np.array([vert_ind_a, vert_ind_b]))
+    mask_inds = mask_mesh.filter_unmasked_indices(
+        np.array([vert_ind_a, vert_ind_b]))
 
     timings['masked_ccs'] = time.time()-start_time
     start_time = time.time()
@@ -218,7 +221,8 @@ def find_edges_to_link(mesh, vert_ind_a, vert_ind_b, distance_upper_bound=2500, 
     start_time = time.time()
     # make sure we found a good path
     if np.isinf(d_ais_to_all[mask_inds[1]]):
-        raise Exception(f"cannot find link between {vert_ind_a} and {vert_ind_b}")
+        raise Exception(
+            f"cannot find link between {vert_ind_a} and {vert_ind_b}")
 
     # turn this path back into a original mesh index edge list
     path = utils.get_path(mask_inds[0], mask_inds[1], pred)
@@ -254,7 +258,8 @@ def merge_points_to_merge_indices(mesh, merge_event_points, close_map_distance=3
     """
     Nmerge = merge_event_points.shape[0]
     # find the connected components of the mesh
-    ccs, labels = sparse.csgraph.connected_components(mesh.csgraph, return_labels=True)
+    ccs, labels = sparse.csgraph.connected_components(
+        mesh.csgraph, return_labels=True)
     uniq_labels, label_counts = np.unique(labels, return_counts=True)
     large_cc_mask = np.isin(labels, uniq_labels[label_counts > 100])
 
@@ -288,7 +293,8 @@ def merge_points_to_merge_indices(mesh, merge_event_points, close_map_distance=3
 
     # these are the merge edges that had 'close' results on at least one
     # of their edges
-    close_mapped = np.min(ds2.reshape((Nmerge, 2)), axis=1) < close_map_distance
+    close_mapped = np.min(ds2.reshape((Nmerge, 2)),
+                          axis=1) < close_map_distance
     # calculate the index of merge edges that are mapped closely,
     # but ended up being on the same connected component
     # these are remapping candidates
@@ -302,7 +308,8 @@ def merge_points_to_merge_indices(mesh, merge_event_points, close_map_distance=3
     close_merge = np.argmin(ds2.reshape((Nmerge, 2)), axis=1)
 
     # we want to reconsider the other end of the merge edge and get their xyz coords
-    far_points = merge_event_points[remap_merges, (1-close_merge)[remap_merges], :]
+    far_points = merge_event_points[remap_merges,
+                                    (1-close_merge)[remap_merges], :]
     # If no candidates are available, return an empty array
     if len(far_points) == 0:
         return np.zeros((0, 2))
@@ -323,7 +330,8 @@ def merge_points_to_merge_indices(mesh, merge_event_points, close_map_distance=3
         # of a different connected component than the other side of the merge edge
         other_comp_points = labels[mesh.faces[arr, 0]] != close_cc
         # find out how far each of the candidates that is on a different connected component is
-        d = np.linalg.norm(far_points[k] - mesh.triangles_center[arr][other_comp_points], axis=1)
+        d = np.linalg.norm(
+            far_points[k] - mesh.triangles_center[arr][other_comp_points], axis=1)
 
         # if this is empty that there are no candidates and we can safely ignore this merge edge
         if (d.shape[0] != 0):
@@ -332,7 +340,8 @@ def merge_points_to_merge_indices(mesh, merge_event_points, close_map_distance=3
             ind = remap_merges[k]*2 + (1-close_merge[remap_merges[k]])
             # remap the index of the closest point with a different connected component
             # into the mesh vertex index.
-            close_inds[ind] = mesh.faces[arr[np.where(other_comp_points)[0][np.argmin(d)]], 0]
+            close_inds[ind] = mesh.faces[arr[np.where(
+                other_comp_points)[0][np.argmin(d)]], 0]
             # reset the is_join_merge index to True for this case
             is_join_merge[remap_merges[k]] = True
 
@@ -343,7 +352,7 @@ def merge_points_to_merge_indices(mesh, merge_event_points, close_map_distance=3
 
 def get_link_edges(mesh, seg_id, dataset_name, close_map_distance=300,
                    server_address="https://www.dynamicannotationframework.com",
-                   verbose=False):
+                   verbose=False, client=None):
     """function to get a set of edges that should be added to a mesh
 
     Parameters
@@ -370,9 +379,11 @@ def get_link_edges(mesh, seg_id, dataset_name, close_map_distance=300,
     """
 
     # initialize a chunkedgraph client
-    cg_client = chunkedgraph.ChunkedGraphClient(server_address=server_address,
-                                                dataset_name=dataset_name)
-
+    if client is None:
+        cg_client = chunkedgraph.ChunkedGraphClient(server_address=server_address,
+                                                    dataset_name=dataset_name)
+    else:
+        cg_client = client
     # get the merge log
     if type(seg_id) is np.int64:
         seg_id = int(seg_id)

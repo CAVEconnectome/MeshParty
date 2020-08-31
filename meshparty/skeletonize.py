@@ -99,7 +99,8 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True, c
                            mesh_index=mesh.map_indices_to_unmasked(
                                orig_skel_index),
                            mesh_to_skel_map=skel_map)
-        _, close_ind = temp_sk.kdtree.query(soma_pt.reshape(1, 3))
+        soma_pt = np.array(soma_pt).reshape(1, 3)
+        _, close_ind = temp_sk.kdtree.query(soma_pt)
         temp_sk.reroot(close_ind[0])
 
         if collapse_function == 'sphere':
@@ -131,7 +132,6 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True, c
                                                         dynamic_threshold=collapse_params.get(
                                                             'dynamic_threshold', False)
                                                         )
-
         new_v, new_e, new_skel_map, vert_filter, root_ind = collapse_soma_skeleton(soma_verts, soma_pt, temp_sk.vertices, temp_sk.edges,
                                                                                    mesh_to_skeleton_map=temp_sk.mesh_to_skel_map,
                                                                                    return_filter=True, return_soma_ind=True)
@@ -298,13 +298,14 @@ def calculate_skeleton_paths_on_mesh(mesh,
     if return_map:
         mesh_to_skeleton_map = utils.nanfilter_shapes(
             np.unique(tot_edges.ravel()), mesh_to_skeleton_map)
+        mesh_to_skeleton_map[np.isnan(mesh_to_skeleton_map)] = -1
     else:
         mesh_to_skeleton_map = None
 
     output_tuple = (skel_verts, skel_edges, smooth_verts, skel_verts_orig)
 
     if return_map:
-        output_tuple = output_tuple + (mesh_to_skeleton_map,)
+        output_tuple = output_tuple + (mesh_to_skeleton_map.astype(int),)
 
     return output_tuple
 
@@ -896,62 +897,3 @@ def collapse_soma_skeleton(soma_verts, soma_pt, verts, edges, mesh_to_skeleton_m
     else:
         simple_verts, simple_edges = utils.remove_unused_verts(verts, edges)
         return simple_verts, simple_edges
-
-
-# def ray_trace_distance(vertex_inds, mesh, max_iter=10, rand_jitter=0.001, verbose=False, ray_inter=None):
-#     '''
-#     Compute distance to opposite side of the mesh for specified vertex indices on the mesh.
-
-#     Parameters
-#     ----------
-#     vertex_inds : np.array
-#         a K long set of indices into the mesh.vertices that you want to perform ray tracing on
-#     mesh : :obj:`meshparty.trimesh_io.Mesh`
-#         mesh to perform ray tracing on
-#     max_iter : int
-#         maximum retries to attempt in order to get a proper sdf measure (default 10)
-#     rand_jitter : float
-#         the amplitude of gaussian jitter on the vertex normal to add on each iteration (default .001)
-#     verbose : bool
-#         whether to print debug statements (default False)
-#     ray_inter: ray_pyembree.RayMeshIntersector
-#         a ray intercept object pre-initialized with a mesh, in case y ou are doing this many times
-#         and want to avoid paying initialization costs. (default None) will initialize it for you
-
-#     Returns
-#     -------
-#     np.array
-#         rs, a K long array of sdf values. rays with no result after max_iters will contain zeros.
-
-#     '''
-#     if not trimesh.ray.has_embree:
-#         logging.warning(
-#             "calculating rays without pyembree, conda install pyembree for large speedup")
-
-#     if ray_inter is None:
-#         ray_inter = ray_pyembree.RayMeshIntersector(mesh)
-
-#     rs = np.zeros(len(vertex_inds))
-#     good_rs = np.full(len(rs), False)
-
-#     it = 0
-#     while not np.all(good_rs):
-#         if verbose:
-#             print(np.sum(~good_rs))
-#         blank_inds = np.where(~good_rs)[0]
-#         starts = (mesh.vertices-mesh.vertex_normals)[vertex_inds, :][~good_rs, :]
-#         vs = -mesh.vertex_normals[vertex_inds, :] \
-#             + (1.2**it)*rand_jitter*np.random.rand(*mesh.vertex_normals[vertex_inds, :].shape)
-#         vs = vs[~good_rs, :]
-
-#         rtrace = ray_inter.intersects_location(starts, vs, multiple_hits=False)
-
-#         if len(rtrace[0] > 0):
-#             # radius values
-#             rs[blank_inds[rtrace[1]]] = np.linalg.norm(
-#                 mesh.vertices[vertex_inds, :][rtrace[1]]-rtrace[0], axis=1)
-#             good_rs[blank_inds[rtrace[1]]] = True
-#         it += 1
-#         if it > max_iter:
-#             break
-#     return rs

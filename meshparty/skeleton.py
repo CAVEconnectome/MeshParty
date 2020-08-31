@@ -643,6 +643,7 @@ class Skeleton:
     def _single_path_length(self, path):
         """Compute the length of a single path (assumed to be correct)
         """
+        path = np.unique(path)
         return np.sum(self.csgraph[:, path][path])
 
     def path_length(self, paths=None):
