@@ -1149,9 +1149,8 @@ class Mesh(trimesh.Trimesh):
         return utils.filter_shapes(node_ids, self.graph_edges)
 
     @ScalingManagement.original_scaling
-    def add_link_edges(self, seg_id, dataset_name, close_map_distance=300,
-                       server_address="https://www.dynamicannotationframework.com",
-                       client=None):
+    def add_link_edges(self, seg_id, datastack_name=None, server_address=None,
+                       close_map_distance=300, client=None, verbose=False):
         """ add a set of link edges to this mesh from a PyChunkedGraph endpoint
         This will ask the pcg server where merges were done and try to calculate 
         where edges should be added to reflect the merge operations that have been done
@@ -1161,16 +1160,22 @@ class Mesh(trimesh.Trimesh):
         ----------
         seg_id: int 
             the seg_id of this mesh
-        dataset_name: str
-            the dataset name this mesh can be found in
-        close_map_distance: float
-            the distance in mesh vertex coordinates to consider a mapping to be 'close'
-        server_address: str
-            the server address to find the pcg endpoint (default https://www.dynamicannotationframework.com)
+        dataset_name: str or None, optional
+            The datastack name this mesh can be found in. If None, requires a pre-made client
+            passed through the client parameter. Defaults to None.
+        close_map_distance: float, optional
+            The distance in nm in mesh vertex coordinates to consider a mapping to be 'close'.
+            Defaults to 300.
+        server_address: str or None, optional
+            the server address to find the pcg endpoint (defaults to None)
+        client : annotationframeworkclient.FrameworkClient or None, optional
+            Framework client for a specific datastack. If provided, ingores datastack name and
+            server_address parameters. defaults to None
         """
-        link_edges = trimesh_repair.get_link_edges(self, seg_id, dataset_name,
+        link_edges = trimesh_repair.get_link_edges(self, seg_id, datastack_name=datastack_name,
                                                    close_map_distance=close_map_distance,
                                                    server_address=server_address,
+                                                   verbose=verbose,
                                                    client=client)
 
         self.link_edges = np.vstack([self.link_edges, link_edges])
@@ -1533,41 +1538,3 @@ class MaskedMesh(Mesh):
             "use of MaskedMesh deprecated, Mesh now contains all MaskedMesh functionality",
             DeprecationWarning)
         super(MaskedMesh, self).__init__(*args, **kwargs)
-
-
-def MeshIndexFactory(mesh):
-    class MeshIndex(np.ndarray):
-        def __new__(cls, mesh_indices):
-            if np.array(mesh_indices).dtype is np.dtype('bool') and len(mesh_indices) == mesh.n_vertices:
-                mesh_indices = np.flatnonzero(mesh_indices)
-
-            mesh_inds = np.asarray(mesh_indices, dtype=int)
-            obj = mesh_inds.view(cls)
-            obj._mesh_indices_base = mesh.map_indices_to_unmasked(mesh_inds)
-            return obj
-
-        def __finalize_array__(self, obj):
-            if obj is None:
-                return
-            self._mesh_indices_base = getattr(
-                obj, '_mesh_indices_base', np.array([]))
-
-        @property
-        def to_mesh_index(self):
-            return self
-
-        @property
-        def to_mesh_index_base(self):
-            return self._mesh_indices_base
-
-        @property
-        def to_mesh_mask_base(self):
-            mask = np.full(len(mesh.node_mask), False)
-            mask[self.to_mesh_index_base] = True
-            return mask
-
-        @property
-        def to_mesh_mask(self):
-            return mesh.filter_unmasked_boolean(self.to_mesh_mask_base)
-
-    return MeshIndex

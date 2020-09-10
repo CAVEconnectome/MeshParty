@@ -6,7 +6,7 @@ import numpy as np
 from meshparty import trimesh_io
 import logging
 try:
-    from annotationframeworkclient import chunkedgraph
+    from annotationframeworkclient import FrameworkClient
 except ImportError:
     logging.warning(
         "Need to pip install annotationframeworkclient to repair mesh with pychunkedgraph")
@@ -350,9 +350,8 @@ def merge_points_to_merge_indices(mesh, merge_event_points, close_map_distance=3
     return close_inds.reshape((Nmerge, 2))[is_join_merge, :]
 
 
-def get_link_edges(mesh, seg_id, dataset_name, close_map_distance=300,
-                   server_address="https://www.dynamicannotationframework.com",
-                   verbose=False, client=None):
+def get_link_edges(mesh, seg_id, datastack_name=None, close_map_distance=300,
+                   server_address=None, verbose=False, client=None):
     """function to get a set of edges that should be added to a mesh
 
     Parameters
@@ -380,16 +379,18 @@ def get_link_edges(mesh, seg_id, dataset_name, close_map_distance=300,
 
     # initialize a chunkedgraph client
     if client is None:
-        cg_client = chunkedgraph.ChunkedGraphClient(server_address=server_address,
-                                                    dataset_name=dataset_name)
-    else:
-        cg_client = client
+        client = FrameworkClient(datastack_name)
+    cg_client = client.chunkedgraph
+
     # get the merge log
     if type(seg_id) is np.int64:
         seg_id = int(seg_id)
     merge_log = cg_client.get_merge_log(seg_id)
-    # convert the coordinates to numpy array and count them
-    merge_event_points = np.array(merge_log['merge_edge_coords'])
+
+    # convert the coordinates to numpy array in nm and count them
+    merge_event_points = np.array(merge_log['merge_edge_coords']).squeeze()
+    merge_event_points = merge_event_points * cg_client.base_resolution
+
     # map these merge edge coordinates to indices on the mesh
     if len(merge_event_points) > 0:
         merge_edge_inds = merge_points_to_merge_indices(mesh,
