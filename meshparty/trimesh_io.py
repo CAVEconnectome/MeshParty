@@ -1149,8 +1149,8 @@ class Mesh(trimesh.Trimesh):
         return utils.filter_shapes(node_ids, self.graph_edges)
 
     @ScalingManagement.original_scaling
-    def add_link_edges(self, seg_id, datastack_name=None, server_address=None,
-                       close_map_distance=300, client=None, verbose=False):
+    def add_link_edges(self, seg_id=None, merge_log=None, datastack_name=None, server_address=None,
+                       close_map_distance=300, client=None, verbose=False, base_resolution=None):
         """ add a set of link edges to this mesh from a PyChunkedGraph endpoint
         This will ask the pcg server where merges were done and try to calculate 
         where edges should be added to reflect the merge operations that have been done
@@ -1160,6 +1160,9 @@ class Mesh(trimesh.Trimesh):
         ----------
         seg_id: int 
             the seg_id of this mesh
+        merge_log : dict
+            JSON dict of merge log as it comes out of the chunkedgraph client. If used, must
+            also set base_resolution, the mip 0 resolution of the supervoxel segmentation volume.
         dataset_name: str or None, optional
             The datastack name this mesh can be found in. If None, requires a pre-made client
             passed through the client parameter. Defaults to None.
@@ -1171,12 +1174,28 @@ class Mesh(trimesh.Trimesh):
         client : annotationframeworkclient.FrameworkClient or None, optional
             Framework client for a specific datastack. If provided, ingores datastack name and
             server_address parameters. defaults to None
+        verbose : bool, optional
+            If True, provides more debugging statements, default is False
+        base_resolution : array-like or None, optional
+            Resolution of the supervoxel segmentation at its lowest mip.
         """
-        link_edges = trimesh_repair.get_link_edges(self, seg_id, datastack_name=datastack_name,
-                                                   close_map_distance=close_map_distance,
-                                                   server_address=server_address,
-                                                   verbose=verbose,
-                                                   client=client)
+        if seg_id is None and merge_log is None:
+            raise ValueError(
+                'Must set either seg id or pre-determined merge log')
+
+        if merge_log is not None:
+            link_edges = trimesh_repair.merge_log_edges(self,
+                                                        merge_log=merge_log,
+                                                        base_resolution=base_resolution,
+                                                        close_map_distance=close_map_distance,
+                                                        verbose=verbose)
+        else:
+            # Use the get_link_edges approach
+            link_edges = trimesh_repair.get_link_edges(self, seg_id, datastack_name=datastack_name,
+                                                       close_map_distance=close_map_distance,
+                                                       server_address=server_address,
+                                                       verbose=verbose,
+                                                       client=client)
 
         self.link_edges = np.vstack([self.link_edges, link_edges])
 

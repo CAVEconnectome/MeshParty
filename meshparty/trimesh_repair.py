@@ -350,46 +350,21 @@ def merge_points_to_merge_indices(mesh, merge_event_points, close_map_distance=3
     return close_inds.reshape((Nmerge, 2))[is_join_merge, :]
 
 
-def get_link_edges(mesh, seg_id, datastack_name=None, close_map_distance=300,
-                   server_address=None, verbose=False, client=None):
-    """function to get a set of edges that should be added to a mesh
-
-    Parameters
-    ----------
-    mesh : trimesh_io.Mesh
-        the mesh to add edges to
-    seg_id : np.uint64 or int
-        the seg_id to query the PCG endpoint for merges
-    dataset_name: str
-        the name of the dataset to query
-    close_map_distance: int or float
-        the maximum distance to map (default 300 in units of mesh.vertices)
-    server_address: str
-        the url to the root of the framework deployment
-        default "https://www.dynamicannotationframework.com"
-    verbose: bool
-        whether to print debug statements
-
-    Returns
-    -------
-    np.array
-        link_edges, a Kx2 array of mesh.vertices indices representing edges that should be added to the mesh graph
-
+def merge_log_to_points(merge_log, base_resolution):
+    """Process the raw merge log into points in the euclidean space.
     """
+    if isinstance(merge_log, dict):
+        ml = merge_log['merge_edge_coords']
+    else:
+        ml = merge_log
+    merge_event_points = np.array(ml).squeeze()
+    return merge_event_points * base_resolution
 
-    # initialize a chunkedgraph client
-    if client is None:
-        client = FrameworkClient(datastack_name)
-    cg_client = client.chunkedgraph
 
-    # get the merge log
-    if type(seg_id) is np.int64:
-        seg_id = int(seg_id)
-    merge_log = cg_client.get_merge_log(seg_id)
-
-    # convert the coordinates to numpy array in nm and count them
-    merge_event_points = np.array(merge_log['merge_edge_coords']).squeeze()
-    merge_event_points = merge_event_points * cg_client.base_resolution
+def merge_log_edges(mesh, merge_log, base_resolution, close_map_distance=300, verbose=False):
+    """ Process a merge log into mesh link edges
+    """
+    merge_event_points = merge_log_to_points(merge_log, base_resolution)
 
     # map these merge edge coordinates to indices on the mesh
     if len(merge_event_points) > 0:
@@ -417,3 +392,46 @@ def get_link_edges(mesh, seg_id, datastack_name=None, close_map_distance=300,
     link_edges = link_edges.reshape((len(link_edges), 2))
 
     return link_edges
+
+
+def get_link_edges(mesh, seg_id, datastack_name=None, close_map_distance=300,
+                   server_address=None, verbose=False, client=None):
+    """function to get a set of edges that should be added to a mesh
+
+    Parameters
+    ----------
+    mesh : trimesh_io.Mesh
+        the mesh to add edges to
+    seg_id : np.uint64 or int
+        the seg_id to query the PCG endpoint for merges
+    dataset_name: str
+        the name of the dataset to query
+    close_map_distance: int or float
+        the maximum distance to map (default 300 in units of mesh.vertices)
+    server_address: str
+        the url to the root of the framework deployment
+    verbose: bool
+        whether to print debug statements
+    client : annotationframeworkclient.ChunkedGraphClient
+
+    Returns
+    -------
+    np.array
+        link_edges, a Kx2 array of mesh.vertices indices representing edges that should be added to the mesh graph
+
+    """
+
+    # initialize a chunkedgraph client
+    if client is None:
+        client = FrameworkClient(
+            datastack_name, server_address=server_address).chunkedgraph
+
+    # get the merge log
+    if type(seg_id) is np.int64:
+        seg_id = int(seg_id)
+
+    merge_log = client.get_merge_log(seg_id)
+
+    return merge_log_edges(mesh, merge_log, client.base_resolution,
+                           close_map_distance=close_map_distance,
+                           verbose=verbose)
