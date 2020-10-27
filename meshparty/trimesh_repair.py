@@ -130,7 +130,7 @@ def find_all_close_edges(vertices, labels, ccs):
 def find_edges_to_link(mesh, vert_ind_a, vert_ind_b, distance_upper_bound=2500, verbose=False):
     '''Given a mesh and two points on that mesh
     find a way to add edges to the  mesh graph so that those indices
-    are on the same connected component 
+    are on the same connected component
 
     Parameters
     ----------
@@ -205,7 +205,7 @@ def find_edges_to_link(mesh, vert_ind_a, vert_ind_b, distance_upper_bound=2500, 
         raise Exception('no close edges found')
 
     # create a new mesh that has these added edges
-    #new_mesh = make_new_mesh_with_added_edges(mask_mesh, new_edges)
+    # new_mesh = make_new_mesh_with_added_edges(mask_mesh, new_edges)
     total_edges = np.vstack([mask_mesh.graph_edges, new_edges])
     graph = utils.create_csgraph(mask_mesh.vertices, total_edges)
     timings['make_new_mesh'] = time.time()-start_time
@@ -252,11 +252,12 @@ def merge_points_to_merge_indices(mesh, merge_event_points, close_map_distance=3
     -------
     np.array
         close_inds, a Mx2 matrix of indices into mesh.vertices
-        M<N because some merge pairs might not have been able to both be mapped 
+        M<N because some merge pairs might not have been able to both be mapped
         in under close_map_distance, and merge_points that only seem to connect
         already connected components are not added.
     """
     Nmerge = merge_event_points.shape[0]
+
     # find the connected components of the mesh
     ccs, labels = sparse.csgraph.connected_components(
         mesh.csgraph, return_labels=True)
@@ -358,6 +359,10 @@ def merge_log_to_points(merge_log, base_resolution):
     else:
         ml = merge_log
     merge_event_points = np.array(ml).squeeze()
+
+    if len(merge_event_points.shape) != 3:
+        merge_event_points = merge_event_points.reshape(-1, 2, 3)
+
     return merge_event_points * base_resolution
 
 

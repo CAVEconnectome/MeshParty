@@ -150,7 +150,10 @@ def save_meshwork_annotations(filename, mw):
 
 
 def load_meshwork_annotations(filename):
+
     with h5py.File(filename, "r") as f:
+        if "annotations" not in f:
+            return {}
         table_names = list(f["annotations"].keys())
 
     annotation_dfs = {}
