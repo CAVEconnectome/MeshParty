@@ -20,7 +20,7 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True, c
                      invalidation_d=12000, smooth_vertices=False, compute_radius=True,
                      shape_function='single', compute_original_index=True, verbose=True,
                      smooth_iterations=12, smooth_neighborhood=2, smooth_r=0.1,
-                     cc_vertex_thresh=100,
+                     cc_vertex_thresh=100, root_index=None,
                      remove_zero_length_edges=True, collapse_params={}):
     '''
     Build skeleton object from mesh skeletonization
@@ -67,6 +67,8 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True, c
         Size of neighborhood to look at for smoothing
     smooth_r: float, optional
         Weight of update step in smoothing algorithm, default is 0.2
+    root_index: int or None, optional
+        A precise mesh vertex to use as the skeleton root. If provided, the vertex location overrides soma_pt. By default, None.
     remove_zero_length_edges: bool
         If True, removes vertices involved in zero length edges, which can disrupt graph computations. Default True.
     collapse_params: dict
@@ -81,15 +83,19 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True, c
     :obj:`meshparty.skeleton.Skeleton`
            a Skeleton object for this mesh
     '''
-    skel_verts, skel_edges, _, orig_skel_index, skel_map = calculate_skeleton_paths_on_mesh(mesh,
-                                                                                            invalidation_d=invalidation_d,
-                                                                                            cc_vertex_thresh=cc_vertex_thresh,
-                                                                                            return_map=True)
+    skel_verts, skel_edges, orig_skel_index, skel_map = calculate_skeleton_paths_on_mesh(mesh,
+                                                                                         invalidation_d=invalidation_d,
+                                                                                         cc_vertex_thresh=cc_vertex_thresh,
+                                                                                         root_index=root_index,
+                                                                                         return_map=True)
 
     if smooth_vertices is True:
         smooth_verts = smooth_graph(
             skel_verts, skel_edges, neighborhood=smooth_neighborhood, iterations=smooth_iterations, r=smooth_r)
         skel_verts = smooth_verts
+
+    if root_index is not None and soma_pt is None:
+        soma_pt = mesh.vertices[root_index]
 
     rs = None
 
@@ -132,14 +138,19 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True, c
                                                         dynamic_threshold=collapse_params.get(
                                                             'dynamic_threshold', False)
                                                         )
+        if root_index is not None:
+            collapse_index = np.flatnonzero(orig_skel_index == root_index)[0]
+        else:
+            collapse_index = None
         new_v, new_e, new_skel_map, vert_filter, root_ind = collapse_soma_skeleton(soma_verts, soma_pt, temp_sk.vertices, temp_sk.edges,
                                                                                    mesh_to_skeleton_map=temp_sk.mesh_to_skel_map,
-                                                                                   return_filter=True, return_soma_ind=True)
+                                                                                   collapse_index=collapse_index, return_filter=True, return_soma_ind=True)
     else:
         new_v, new_e, new_skel_map = skel_verts, skel_edges, skel_map
         vert_filter = np.arange(len(orig_skel_index))
-
-        if soma_pt is None:
+        if root_index is not None:
+            root_ind = np.flatnonzero(orig_skel_index == root_index)[0]
+        elif soma_pt is None:
             sk_graph = utils.create_csgraph(new_v, new_e)
             root_ind = utils.find_far_points_graph(sk_graph)[0]
         else:
@@ -158,7 +169,8 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True, c
     if compute_original_index is True:
         if collapse_soma is True and soma_pt is not None:
             mesh_index = temp_sk.mesh_index[vert_filter]
-            mesh_index = np.append(mesh_index, -1)
+            if root_index is None:
+                mesh_index = np.append(mesh_index, -1)
         else:
             mesh_index = orig_skel_index[vert_filter]
         props['mesh_index'] = mesh_index
@@ -173,7 +185,10 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True, c
         else:
             rs = rs[vert_filter]
         if collapse_soma is True and soma_pt is not None:
-            rs = np.append(rs, soma_r)
+            if root_index is None:
+                rs = np.append(rs, soma_r)
+            else:
+                rs[root_ind] = soma_r
         props['rs'] = rs
 
     sk = Skeleton(new_v, new_e, mesh_to_skel_map=skel_map_full_mesh,
@@ -214,7 +229,8 @@ def calculate_skeleton_paths_on_mesh(mesh,
                                      smooth_iterations=12,
                                      cc_vertex_thresh=100,
                                      large_skel_path_threshold=5000,
-                                     return_map=False):
+                                     return_map=False,
+                                     root_index=None):
     """ function to turn a trimesh object of a neuron into a skeleton, without running soma collapse,
     or recasting result into a Skeleton.  Used by :func:`meshparty.skeletonize.skeletonize_mesh` and
     makes use of :func:`meshparty.skeletonize.skeletonize_components`
@@ -255,19 +271,21 @@ def calculate_skeleton_paths_on_mesh(mesh,
     return_map: bool
         whether to return a map of how each mesh vertex maps onto each skeleton vertex
         based upon how it was invalidated.
+    root_index: int or None
+        Mesh vertex to set as initial root node. Overides soma_pt if provided. Default is None.
 
     Returns
     -------
-        skel_verts: np.array
-            a Nx3 matrix of skeleton vertex positions
-        skel_edges: np.array
-            a Kx2 matrix of skeleton edge indices into skel_verts
-        smooth_verts: np.array
-            a Nx3 matrix of vertex positions after smoothing
-        skel_verts_orig: np.array
-            a N long index of skeleton vertices in the original mesh vertex index
-        (mesh_to_skeleton_map): np.array
-            a Mx2 map of mesh vertex indices to skeleton vertex indices
+    skel_verts: np.array
+        a Nx3 matrix of skeleton vertex positions
+    skel_edges: np.array
+        a Kx2 matrix of skeleton edge indices into skel_verts
+    smooth_verts: np.array
+        a Nx3 matrix of vertex positions after smoothing
+    skel_verts_orig: np.array
+        a N long index of skeleton vertices in the original mesh vertex index
+    (mesh_to_skeleton_map): np.array
+        a Mx2 map of mesh vertex indices to skeleton vertex indices
 
     """
 
@@ -276,7 +294,8 @@ def calculate_skeleton_paths_on_mesh(mesh,
                                                 soma_thresh=soma_thresh,
                                                 invalidation_d=invalidation_d,
                                                 cc_vertex_thresh=cc_vertex_thresh,
-                                                return_map=return_map)
+                                                return_map=return_map,
+                                                root_index=root_index)
     if return_map is True:
         all_paths, roots, tot_path_lengths, mesh_to_skeleton_map = skeletonize_output
     else:
@@ -292,8 +311,6 @@ def calculate_skeleton_paths_on_mesh(mesh,
 
     skel_verts, skel_edges, skel_verts_orig = reduce_verts(
         mesh.vertices, tot_edges)
-    smooth_verts = smooth_graph(
-        skel_verts, skel_edges, neighborhood=smooth_neighborhood, iterations=smooth_iterations)
 
     if return_map:
         mesh_to_skeleton_map = utils.nanfilter_shapes(
@@ -302,7 +319,7 @@ def calculate_skeleton_paths_on_mesh(mesh,
     else:
         mesh_to_skeleton_map = None
 
-    output_tuple = (skel_verts, skel_edges, smooth_verts, skel_verts_orig)
+    output_tuple = (skel_verts, skel_edges, skel_verts_orig)
 
     if return_map:
         output_tuple = output_tuple + (mesh_to_skeleton_map.astype(int),)
@@ -344,9 +361,10 @@ def skeletonize_components(mesh,
                            soma_thresh=10000,
                            invalidation_d=10000,
                            cc_vertex_thresh=100,
-                           return_map=False):
+                           return_map=False,
+                           root_index=None):
     """ core skeletonization routine, used by :func:`meshparty.skeletonize.calculate_skeleton_paths_on_mesh`
-    to calculcate skeleton on all components of mesh, with no post processing """
+    to calculate skeleton on all components of mesh, with no post processing """
     # find all the connected components in the mesh
     n_components, labels = sparse.csgraph.connected_components(mesh.csgraph,
                                                                directed=False,
@@ -361,7 +379,11 @@ def skeletonize_components(mesh,
     roots = []
     tot_path_lengths = []
 
-    if soma_pt is not None:
+    if root_index is not None:
+        soma_d = np.linalg.norm(
+            mesh.vertices - mesh.vertices[root_index], axis=1)
+        is_soma_pt = np.arange(len(mesh.vertices)) == root_index
+    elif soma_pt is not None:
         soma_d = mesh.vertices - soma_pt.reshape(1, 3)
         soma_d = np.linalg.norm(soma_d, axis=1)
         is_soma_pt = soma_d < soma_thresh
@@ -821,7 +843,7 @@ def soma_via_branch_starts(sk,
 
 
 def collapse_soma_skeleton(soma_verts, soma_pt, verts, edges, mesh_to_skeleton_map=None,
-                           return_filter=False, return_soma_ind=False):
+                           collapse_index=None, return_filter=False, return_soma_ind=False):
     """function to adjust skeleton result to move root to soma_pt 
 
     Parameters
@@ -865,8 +887,14 @@ def collapse_soma_skeleton(soma_verts, soma_pt, verts, edges, mesh_to_skeleton_m
     """
     if soma_verts is not None:
         soma_pt_m = soma_pt.reshape(1, 3)
-        new_verts = np.vstack((verts, soma_pt_m))
-        soma_i = verts.shape[0]
+        if collapse_index is None:
+            new_verts = np.vstack((verts, soma_pt_m))
+            soma_i = verts.shape[0]
+        else:
+            new_verts = verts
+            soma_i = collapse_index
+            soma_verts = soma_verts[soma_verts != soma_i]
+
         edges_m = edges.copy()
         edges_m[np.isin(edges, soma_verts)] = soma_i
 
@@ -877,7 +905,7 @@ def collapse_soma_skeleton(soma_verts, soma_pt, verts, edges, mesh_to_skeleton_m
         if mesh_to_skeleton_map is not None:
             consolidate_dict = {v: soma_i for v in soma_verts}
             new_index_dict, _ = utils.remap_dict(
-                len(verts)+1, consolidate_dict)
+                len(new_verts), consolidate_dict)
             new_index_dict[-1] = -1
             mesh_to_skeleton_map[np.isnan(mesh_to_skeleton_map)] = -1
             new_mesh_to_skeleton_map = fastremap.remap(
@@ -887,11 +915,13 @@ def collapse_soma_skeleton(soma_verts, soma_pt, verts, edges, mesh_to_skeleton_m
         if mesh_to_skeleton_map is not None:
             output.append(new_mesh_to_skeleton_map)
         if return_filter:
-            # Remove the largest value which is soma_i
-            used_vertices = np.unique(edges_m.ravel())[:-1]
+            used_vertices = np.unique(edges_m.ravel())
+            if collapse_index is None:
+                # Remove the largest value which is soma_i
+                used_vertices = used_vertices[:-1]
             output.append(used_vertices)
         if return_soma_ind:
-            output.append(len(simple_verts)-1)
+            output.append(new_index_dict[soma_i])
         return output
 
     else:
