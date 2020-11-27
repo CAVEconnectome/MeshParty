@@ -148,7 +148,7 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True, c
                 new_v, balanced_tree=False).query(soma_pt[np.newaxis, :])
             root_ind = qry_inds[0]
 
-    skel_map_full_mesh = np.full(mesh.node_mask.shape, -1, dtype=np.int)
+    skel_map_full_mesh = np.full(mesh.node_mask.shape, -1, dtype=np.int64)
     skel_map_full_mesh[mesh.node_mask] = new_skel_map
     ind_to_fix = mesh.map_boolean_to_unmasked(np.isnan(new_skel_map))
     skel_map_full_mesh[ind_to_fix] = -1

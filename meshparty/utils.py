@@ -418,7 +418,7 @@ def filter_unmasked_indices(node_mask, unmasked_shape):
 
 
 def filter_unmasked_indices_padded(node_mask, unmasked_shape):
-    new_index = np.zeros(node_mask.shape, dtype=int)-1
+    new_index = np.zeros(node_mask.shape, dtype=np.int64)-1
     new_index[node_mask] = np.arange(np.sum(node_mask))
 
     if np.isscalar(unmasked_shape) is True:
@@ -427,7 +427,7 @@ def filter_unmasked_indices_padded(node_mask, unmasked_shape):
         unmasked_shape = np.array(unmasked_shape)
         unmasked_shape[unmasked_shape == None] = -1
         new_shape = new_index[unmasked_shape.ravel().astype(
-            int)].reshape(unmasked_shape.shape)
+            np.int64)].reshape(unmasked_shape.shape)
         new_shape[unmasked_shape == -1] = -1
     return new_shape
 
