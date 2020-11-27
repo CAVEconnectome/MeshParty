@@ -330,10 +330,10 @@ def compress_mesh_data(mesh, cname="lz4"):
     else:
         vxsc = None
     mesh.voxel_scaling = None
-    zvs = blosc.compress(mesh.vertices.tostring(), typesize=8, cname=cname)
-    zfs = blosc.compress(mesh.faces.tostring(), typesize=8, cname=cname)
-    zes = blosc.compress(mesh.link_edges.tostring(), typesize=8, cname=cname)
-    znm = blosc.compress(mesh.node_mask.tostring(), typesize=1, cname=cname)
+    zvs = blosc.compress(mesh.vertices.tobytes(), typesize=8, cname=cname)
+    zfs = blosc.compress(mesh.faces.tobytes(), typesize=8, cname=cname)
+    zes = blosc.compress(mesh.link_edges.tobytes(), typesize=8, cname=cname)
+    znm = blosc.compress(mesh.node_mask.tobytes(), typesize=1, cname=cname)
     mesh.voxel_scaling = vxsc
     return zvs, zfs, zes, znm, vxsc
 

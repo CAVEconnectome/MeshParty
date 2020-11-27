@@ -276,24 +276,14 @@ def test_masked_mesh(cv_path, full_cell_mesh_id, full_cell_soma_pt, tmpdir):
     double_soma_read = mm.mesh(filename=fname)
 
 
-def test_link_edges(full_cell_mesh, full_cell_merge_log, full_cell_soma_pt, monkeypatch):
-
-    class MyChunkedGraph(object):
-        def __init__(a, **kwargs):
-            pass
-
-        def get_merge_log(self, atomic_id):
-            return full_cell_merge_log
-
-    monkeypatch.setattr(trimesh_io.trimesh_repair.chunkedgraph,
-                        'ChunkedGraphClient',
-                        MyChunkedGraph)
+def test_link_edges(full_cell_mesh, full_cell_merge_log, full_cell_soma_pt):
 
     lcc_before = mesh_filters.filter_largest_component(full_cell_mesh)
     assert lcc_before.sum() == 1973174
 
     full_cell_mesh.voxel_scaling = [10, 10, 10]
-    full_cell_mesh.add_link_edges('test', 5)
+    full_cell_mesh.add_link_edges(
+        merge_log=full_cell_merge_log, base_resolution=[1, 1, 1])
     full_cell_mesh.voxel_scaling = None
 
     lcc_after = mesh_filters.filter_largest_component(full_cell_mesh)

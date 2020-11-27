@@ -14,7 +14,7 @@ import re
 from collections import defaultdict
 import warnings
 import logging
-
+from functools import wraps
 import cloudvolume
 from multiwrapper import multiprocessing_utils as mu
 
@@ -34,9 +34,9 @@ try:
     from annotationframeworkclient import infoservice
     allow_framework_client = True
 except ImportError:
-    logging.warning("Need to pip install annotationframeworkclient to use dataset_name parameters")
+    logging.warning(
+        "Need to pip install annotationframeworkclient to use dataset_name parameters")
     allow_framework_client = False
-
 
 
 class EmptyMaskException(Exception):
@@ -53,7 +53,8 @@ def _get_cv_path_from_info(dataset_name, server_address=None, segmentation_type=
             "Need to pip install annotationframeworkclient to use dataset_name parameters")
         return None
 
-    info = infoservice.InfoServiceClient(dataset_name=dataset_name, server_address=server_address)
+    info = infoservice.InfoServiceClient(
+        dataset_name=dataset_name, server_address=server_address)
     if segmentation_type == 'graphene':
         cv_path = info.graphene_source(format_for='cloudvolume')
     elif segmentation_type == 'flat':
@@ -98,11 +99,12 @@ def read_mesh_h5(filename):
 
     with h5py.File(filename, "r") as f:
         if "draco" in f.keys():
-            mesh_object = DracoPy.decode_buffer_to_mesh(f["draco"][()].tostring())
+            mesh_object = DracoPy.decode_buffer_to_mesh(
+                f["draco"][()].tostring())
             vertices = np.array(mesh_object.points).astype(np.float32)
-            if len(vertices.shape)==1:
-                N=len(vertices)
-                vertices=vertices.reshape((N//3,3))
+            if len(vertices.shape) == 1:
+                N = len(vertices)
+                vertices = vertices.reshape((N//3, 3))
             faces = np.array(mesh_object.faces).astype(np.uint32)
         else:
             vertices = f["vertices"][()]
@@ -166,7 +168,7 @@ def write_mesh_h5(filename, vertices, faces,
 
             buf = DracoPy.encode_mesh_to_buffer(vertices.flatten('C'),
                                                 faces.flatten('C'))
-            f.create_dataset("draco", data=np.void(buf))                        
+            f.create_dataset("draco", data=np.void(buf))
         else:
             f.create_dataset("vertices", data=vertices, compression="gzip")
             f.create_dataset("faces", data=faces, compression="gzip")
@@ -259,7 +261,7 @@ def _download_meshes_thread_graphene(args):
      """
     seg_ids, cv_path, target_dir, fmt, overwrite, \
         merge_large_components, stitch_mesh_chunks, map_gs_to_https, \
-            remove_duplicate_vertices, progress, chunk_size, save_draco = args
+        remove_duplicate_vertices, progress, chunk_size, save_draco = args
 
     cv = cloudvolume.CloudVolume(cv_path, use_https=map_gs_to_https)
 
@@ -381,7 +383,7 @@ def _download_meshes_thread_precomputed(args):
                               mesh.faces.flatten(),
                               link_edges=mesh.link_edges,
                               draco=save_draco,
-                              overwrite=overwrite)            
+                              overwrite=overwrite)
             else:
                 mesh.write_to_file(f"{target_dir}/{segid}.{fmt}")
 
@@ -448,7 +450,7 @@ def download_meshes(seg_ids, target_dir, cv_path, overwrite=True,
     for seg_id_block in seg_id_blocks:
         multi_args.append([seg_id_block, cv_path, target_dir, fmt,
                            overwrite, merge_large_components, stitch_mesh_chunks,
-                            map_gs_to_https, remove_duplicate_vertices, progress, chunk_size, save_draco])
+                           map_gs_to_https, remove_duplicate_vertices, progress, chunk_size, save_draco])
 
     if n_jobs == 1:
         mu.multiprocess_func(_download_meshes_thread,
@@ -642,7 +644,8 @@ class MeshMeta(object):
                     self._mesh_cache[seg_id] = mesh
 
                 if self.disk_cache_path is not None:
-                    mesh.write_to_file(self._filename(seg_id), overwrite=force_download)
+                    mesh.write_to_file(self._filename(
+                        seg_id), overwrite=force_download)
             else:
                 mesh = self._mesh_cache[seg_id]
 
@@ -699,7 +702,8 @@ class Mesh(trimesh.Trimesh):
             else:
                 unmasked_size = len(vertices_all)
         if unmasked_size < len(vertices_all):
-            raise ValueError('Original size cannot be smaller than current size')
+            raise ValueError(
+                'Original size cannot be smaller than current size')
         self._unmasked_size = unmasked_size
 
         if node_mask is None:
@@ -710,14 +714,16 @@ class Mesh(trimesh.Trimesh):
             node_mask[node_mask_inds] = True
 
         if len(node_mask) != unmasked_size:
-            raise ValueError('The node mask must be the same length as the unmasked size')
+            raise ValueError(
+                'The node mask must be the same length as the unmasked size')
 
         self._node_mask = node_mask
 
         if apply_mask:
             if any(self.node_mask == False):
                 nodes_f = vertices_all[self.node_mask]
-                faces_f = utils.filter_shapes(np.flatnonzero(node_mask), faces_all)[0]
+                faces_f = utils.filter_shapes(
+                    np.flatnonzero(node_mask), faces_all)[0]
             else:
                 nodes_f, faces_f = vertices_all, faces_all
         else:
@@ -737,7 +743,8 @@ class Mesh(trimesh.Trimesh):
         if apply_mask:
             if link_edges is not None:
                 if any(self.node_mask == False):
-                    self.link_edges = utils.filter_shapes(np.flatnonzero(node_mask), link_edges)[0]
+                    self.link_edges = utils.filter_shapes(
+                        np.flatnonzero(node_mask), link_edges)[0]
                 else:
                     self.link_edges = link_edges
             else:
@@ -754,6 +761,7 @@ class Mesh(trimesh.Trimesh):
     class ScalingManagement(object):
         @staticmethod
         def original_scaling(func):
+            @wraps(func)
             def wrapper(self, *args, **kwargs):
                 original_scaling = self.voxel_scaling
                 self.voxel_scaling = None
@@ -875,8 +883,9 @@ class Mesh(trimesh.Trimesh):
     @caching.cache_decorator
     def graph_edges(self):
         # mesh.edges has bidirectional edges, so we need to pass bidirectional link_edges.
-        if len(self.link_edges)>0:
-            link_edges_sym = np.vstack((self.link_edges, self.link_edges[:,[1,0]]))
+        if len(self.link_edges) > 0:
+            link_edges_sym = np.vstack(
+                (self.link_edges, self.link_edges[:, [1, 0]]))
             link_edges_sym_unique = np.unique(link_edges_sym, axis=1)
         else:
             link_edges_sym_unique = self.link_edges
@@ -1140,8 +1149,8 @@ class Mesh(trimesh.Trimesh):
         return utils.filter_shapes(node_ids, self.graph_edges)
 
     @ScalingManagement.original_scaling
-    def add_link_edges(self, seg_id, dataset_name, close_map_distance=300,
-                       server_address="https://www.dynamicannotationframework.com"):
+    def add_link_edges(self, seg_id=None, merge_log=None, datastack_name=None, server_address=None,
+                       close_map_distance=300, client=None, verbose=False, base_resolution=None):
         """ add a set of link edges to this mesh from a PyChunkedGraph endpoint
         This will ask the pcg server where merges were done and try to calculate 
         where edges should be added to reflect the merge operations that have been done
@@ -1151,16 +1160,42 @@ class Mesh(trimesh.Trimesh):
         ----------
         seg_id: int 
             the seg_id of this mesh
-        dataset_name: str
-            the dataset name this mesh can be found in
-        close_map_distance: float
-            the distance in mesh vertex coordinates to consider a mapping to be 'close'
-        server_address: str
-            the server address to find the pcg endpoint (default https://www.dynamicannotationframework.com)
+        merge_log : dict
+            JSON dict of merge log as it comes out of the chunkedgraph client. If used, must
+            also set base_resolution, the mip 0 resolution of the supervoxel segmentation volume.
+        dataset_name: str or None, optional
+            The datastack name this mesh can be found in. If None, requires a pre-made client
+            passed through the client parameter. Defaults to None.
+        close_map_distance: float, optional
+            The distance in nm in mesh vertex coordinates to consider a mapping to be 'close'.
+            Defaults to 300.
+        server_address: str or None, optional
+            the server address to find the pcg endpoint (defaults to None)
+        client : annotationframeworkclient.FrameworkClient or None, optional
+            Framework client for a specific datastack. If provided, ingores datastack name and
+            server_address parameters. defaults to None
+        verbose : bool, optional
+            If True, provides more debugging statements, default is False
+        base_resolution : array-like or None, optional
+            Resolution of the supervoxel segmentation at its lowest mip.
         """
-        link_edges = trimesh_repair.get_link_edges(self, seg_id, dataset_name,
-                                                   close_map_distance=close_map_distance,
-                                                   server_address=server_address)
+        if seg_id is None and merge_log is None:
+            raise ValueError(
+                'Must set either seg id or pre-determined merge log')
+
+        if merge_log is not None:
+            link_edges = trimesh_repair.merge_log_edges(self,
+                                                        merge_log=merge_log,
+                                                        base_resolution=base_resolution,
+                                                        close_map_distance=close_map_distance,
+                                                        verbose=verbose)
+        else:
+            # Use the get_link_edges approach
+            link_edges = trimesh_repair.get_link_edges(self, seg_id, datastack_name=datastack_name,
+                                                       close_map_distance=close_map_distance,
+                                                       server_address=server_address,
+                                                       verbose=verbose,
+                                                       client=client)
 
         self.link_edges = np.vstack([self.link_edges, link_edges])
 
@@ -1354,7 +1389,8 @@ class Mesh(trimesh.Trimesh):
             joint_mask = self.node_mask & new_mask
             new_mask = self.filter_unmasked_boolean(new_mask)
         elif np.size(new_mask) == self.vertices.shape[0]:
-            joint_mask = self.node_mask & self.map_boolean_to_unmasked(new_mask)
+            joint_mask = self.node_mask & self.map_boolean_to_unmasked(
+                new_mask)
         else:
             raise ValueError(
                 'Incompatible shape. Must be either original length or current length of vertices.')
@@ -1379,7 +1415,8 @@ class Mesh(trimesh.Trimesh):
         The new 0 index is the first nonzero element of the mask.
         Unfortunately, update_vertices maps all masked face values to 0 as well.
         """
-        num_zero_expected = np.sum(self.faces == np.flatnonzero(mask)[0], axis=1)
+        num_zero_expected = np.sum(
+            self.faces == np.flatnonzero(mask)[0], axis=1)
         self.update_vertices(mask)
 
         num_zero_new = np.sum(self.faces == 0, axis=1)
@@ -1520,41 +1557,3 @@ class MaskedMesh(Mesh):
             "use of MaskedMesh deprecated, Mesh now contains all MaskedMesh functionality",
             DeprecationWarning)
         super(MaskedMesh, self).__init__(*args, **kwargs)
-
-
-def MeshIndexFactory(mesh):
-    class MeshIndex(np.ndarray):
-        def __new__(cls, mesh_indices):
-            if np.array(mesh_indices).dtype is np.dtype('bool') and len(mesh_indices) == mesh.n_vertices:
-                mesh_indices = np.flatnonzero(mesh_indices)
-
-            mesh_inds = np.asarray(mesh_indices, dtype=int)
-            obj = mesh_inds.view(cls)
-            obj._mesh_indices_base = mesh.map_indices_to_unmasked(mesh_inds)
-            return obj
-
-        def __finalize_array__(self, obj):
-            if obj is None:
-                return
-            self._mesh_indices_base = getattr(
-                obj, '_mesh_indices_base', np.array([]))
-
-        @property
-        def to_mesh_index(self):
-            return self
-
-        @property
-        def to_mesh_index_base(self):
-            return self._mesh_indices_base
-
-        @property
-        def to_mesh_mask_base(self):
-            mask = np.full(len(mesh.node_mask), False)
-            mask[self.to_mesh_index_base] = True
-            return mask
-
-        @property
-        def to_mesh_mask(self):
-            return mesh.filter_unmasked_boolean(self.to_mesh_mask_base)
-
-    return MeshIndex

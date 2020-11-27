@@ -16,13 +16,16 @@ def compare_img_to_test_file(fname, back_val=255, close=15, pre_path=None):
     img_tmpl = imageio.imread(tmpl_path)
     assert(img_test.shape == img_tmpl.shape)
 
-    non_background = np.any((img_test != back_val) | (img_tmpl != back_val), axis=2)
+    non_background = np.any((img_test != back_val) |
+                            (img_tmpl != back_val), axis=2)
     newshape = (img_test.shape[0]*img_test.shape[1], img_test.shape[2])
     img_test_non_back = img_test.reshape(newshape)[non_background.ravel(), :]
     img_tmpl_non_back = img_tmpl.reshape(newshape)[non_background.ravel(), :]
 
-    assert(np.all((np.mean(img_test_non_back, axis=0) - np.mean(img_tmpl_non_back, axis=0)) < close))
-    assert(np.all((np.std(img_test_non_back, axis=0) - np.std(img_tmpl_non_back, axis=0)) < close))
+    assert(np.all((np.mean(img_test_non_back, axis=0) -
+                   np.mean(img_tmpl_non_back, axis=0)) < close))
+    assert(np.all((np.std(img_test_non_back, axis=0) -
+                   np.std(img_tmpl_non_back, axis=0)) < close))
     return True
 
 
@@ -142,7 +145,8 @@ def test_basic_mesh_actor(cube_verts_faces):
 
 
 def test_skeleton_viz(cell_skel, tmp_path):
-    skel_actor = trimesh_vtk.skeleton_actor(cell_skel, vertex_property='rs', line_width=5)
+    skel_actor = trimesh_vtk.skeleton_actor(
+        cell_skel, vertex_property='rs', line_width=5)
     pd = skel_actor.GetMapper().GetInput()
     verts_out, faces_out, edges_out = trimesh_vtk.poly_to_mesh_components(pd)
     assert(np.all(cell_skel.vertices == verts_out))
@@ -154,8 +158,10 @@ def test_skeleton_viz(cell_skel, tmp_path):
 def test_full_cell_camera(full_cell_mesh, full_cell_soma_pt, tmp_path):
     mesh_actor = trimesh_vtk.mesh_actor(full_cell_mesh)
     camera = trimesh_vtk.oriented_camera(full_cell_soma_pt, backoff=100)
-    eval_actor_image([mesh_actor], 'full_cell_orient_camera.png', tmp_path, camera=camera, scale=1)
-    scale_bar_actor = trimesh_vtk.scale_bar_actor(full_cell_soma_pt-[15000, 0, 0], camera)
+    eval_actor_image([mesh_actor], 'full_cell_orient_camera.png',
+                     tmp_path, camera=camera, scale=1)
+    scale_bar_actor = trimesh_vtk.scale_bar_actor(
+        full_cell_soma_pt-[15000, 0, 0], camera)
     eval_actor_image([mesh_actor, scale_bar_actor], 'full_cell_scale_bar.png',
                      tmp_path, camera=camera, scale=1)
 
@@ -185,23 +191,14 @@ def test_vtk_errors():
         pd = trimesh_vtk.trimesh_to_vtk(verts, bad_tris)
 
 
-def test_full_cell_with_links(full_cell_mesh, full_cell_merge_log, tmp_path, monkeypatch):
+def test_full_cell_with_links(full_cell_mesh, full_cell_merge_log, tmp_path):
 
-    class MyChunkedGraph(object):
-        def __init__(a, **kwargs):
-            pass
-
-        def get_merge_log(self, atomic_id):
-            return full_cell_merge_log
-
-    monkeypatch.setattr(trimesh_io.trimesh_repair.chunkedgraph,
-                        'ChunkedGraphClient',
-                        MyChunkedGraph)
-
-    full_cell_mesh.add_link_edges('test', 5)
+    full_cell_mesh.add_link_edges(
+        merge_log=full_cell_merge_log, base_resolution=[1, 1, 1])
 
     mesh_actor = trimesh_vtk.mesh_actor(full_cell_mesh)
-    eval_actor_image([mesh_actor], 'full_cell_with_links.png', tmp_path, scale=1)
+    eval_actor_image(
+        [mesh_actor], 'full_cell_with_links.png', tmp_path, scale=1)
 
     mesh_actor = trimesh_vtk.mesh_actor(full_cell_mesh,
                                         opacity=1.0,
@@ -212,18 +209,22 @@ def test_full_cell_with_links(full_cell_mesh, full_cell_merge_log, tmp_path, mon
     camera = trimesh_vtk.oriented_camera(
         ctr, backoff=5, up_vector=(0, 0, 1), backoff_vector=(0, 1, 0))
 
-    eval_actor_image([mesh_actor], 'full_cell_show_links.png', tmp_path, camera=camera)
+    eval_actor_image([mesh_actor], 'full_cell_show_links.png',
+                     tmp_path, camera=camera)
 
 
 def test_vertex_colors(full_cell_mesh, tmp_path):
-    d = np.linalg.norm(full_cell_mesh.vertices - full_cell_mesh.centroid, axis=1)
+    d = np.linalg.norm(full_cell_mesh.vertices -
+                       full_cell_mesh.centroid, axis=1)
     cmap = np.array(cm.viridis.colors)
     vclrs = trimesh_vtk.values_to_colors(d, cmap, 0, 80000)
-    clr_mesh_actor = trimesh_vtk.mesh_actor(full_cell_mesh, vertex_colors=vclrs, opacity=1.0)
+    clr_mesh_actor = trimesh_vtk.mesh_actor(
+        full_cell_mesh, vertex_colors=vclrs, opacity=1.0)
     eval_actor_image([clr_mesh_actor], 'full_cell_colors.png', tmp_path)
 
     vclrs = trimesh_vtk.values_to_colors(d, cmap)
-    clr_mesh_actor = trimesh_vtk.mesh_actor(full_cell_mesh, vertex_colors=vclrs, opacity=1.0)
+    clr_mesh_actor = trimesh_vtk.mesh_actor(
+        full_cell_mesh, vertex_colors=vclrs, opacity=1.0)
     eval_actor_image([clr_mesh_actor], 'full_cell_auto_colors.png', tmp_path)
 
 
@@ -233,7 +234,8 @@ def test_ngl_state(full_cell_mesh, tmp_path):
 
     camera = trimesh_vtk.camera_from_ngl_state(ngl_state)
     mesh_actor = trimesh_vtk.mesh_actor(full_cell_mesh)
-    eval_actor_image([mesh_actor], 'full_cell_ngl_view.png', tmp_path, camera=camera)
+    eval_actor_image([mesh_actor], 'full_cell_ngl_view.png',
+                     tmp_path, camera=camera)
 
 
 def test_point_cloud(full_cell_mesh, full_cell_synapses, full_cell_soma_pt, tmp_path):
@@ -245,23 +247,26 @@ def test_point_cloud(full_cell_mesh, full_cell_synapses, full_cell_soma_pt, tmp_
     # size points by size, fixed color
     syn_actor = trimesh_vtk.point_cloud_actor(full_cell_synapses['positions'],
                                               size=sizes,
-                                              color=(1,0,0),
+                                              color=(1, 0, 0),
                                               opacity=1)
-    eval_actor_image([mesh_actor, syn_actor], 'full_cell_with_synapes_size_scaled.png', tmp_path, camera=camera)
+    eval_actor_image([mesh_actor, syn_actor],
+                     'full_cell_with_synapes_size_scaled.png', tmp_path, camera=camera)
 
     # color points by size, mapping sizes
     syn_actor = trimesh_vtk.point_cloud_actor(full_cell_synapses['positions'],
-                                            size=500,
-                                            color=np.clip(sizes, 0, 1000),
-                                            opacity=1)
-    eval_actor_image([mesh_actor, syn_actor], 'full_cell_synapes_colored_size.png', tmp_path, camera=camera)
+                                              size=500,
+                                              color=np.clip(sizes, 0, 1000),
+                                              opacity=1)
+    eval_actor_image([mesh_actor, syn_actor],
+                     'full_cell_synapes_colored_size.png', tmp_path, camera=camera)
 
     # color and size points
     syn_actor = trimesh_vtk.point_cloud_actor(full_cell_synapses['positions'],
-                                            size=sizes,
-                                            color=np.clip(sizes, 0, 1000),
-                                            opacity=1)
-    eval_actor_image([mesh_actor, syn_actor], 'full_cell_synapes_colored_and_size.png', tmp_path, camera=camera)
+                                              size=sizes,
+                                              color=np.clip(sizes, 0, 1000),
+                                              opacity=1)
+    eval_actor_image([mesh_actor, syn_actor],
+                     'full_cell_synapes_colored_and_size.png', tmp_path, camera=camera)
 
     # random colors
     x = np.linspace(0, 1.0, len(sizes))
@@ -270,10 +275,11 @@ def test_point_cloud(full_cell_mesh, full_cell_synapses, full_cell_soma_pt, tmp_
                              (1-x)[:, np.newaxis]])
 
     syn_actor = trimesh_vtk.point_cloud_actor(full_cell_synapses['positions'],
-                                            size=500,
-                                            color=rand_colors,
-                                            opacity=1)
-    eval_actor_image([mesh_actor, syn_actor], 'full_cell_synapes_random_colors.png', tmp_path, camera=camera)
+                                              size=500,
+                                              color=rand_colors,
+                                              opacity=1)
+    eval_actor_image([mesh_actor, syn_actor],
+                     'full_cell_synapes_random_colors.png', tmp_path, camera=camera)
 
     # random colors uint8
     rand_colors_uint8 = np.uint8(rand_colors*255)
@@ -281,7 +287,8 @@ def test_point_cloud(full_cell_mesh, full_cell_synapses, full_cell_soma_pt, tmp_
                                               size=500,
                                               color=rand_colors_uint8,
                                               opacity=1)
-    eval_actor_image([mesh_actor, syn_actor], 'full_cell_synapes_random_colors_uint8.png', tmp_path, camera=camera)
+    eval_actor_image([mesh_actor, syn_actor],
+                     'full_cell_synapes_random_colors_uint8.png', tmp_path, camera=camera)
 
     # test failure modes
     with pytest.raises(ValueError) as e:
