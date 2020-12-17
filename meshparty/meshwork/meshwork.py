@@ -138,11 +138,12 @@ class AnchoredAnnotationManager(object):
             voxel_resolution = self.voxel_resolution
 
         if issubclass(type(data), np.ndarray):
-            if data.shape[1] == 3:
-                data = pd.DataFrame(data={"pt": data.tolist()})
-                point_column = "pt"
-            else:
-                raise ValueError("Arrays must be of size Nx3")
+            if len(data.shape) == 2:
+                if data.shape[1] == 3:
+                    data = pd.DataFrame(data={"pt": data.tolist()})
+                    point_column = "pt"
+                else:
+                    raise ValueError("Arrays must be of size Nx3")
 
         self._data_tables[name] = AnchoredAnnotation(
             name,
@@ -215,8 +216,8 @@ class AnchoredAnnotation(object):
                 point_column = 'position'
             data = pd.DataFrame({point_column: data})
         elif mask == True:
-            data = pd.DataFrame({'index': np.in1d(data)})
-            index_column = 'index'
+            data = pd.DataFrame({'mesh_index': data.ravel()})
+            index_column = 'mesh_index'
 
         self._name = name
         self._data = data.reset_index()
@@ -225,14 +226,13 @@ class AnchoredAnnotation(object):
 
         self._point_column = point_column
         if index_column is None:
-            index_column = unique_column_name(None, "mesh_index", data)
             defined_index = False
+            index_column = unique_column_name(None, "mesh_index", data)
         else:
             defined_index = True
         self._defined_index = defined_index
-        self._index_column_base = unique_column_name(
-            None, "mesh_index_base", data)
-        self._index_column_filt = index_column
+        self._index_column_base = index_column
+        self._index_column_filt = f'{index_column}_filt'
 
         # Initalize to -1 so the column exists
         self._data[self._index_column_base] = -1
@@ -244,9 +244,12 @@ class AnchoredAnnotation(object):
                     data[index_column])
                 self._data[self._index_column_filt] = data[index_column]
 
-        self._orig_col_plus_index = list(self._original_columns) + [
-            self._index_column_filt
-        ]
+        if self._defined_index:
+            self._orig_col_plus_index = list(self._original_columns)
+        else:
+            self._orig_col_plus_index = list(self._original_columns) + [
+                self._index_column_filt
+            ]
 
         valid_column = unique_column_name(index_column, "valid", data)
         self._data[valid_column] = True
