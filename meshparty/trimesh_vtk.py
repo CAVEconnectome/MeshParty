@@ -276,22 +276,22 @@ def render_actors(actors, camera=None, do_save=False, filename=None,
     if VIDEO_WIDTH is not None:
         logging.warning('VIDEO_WIDTH is deprecated, please use VIDEO_WIDTH')
         video_width=VIDEO_WIDTH
-        
+    print('setting up renderer')
     # create a rendering window and renderer
     ren, renWin, iren = _setup_renderer(
         video_width, video_height, back_color, camera=camera)
-
+    print('done setting up')
     for a in actors:
         # assign actor to the renderer
         ren.AddActor(a)
-
+    print('actors added')
     # render
     if camera is None:
         ren.ResetCamera()
     else:
         ren.ResetCameraClippingRange()
         camera.ViewingRaysModified()
-
+    print('camera set')
     if return_keyframes:
         key_frame_cameras = []
 
@@ -304,7 +304,7 @@ def render_actors(actors, camera=None, do_save=False, filename=None,
             return
         iren.AddObserver("KeyPressEvent", vtkKeyPress)
     renWin.Render()
-
+    print('render done')
     if do_save is False:
         trackCamera = vtk.vtkInteractorStyleTrackballCamera()
         iren.SetInteractorStyle(trackCamera)
@@ -324,7 +324,7 @@ def render_actors(actors, camera=None, do_save=False, filename=None,
         writer.SetFileName(filename)
         writer.SetInputData(w2if.GetOutput())
         writer.Write()
-
+    print('finalizing..')
     renWin.Finalize()
 
     if return_keyframes:
@@ -417,6 +417,22 @@ def camera_from_ngl_state(state_d, zoom_factor=300.0):
 
 
 def process_colors(color, xyz):
+    """ utility function to normalize colors on an set of things
+    Parameters
+    ----------
+    color : np.array
+        a Nx3, or a N long, or a 3 long iterator the represents the 
+        color or colors  you want to label xyz with
+    xyz: np.array
+        a NxD matrix you wish to 'color'
+    Returns
+    -------
+    np.array
+        a Nx3 or N long array of color values
+    bool
+        map_colors, whether the colors should be mapped through a colormap
+        or used as is
+    """
     map_colors = False
     if not isinstance(color, np.ndarray):
         color = np.array(color)
@@ -824,16 +840,18 @@ def render_actors_360(actors, directory, nframes, camera_start=None, start_frame
 
         render_actors_360([mesh_actor], 'movie', 360, camera_start=camera_start)
     """
+    print('starting')
     if camera_start is None:
         frame_0_file = os.path.join(directory, "0000.png")
         ren = render_actors(actors,
                             do_save=True,
                             filename=frame_0_file,
-                            VIDEO_WIDTH=video_width,
-                            VIDEO_HEIGHT=video_height,
+                            video_width=video_width,
+                            video_height=video_height,
                             back_color=back_color)
+        print('done rendering')
         camera_start = ren.GetActiveCamera()
-
+    print('camera_start done')
     cameras = []
     times = []
     for k, angle in enumerate(np.linspace(0, 360, nframes)):
@@ -844,7 +862,7 @@ def render_actors_360(actors, directory, nframes, camera_start=None, start_frame
         angle_cam.Azimuth(angle)
         cameras.append(angle_cam)
         times.append(k)
-
+    print('cameras ready')
     return render_movie(actors, directory,
                         times=times,
                         cameras=cameras,
