@@ -3,6 +3,7 @@ from vtk.util.numpy_support import numpy_to_vtk, numpy_to_vtkIdTypeArray, vtk_to
 import numpy as np
 import os
 import logging
+from meshparty.utils import remove_unused_verts
 
 def numpy_to_vtk_cells(mat):
     """function to convert a numpy array of integers to a vtkCellArray
@@ -198,32 +199,6 @@ def decimate_trimesh(trimesh, reduction=.1):
     return points, tris
 
 
-def remove_unused_verts(verts, faces):
-    """removes unused vertices from a graph or mesh
-
-    Parameters
-    ----------
-    verts : np.array
-        NxD numpy array of vertex locations
-    faces : np.array
-        MxK numpy array of connected shapes (i.e. edges or tris)
-        (entries are indices into verts)
-
-    Returns
-    -------
-    np.array
-        new_verts a filtered set of vertices s
-    new_face
-        a reindexed set of faces
-
-    """
-    used_verts = np.unique(faces.ravel())
-    new_verts = verts[used_verts, :]
-    new_face = np.zeros(faces.shape, dtype=faces.dtype)
-    for i in range(faces.shape[1]):
-        new_face[:, i] = np.searchsorted(used_verts, faces[:, i])
-    return new_verts, new_face
-
 
 def poly_to_mesh_components(poly):
     """ converts a vtkPolyData to its numpy components
@@ -301,22 +276,22 @@ def render_actors(actors, camera=None, do_save=False, filename=None,
     if VIDEO_WIDTH is not None:
         logging.warning('VIDEO_WIDTH is deprecated, please use VIDEO_WIDTH')
         video_width=VIDEO_WIDTH
-        
+    print('setting up renderer')
     # create a rendering window and renderer
     ren, renWin, iren = _setup_renderer(
         video_width, video_height, back_color, camera=camera)
-
+    print('done setting up')
     for a in actors:
         # assign actor to the renderer
         ren.AddActor(a)
-
+    print('actors added')
     # render
     if camera is None:
         ren.ResetCamera()
     else:
         ren.ResetCameraClippingRange()
         camera.ViewingRaysModified()
-
+    print('camera set')
     if return_keyframes:
         key_frame_cameras = []
 
@@ -329,7 +304,7 @@ def render_actors(actors, camera=None, do_save=False, filename=None,
             return
         iren.AddObserver("KeyPressEvent", vtkKeyPress)
     renWin.Render()
-
+    print('render done')
     if do_save is False:
         trackCamera = vtk.vtkInteractorStyleTrackballCamera()
         iren.SetInteractorStyle(trackCamera)
@@ -349,7 +324,7 @@ def render_actors(actors, camera=None, do_save=False, filename=None,
         writer.SetFileName(filename)
         writer.SetInputData(w2if.GetOutput())
         writer.Write()
-
+    print('finalizing..')
     renWin.Finalize()
 
     if return_keyframes:
@@ -443,7 +418,6 @@ def camera_from_ngl_state(state_d, zoom_factor=300.0):
 
 def process_colors(color, xyz):
     """ utility function to normalize colors on an set of things
-
     Parameters
     ----------
     color : np.array
@@ -451,7 +425,6 @@ def process_colors(color, xyz):
         color or colors  you want to label xyz with
     xyz: np.array
         a NxD matrix you wish to 'color'
-
     Returns
     -------
     np.array
@@ -459,7 +432,6 @@ def process_colors(color, xyz):
     bool
         map_colors, whether the colors should be mapped through a colormap
         or used as is
-
     """
     map_colors = False
     if not isinstance(color, np.ndarray):
@@ -478,7 +450,7 @@ def process_colors(color, xyz):
         # then we have one explicit color
         assert(np.max(color)<=1.0)
         assert(np.min(color)>=0)
-        car = np.array(color*255, dtype=np.uint8)
+        car = np.array(color*255, dtype=np.uint8) 
         color = np.repeat(car[np.newaxis,:],len(xyz),axis=0)
     else:
         raise ValueError(
@@ -868,25 +840,29 @@ def render_actors_360(actors, directory, nframes, camera_start=None, start_frame
 
         render_actors_360([mesh_actor], 'movie', 360, camera_start=camera_start)
     """
+    print('starting')
     if camera_start is None:
         frame_0_file = os.path.join(directory, "0000.png")
         ren = render_actors(actors,
                             do_save=True,
                             filename=frame_0_file,
-                            VIDEO_WIDTH=video_width,
-                            VIDEO_HEIGHT=video_height,
+                            video_width=video_width,
+                            video_height=video_height,
                             back_color=back_color)
+        print('done rendering')
         camera_start = ren.GetActiveCamera()
-
+    print('camera_start done')
     cameras = []
     times = []
     for k, angle in enumerate(np.linspace(0, 360, nframes)):
         angle_cam = vtk.vtkCamera()
         angle_cam.ShallowCopy(camera_start)
+        angle_cam.SetParallelProjection(camera_start.GetParallelProjection())
+        angle_cam.SetParallelScale(camera_start.GetParallelScale())
         angle_cam.Azimuth(angle)
         cameras.append(angle_cam)
         times.append(k)
-
+    print('cameras ready')
     return render_movie(actors, directory,
                         times=times,
                         cameras=cameras,
@@ -915,16 +891,18 @@ def _setup_renderer(video_width, video_height, back_color, camera=None):
 
     return ren, renWin, iren
 
-def make_camera_interpolator(times, cameras):
+def make_camera_interpolator(times, cameras, linear=False):
     assert(len(times) == len(cameras))
     camera_interp = vtk.vtkCameraInterpolator()
     for t, cam in zip(times, cameras):
         camera_interp.AddCamera(t, cam)
+    if linear:
+        camera_interp.SetInterpolationTypeToLinear()
     return camera_interp
 
 def render_movie(actors, directory, times, cameras, start_frame=0,
                  video_width=1280, video_height=720, scale=4,
-                 do_save=True, back_color=(1, 1, 1)):
+                 do_save=True, back_color=(1, 1, 1), linear=False):
     """
     Function to create a series of png frames based upon a defining 
     a set of cameras at a set of times.
@@ -982,7 +960,7 @@ def render_movie(actors, directory, times, cameras, start_frame=0,
                 times,
                 cameras)
     """
-    camera_interp=make_camera_interpolator(times, cameras)
+    camera_interp=make_camera_interpolator(times, cameras, linear=linear)
 
     def interpolate_camera(actors, camera, t):
         camera_interp.InterpolateCamera(t, camera)

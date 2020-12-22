@@ -1,22 +1,27 @@
-from scipy import sparse, spatial
+from scipy import sparse, spatial, optimize, signal
 import numpy as np
 import time
-from meshparty import trimesh_vtk, utils, mesh_filters
+from meshparty import utils, mesh_filters
 import pandas as pd
-from pykdtree.kdtree import KDTree
+try:
+    from pykdtree.kdtree import KDTree
+except:
+    KDTree = spatial.cKDTree
 from tqdm import trange, tqdm
 from meshparty.trimesh_io import Mesh
 from meshparty.skeleton import Skeleton
 from collections import defaultdict
-from pykdtree.kdtree import KDTree as pyKDTree
-import trimesh.ray
-from trimesh.ray import ray_pyembree
+from .ray_tracing import ray_trace_distance, shape_diameter_function
+import fastremap
 import logging
 
 
-def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True,
+def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True, collapse_function='sphere',
                      invalidation_d=12000, smooth_vertices=False, compute_radius=True,
-                     compute_original_index=True, cc_vertex_thresh=100, verbose=True):
+                     shape_function='single', compute_original_index=True, verbose=True,
+                     smooth_iterations=12, smooth_neighborhood=2, smooth_r=0.1,
+                     cc_vertex_thresh=100, root_index=None,
+                     remove_zero_length_edges=True, collapse_params={}):
     '''
     Build skeleton object from mesh skeletonization
 
@@ -38,6 +43,10 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True,
         is true. (default=7500 (nm))
     collapse_soma: bool
         whether to collapse the skeleton around the soma point (default True)
+    collapse_function: 'sphere' or 'branch'
+        Determines which soma collapse function to use. Sphere uses the soma_radius
+        and collapses all vertices within that radius to the soma. Branch is an experimental
+        approach that tries to compute the right boundary for each branch into soma.
     invalidation_d: float
         the distance along the mesh to invalidate when applying TEASAR
         like algorithm.  Controls how detailed a structure the skeleton
@@ -47,9 +56,23 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True,
     compute_radius: bool
         whether to calculate the radius of the skeleton at each point on the skeleton
         (default True)
+    shape_function: 'single' or 'cone'
+        Selects how to compute the radius, either with a single ray or a cone of rays. Default is 'single'.
     compute_original_index: bool
         whether to calculate how each of the mesh nodes maps onto the skeleton
         (default True)
+    smooth_iterations: int, optional
+        Number of iterations to smooth (default is 12)
+    smooth_neighborhood: int, optional
+        Size of neighborhood to look at for smoothing
+    smooth_r: float, optional
+        Weight of update step in smoothing algorithm, default is 0.2
+    root_index: int or None, optional
+        A precise mesh vertex to use as the skeleton root. If provided, the vertex location overrides soma_pt. By default, None.
+    remove_zero_length_edges: bool
+        If True, removes vertices involved in zero length edges, which can disrupt graph computations. Default True.
+    collapse_params: dict
+        Extra keyword arguments for the collapse function. See soma_via_sphere and soma_via_branch_starts for specifics.
     cc_vertex_thresh : int, optional
         Smallest number of vertices in a connected component to skeletonize.
     verbose: bool
@@ -60,33 +83,80 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True,
     :obj:`meshparty.skeleton.Skeleton`
            a Skeleton object for this mesh
     '''
-    skel_verts, skel_edges, smooth_verts, orig_skel_index, skel_map = calculate_skeleton_paths_on_mesh(mesh,
-                                                                                                       soma_pt=soma_pt,
-                                                                                                       soma_thresh=soma_radius,
-                                                                                                       invalidation_d=invalidation_d,
-                                                                                                       cc_vertex_thresh=cc_vertex_thresh,
-                                                                                                       return_map=True)
+    skel_verts, skel_edges, orig_skel_index, skel_map = calculate_skeleton_paths_on_mesh(mesh,
+                                                                                         invalidation_d=invalidation_d,
+                                                                                         cc_vertex_thresh=cc_vertex_thresh,
+                                                                                         root_index=root_index,
+                                                                                         return_map=True)
 
     if smooth_vertices is True:
+        smooth_verts = smooth_graph(
+            skel_verts, skel_edges, neighborhood=smooth_neighborhood, iterations=smooth_iterations, r=smooth_r)
         skel_verts = smooth_verts
 
+    if root_index is not None and soma_pt is None:
+        soma_pt = mesh.vertices[root_index]
+
+    rs = None
+
     if collapse_soma is True and soma_pt is not None:
-        soma_verts = mesh_filters.filter_spatial_distance_from_points(
-            mesh, [soma_pt], soma_radius)
-        new_v, new_e, new_skel_map, vert_filter, root_ind = collapse_soma_skeleton(soma_pt, skel_verts, skel_edges,
-                                                                                   soma_d_thresh=soma_radius, mesh_to_skeleton_map=skel_map,
-                                                                                   soma_mesh_indices=soma_verts, return_filter=True,
-                                                                                   return_soma_ind=True)
+        # skel_map[np.isnan(skel_map)] = len(skel_verts)
+        temp_sk = Skeleton(skel_verts, skel_edges,
+                           mesh_index=mesh.map_indices_to_unmasked(
+                               orig_skel_index),
+                           mesh_to_skel_map=skel_map)
+        soma_pt = np.array(soma_pt).reshape(1, 3)
+        _, close_ind = temp_sk.kdtree.query(soma_pt)
+        temp_sk.reroot(close_ind[0])
+
+        if collapse_function == 'sphere':
+            soma_verts, soma_r = soma_via_sphere(
+                soma_pt, temp_sk.vertices, temp_sk.edges, soma_radius)
+        elif collapse_function == 'branch':
+
+            if shape_function == 'single':
+                rs = ray_trace_distance(
+                    mesh.filter_unmasked_indices_padded(temp_sk.mesh_index), mesh)
+            elif shape_function == 'cone':
+                rs = shape_diameter_function(mesh.filter_unmasked_indices_padded(
+                    temp_sk.mesh_index), mesh, num_points=30, cone_angle=np.pi/3)
+
+            soma_verts, soma_r = soma_via_branch_starts(temp_sk,
+                                                        mesh,
+                                                        soma_pt,
+                                                        rs,
+                                                        search_radius=collapse_params.get(
+                                                            'search_radius', 25000),
+                                                        fallback_radius=collapse_params.get(
+                                                            'fallback_radius', soma_radius),
+                                                        cutoff_threshold=collapse_params.get(
+                                                            'cutoff_threshold', 0.4),
+                                                        min_cutoff=collapse_params.get(
+                                                            'min_cutoff', 0.1),
+                                                        dynamic_range=collapse_params.get(
+                                                            'dynamic_range', 1),
+                                                        dynamic_threshold=collapse_params.get(
+                                                            'dynamic_threshold', False)
+                                                        )
+        if root_index is not None:
+            collapse_index = np.flatnonzero(orig_skel_index == root_index)[0]
+        else:
+            collapse_index = None
+        new_v, new_e, new_skel_map, vert_filter, root_ind = collapse_soma_skeleton(soma_verts, soma_pt, temp_sk.vertices, temp_sk.edges,
+                                                                                   mesh_to_skeleton_map=temp_sk.mesh_to_skel_map,
+                                                                                   collapse_index=collapse_index, return_filter=True, return_soma_ind=True)
     else:
         new_v, new_e, new_skel_map = skel_verts, skel_edges, skel_map
         vert_filter = np.arange(len(orig_skel_index))
-
-        if soma_pt is None:
+        if root_index is not None:
+            root_ind = np.flatnonzero(orig_skel_index == root_index)[0]
+        elif soma_pt is None:
             sk_graph = utils.create_csgraph(new_v, new_e)
             root_ind = utils.find_far_points_graph(sk_graph)[0]
         else:
             # Still try to root close to the soma
-            _, qry_inds = pyKDTree(new_v).query(soma_pt[np.newaxis, :])
+            _, qry_inds = spatial.cKDTree(
+                new_v, balanced_tree=False).query(soma_pt[np.newaxis, :])
             root_ind = qry_inds[0]
 
     skel_map_full_mesh = np.full(mesh.node_mask.shape, -1, dtype=np.int64)
@@ -95,24 +165,72 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True,
     skel_map_full_mesh[ind_to_fix] = -1
 
     props = {}
-    if compute_original_index is True:
-        props['mesh_index'] = np.append(
-            mesh.map_indices_to_unmasked(orig_skel_index[vert_filter]), -1)
-    if compute_radius is True:
 
-        rs = ray_trace_distance(orig_skel_index[vert_filter], mesh)
-        rs = np.append(rs, soma_radius)
+    if compute_original_index is True:
+        if collapse_soma is True and soma_pt is not None:
+            mesh_index = temp_sk.mesh_index[vert_filter]
+            if root_index is None:
+                mesh_index = np.append(mesh_index, -1)
+        else:
+            mesh_index = orig_skel_index[vert_filter]
+        props['mesh_index'] = mesh_index
+
+    if compute_radius is True:
+        if rs is None:
+            if shape_function == 'single':
+                rs = ray_trace_distance(orig_skel_index[vert_filter], mesh)
+            elif shape_function == 'cone':
+                rs = shape_diameter_function(
+                    orig_skel_index[vert_filter], mesh)
+        else:
+            rs = rs[vert_filter]
+        if collapse_soma is True and soma_pt is not None:
+            if root_index is None:
+                rs = np.append(rs, soma_r)
+            else:
+                rs[root_ind] = soma_r
         props['rs'] = rs
 
     sk = Skeleton(new_v, new_e, mesh_to_skel_map=skel_map_full_mesh,
-                  vertex_properties=props, root=root_ind)
+                  mesh_index=props.get('mesh_index', None), radius=props.get('rs', None), root=root_ind,
+                  remove_zero_length_edges=remove_zero_length_edges)
+
+    if compute_radius is True:
+        _remove_nan_radius(sk)
+
     return sk
 
 
-def calculate_skeleton_paths_on_mesh(mesh, soma_pt=None, soma_thresh=7500,
-                                     invalidation_d=10000, smooth_neighborhood=5,
+def _remove_nan_radius(sk, set_unfixed_to_lowest=True):
+
+    last_numnans = np.inf
+    nanlocs = np.flatnonzero(np.isnan(sk.radius))
+    numnans = len(nanlocs)
+    while numnans > 0 and last_numnans > numnans:
+        for nanloc in nanlocs:
+            sparse_row = sk.csgraph_binary_undirected[nanloc].toarray().ravel()
+            prod = sparse_row * sk.radius
+            with np.errstate(divide='ignore', invalid='ignore'):
+                new_rad = np.nansum(prod) / np.nansum(prod > 0)
+            sk._rooted.radius[nanloc] = new_rad
+        last_numnans = numnans
+        nanlocs = np.flatnonzero(np.isnan(sk.radius))
+        numnans = len(nanlocs)
+
+    if numnans > 0 and set_unfixed_to_lowest:
+        sk._rooted.radius[nanlocs] = np.nanmin(sk.radius)
+
+
+def calculate_skeleton_paths_on_mesh(mesh,
+                                     soma_pt=None,
+                                     soma_thresh=7500,
+                                     invalidation_d=10000,
+                                     smooth_neighborhood=2,
+                                     smooth_iterations=12,
+                                     cc_vertex_thresh=100,
                                      large_skel_path_threshold=5000,
-                                     cc_vertex_thresh=100,  return_map=False):
+                                     return_map=False,
+                                     root_index=None):
     """ function to turn a trimesh object of a neuron into a skeleton, without running soma collapse,
     or recasting result into a Skeleton.  Used by :func:`meshparty.skeletonize.skeletonize_mesh` and
     makes use of :func:`meshparty.skeletonize.skeletonize_components`
@@ -153,19 +271,21 @@ def calculate_skeleton_paths_on_mesh(mesh, soma_pt=None, soma_thresh=7500,
     return_map: bool
         whether to return a map of how each mesh vertex maps onto each skeleton vertex
         based upon how it was invalidated.
+    root_index: int or None
+        Mesh vertex to set as initial root node. Overides soma_pt if provided. Default is None.
 
     Returns
     -------
-        skel_verts: np.array
-            a Nx3 matrix of skeleton vertex positions
-        skel_edges: np.array
-            a Kx2 matrix of skeleton edge indices into skel_verts
-        smooth_verts: np.array
-            a Nx3 matrix of vertex positions after smoothing
-        skel_verts_orig: np.array
-            a N long index of skeleton vertices in the original mesh vertex index
-        (mesh_to_skeleton_map): np.array
-            a Mx2 map of mesh vertex indices to skeleton vertex indices
+    skel_verts: np.array
+        a Nx3 matrix of skeleton vertex positions
+    skel_edges: np.array
+        a Kx2 matrix of skeleton edge indices into skel_verts
+    smooth_verts: np.array
+        a Nx3 matrix of vertex positions after smoothing
+    skel_verts_orig: np.array
+        a N long index of skeleton vertices in the original mesh vertex index
+    (mesh_to_skeleton_map): np.array
+        a Mx2 map of mesh vertex indices to skeleton vertex indices
 
     """
 
@@ -174,7 +294,8 @@ def calculate_skeleton_paths_on_mesh(mesh, soma_pt=None, soma_thresh=7500,
                                                 soma_thresh=soma_thresh,
                                                 invalidation_d=invalidation_d,
                                                 cc_vertex_thresh=cc_vertex_thresh,
-                                                return_map=return_map)
+                                                return_map=return_map,
+                                                root_index=root_index)
     if return_map is True:
         all_paths, roots, tot_path_lengths, mesh_to_skeleton_map = skeletonize_output
     else:
@@ -190,19 +311,18 @@ def calculate_skeleton_paths_on_mesh(mesh, soma_pt=None, soma_thresh=7500,
 
     skel_verts, skel_edges, skel_verts_orig = reduce_verts(
         mesh.vertices, tot_edges)
-    smooth_verts = smooth_graph(
-        skel_verts, skel_edges, neighborhood=smooth_neighborhood)
 
     if return_map:
         mesh_to_skeleton_map = utils.nanfilter_shapes(
             np.unique(tot_edges.ravel()), mesh_to_skeleton_map)
+        mesh_to_skeleton_map[np.isnan(mesh_to_skeleton_map)] = -1
     else:
         mesh_to_skeleton_map = None
 
-    output_tuple = (skel_verts, skel_edges, smooth_verts, skel_verts_orig)
+    output_tuple = (skel_verts, skel_edges, skel_verts_orig)
 
     if return_map:
-        output_tuple = output_tuple + (mesh_to_skeleton_map,)
+        output_tuple = output_tuple + (mesh_to_skeleton_map.astype(int),)
 
     return output_tuple
 
@@ -241,9 +361,10 @@ def skeletonize_components(mesh,
                            soma_thresh=10000,
                            invalidation_d=10000,
                            cc_vertex_thresh=100,
-                           return_map=False):
+                           return_map=False,
+                           root_index=None):
     """ core skeletonization routine, used by :func:`meshparty.skeletonize.calculate_skeleton_paths_on_mesh`
-    to calculcate skeleton on all components of mesh, with no post processing """
+    to calculate skeleton on all components of mesh, with no post processing """
     # find all the connected components in the mesh
     n_components, labels = sparse.csgraph.connected_components(mesh.csgraph,
                                                                directed=False,
@@ -258,15 +379,22 @@ def skeletonize_components(mesh,
     roots = []
     tot_path_lengths = []
 
-    if soma_pt is not None:
-        soma_d = mesh.vertices - soma_pt[np.newaxis, :]
+    if root_index is not None:
+        soma_d = np.linalg.norm(
+            mesh.vertices - mesh.vertices[root_index], axis=1)
+        is_soma_pt = np.arange(len(mesh.vertices)) == root_index
+    elif soma_pt is not None:
+        soma_d = mesh.vertices - soma_pt.reshape(1, 3)
         soma_d = np.linalg.norm(soma_d, axis=1)
         is_soma_pt = soma_d < soma_thresh
     else:
         is_soma_pt = None
         soma_d = None
+    # is_soma_pt = None
+    # soma_d = None
+
     # loop over the components
-    for k in trange(n_components):
+    for k in range(n_components):
         if comp_counts[k] > cc_vertex_thresh:
 
             # find the root using a soma position if you have it
@@ -343,7 +471,8 @@ def setup_root(mesh, is_soma_pt=None, soma_d=None, is_valid=None):
 
 
 def mesh_teasar(mesh, root=None, valid=None, root_ds=None, root_pred=None, soma_pt=None,
-                soma_thresh=7500, invalidation_d=10000, return_timing=False, return_map=False):
+                soma_thresh=7500, invalidation_d=10000, return_timing=False, return_map=False,
+                exclude_edges_sigma=None):
     """core skeletonization function used to skeletonize a single component of a mesh"""
     # if no root passed, then calculation one
     if root is None:
@@ -565,8 +694,156 @@ def smooth_graph(values, edges, mask=None, neighborhood=2, iterations=100, r=.1)
     return new_values
 
 
-def collapse_soma_skeleton(soma_pt, verts, edges, soma_d_thresh=12000, mesh_to_skeleton_map=None,
-                           soma_mesh_indices=None, return_filter=False, only_soma_component=True, return_soma_ind=False):
+def soma_via_sphere(soma_pt, verts, edges, soma_d_thresh):
+    """ Get indices within soma_d_thresh of a soma_pt. Exclude vertices that left and come back.
+    """
+    closest_soma_ind = np.argmin(np.linalg.norm(verts-soma_pt, axis=1))
+    close_inds = np.linalg.norm(verts-soma_pt, axis=1) < soma_d_thresh
+    orig_graph = utils.create_csgraph(verts, edges, euclidean_weight=False)
+    speye = sparse.diags(close_inds.astype(int))
+    _, compids = sparse.csgraph.connected_components(orig_graph * speye)
+    return np.flatnonzero(compids[closest_soma_ind] == compids), soma_d_thresh
+
+
+def soma_via_branch_starts(sk,
+                           mesh,
+                           soma_pt,
+                           rs,
+                           search_radius=20000,
+                           fallback_radius=15000,
+                           cutoff_threshold=0.2,
+                           min_cutoff=0.1,
+                           dynamic_range=1,
+                           dynamic_threshold=False,
+                           ):
+    """Runs down paths into the soma region and finds onset of each branch.
+    """
+
+    is_close = np.linalg.norm(sk.vertices - soma_pt, axis=1) < search_radius
+    is_close_fallback = np.linalg.norm(
+        sk.vertices-soma_pt, axis=1) < fallback_radius
+
+    # Find segments that emerge from the soma region
+    close_segs = []
+    for seg in sk.segments:
+        seg = seg[np.argsort(sk.distance_to_root[seg])]
+        if is_close[seg[0]]:
+            if np.all(is_close[sk.path_to_root(seg[0])]):
+                close_segs.append(seg)
+    close_seg_inds = np.concatenate(close_segs)
+    close_inds = close_seg_inds[is_close[close_seg_inds]]
+
+    # From those segments, find the tips that come out of the search_radius
+    is_close_specific = np.full(sk.n_vertices, False)
+    is_close_specific[close_inds] = True
+    close_parent_edges = sk.edges[is_close_specific[sk.edges[:, 1]]]
+    tip_inds = close_parent_edges[~is_close_specific[close_parent_edges[:, 0]], 0]
+
+    rs = rs[close_inds]
+    rs_long = np.full(sk.n_vertices, np.nan)
+    rs_long[close_inds] = rs
+    sk.reroot(close_inds[np.argmin(np.abs(rs-np.percentile(rs, 98)))])
+
+    # Fit a logistic curve
+    def log_func(x, h, k, xh, a):
+        return h / (1 + np.exp(-k * (xh-x))) + a
+
+    all_params = []
+    soma_votes = []
+
+    for tip_ind in tip_inds:
+        ptr = sk.path_to_root(tip_ind)
+        path_inds = ptr[1:]
+        xdata = sk.distance_to_root[path_inds] / 1000
+        ydata = rs_long[path_inds] / 1000
+        good_rows = np.invert(np.logical_or(np.isnan(ydata), np.isinf(ydata)))
+        ydata = ydata[good_rows]
+        xdata = xdata[good_rows]
+        ydata_filt = np.maximum.accumulate(signal.medfilt(ydata, 21))
+
+        try:
+            # sig = ydata_filt * log_func( (np.max(xdata)-xdata), 1, 2, 3, 1)
+            sig = np.where(ydata_filt < 2, 2, ydata_filt) * \
+                log_func((np.max(xdata)-xdata), 2, 1, 5, 1)
+            params, _ = optimize.curve_fit(log_func,
+                                           xdata,
+                                           ydata_filt,
+                                           sigma=sig,
+                                           bounds=([0, 0.5, 0, 0],
+                                                   [np.inf, 5, np.inf, np.inf]),
+                                           p0=(10, 1, 10, 1),
+                                           method='trf')
+            all_params.append(params)
+            if dynamic_threshold:
+                cutoff_threshold_eff = np.min(
+                    [cutoff_threshold, min_cutoff + (cutoff_threshold-min_cutoff) * np.max([0, (params[1]-0.5)/dynamic_range])])
+            else:
+                cutoff_threshold_eff = cutoff_threshold
+
+            def f(x): return log_func(x, *params) - \
+                (params[3] + cutoff_threshold_eff * (params[0] - params[3]))
+            opt_sol = optimize.root_scalar(f,  bracket=[0, xdata.max()])
+            if opt_sol.converged:
+                root = opt_sol.root
+                use_fallback = False
+            else:
+                use_fallback = True
+        except:
+            use_fallback = True
+            all_params.append(None)
+
+        if not use_fallback:
+            base_path_ind = np.argmin(np.abs(xdata-root))
+        else:
+            d_to_soma_pt = np.linalg.norm(
+                sk.vertices[path_inds] - soma_pt, axis=1)
+            base_path_ind = np.argmin(np.abs(d_to_soma_pt - fallback_radius))
+
+        soma_vote = np.full(sk.n_vertices, np.nan)
+        soma_vote[path_inds[base_path_ind:]] = 1
+        soma_vote[path_inds[:base_path_ind]] = 0
+        soma_votes.append(soma_vote)
+
+    # Any tips whose path to root is entirely in the close zone also vote as as 'somatic'
+    for ep in sk.end_points[is_close[sk.end_points]]:
+        ptr = sk.path_to_root(ep)
+        if np.all(is_close[ptr]):
+            soma_vote = np.full(sk.n_vertices, np.nan)
+            soma_vote[ptr] = 1
+            soma_vote[ptr[is_close_fallback[ptr]]] = np.inf
+            soma_votes.append(soma_vote)
+
+    # Get soma region
+    soma_votes = np.vstack(soma_votes)
+    num_votes = len(soma_votes) - np.sum(np.isnan(soma_votes), axis=0)
+    num_yes = np.nansum(soma_votes, axis=0)
+
+    with np.errstate(all='ignore'):
+        is_soma = (num_yes / num_votes) > 0.5
+
+    last_nonsoma = []
+    for tip_ind in tip_inds:
+        ptr = sk.path_to_root(tip_ind)
+        last_nonsoma.append(ptr[np.flatnonzero(np.diff(is_soma[ptr]) == 1)[0]])
+    last_nonsoma = np.unique(last_nonsoma)
+
+    keep_binds = []
+    for bind in last_nonsoma:
+        bind_ptr = sk.path_to_root(bind)
+        if np.any(np.isin(last_nonsoma, bind_ptr[1:])):
+            keep_binds.append(False)
+        else:
+            keep_binds.append(True)
+    keep_binds = np.array(keep_binds)
+
+    g = sk.cut_graph(last_nonsoma[keep_binds])
+    _, comps = sparse.csgraph.connected_components(g)
+    root_comp = comps[sk.root]
+    return np.flatnonzero(comps == root_comp), np.nanmedian(rs_long[comps == root_comp])
+
+
+def collapse_soma_skeleton(soma_verts, soma_pt, verts, edges, mesh_to_skeleton_map=None,
+                           collapse_index=None, return_filter=False, return_soma_ind=False):
     """function to adjust skeleton result to move root to soma_pt 
 
     Parameters
@@ -608,113 +885,45 @@ def collapse_soma_skeleton(soma_pt, verts, edges, soma_d_thresh=12000, mesh_to_s
         an index into the returned verts that is the root of the skeleton node, only returned if return_soma_ind is True
 
     """
-    if soma_pt is not None:
-        if only_soma_component:
-            closest_soma_ind = np.argmin(np.linalg.norm(verts-soma_pt, axis=1))
-            close_inds = np.linalg.norm(verts-soma_pt, axis=1) < soma_d_thresh
-            orig_graph = utils.create_csgraph(
-                verts, edges, euclidean_weight=False)
-            speye = sparse.diags(close_inds.astype(int))
-            _, compids = sparse.csgraph.connected_components(
-                orig_graph * speye)
-            soma_verts = np.flatnonzero(compids[closest_soma_ind] == compids)
+    if soma_verts is not None:
+        soma_pt_m = soma_pt.reshape(1, 3)
+        if collapse_index is None:
+            new_verts = np.vstack((verts, soma_pt_m))
+            soma_i = verts.shape[0]
         else:
-            dv = np.linalg.norm(verts - soma_pt_m, axis=1)
-            soma_verts = np.where(dv < soma_d_thresh)[0]
+            new_verts = verts
+            soma_i = collapse_index
+            soma_verts = soma_verts[soma_verts != soma_i]
 
-        soma_pt_m = soma_pt[np.newaxis, :]
-        new_verts = np.vstack((verts, soma_pt_m))
-        soma_i = verts.shape[0]
         edges_m = edges.copy()
         edges_m[np.isin(edges, soma_verts)] = soma_i
 
-        simple_verts, simple_edges = trimesh_vtk.remove_unused_verts(
+        simple_verts, simple_edges = utils.remove_unused_verts(
             new_verts, edges_m)
         good_edges = ~(simple_edges[:, 0] == simple_edges[:, 1])
 
         if mesh_to_skeleton_map is not None:
-            new_mesh_to_skeleton_map = mesh_to_skeleton_map.copy()
-            remap_rows = np.isin(mesh_to_skeleton_map, soma_verts)
-            new_mesh_to_skeleton_map[remap_rows] = soma_i
-            new_mesh_to_skeleton_map = utils.nanfilter_shapes(np.unique(edges_m.ravel()),
-                                                              new_mesh_to_skeleton_map)
-            if soma_mesh_indices is not None:
-                new_mesh_to_skeleton_map[soma_mesh_indices] = len(
-                    simple_verts)-1
+            consolidate_dict = {v: soma_i for v in soma_verts}
+            new_index_dict, _ = utils.remap_dict(
+                len(new_verts), consolidate_dict)
+            new_index_dict[-1] = -1
+            mesh_to_skeleton_map[np.isnan(mesh_to_skeleton_map)] = -1
+            new_mesh_to_skeleton_map = fastremap.remap(
+                mesh_to_skeleton_map, new_index_dict)
 
         output = [simple_verts, simple_edges[good_edges]]
         if mesh_to_skeleton_map is not None:
             output.append(new_mesh_to_skeleton_map)
         if return_filter:
-            # Remove the largest value which is soma_i
-            used_vertices = np.unique(edges_m.ravel())[:-1]
+            used_vertices = np.unique(edges_m.ravel())
+            if collapse_index is None:
+                # Remove the largest value which is soma_i
+                used_vertices = used_vertices[:-1]
             output.append(used_vertices)
         if return_soma_ind:
-            output.append(len(simple_verts)-1)
+            output.append(new_index_dict[soma_i])
         return output
 
     else:
-        simple_verts, simple_edges = trimesh_vtk.remove_unused_verts(
-            verts, edges)
+        simple_verts, simple_edges = utils.remove_unused_verts(verts, edges)
         return simple_verts, simple_edges
-
-
-def ray_trace_distance(vertex_inds, mesh, max_iter=10, rand_jitter=0.001, verbose=False, ray_inter=None):
-    '''
-    Compute distance to opposite side of the mesh for specified vertex indices on the mesh.
-
-    Parameters
-    ----------
-    vertex_inds : np.array
-        a K long set of indices into the mesh.vertices that you want to perform ray tracing on
-    mesh : :obj:`meshparty.trimesh_io.Mesh`
-        mesh to perform ray tracing on
-    max_iter : int
-        maximum retries to attempt in order to get a proper sdf measure (default 10)
-    rand_jitter : float
-        the amplitude of gaussian jitter on the vertex normal to add on each iteration (default .001)
-    verbose : bool
-        whether to print debug statements (default False)
-    ray_inter: ray_pyembree.RayMeshIntersector
-        a ray intercept object pre-initialized with a mesh, in case y ou are doing this many times
-        and want to avoid paying initialization costs. (default None) will initialize it for you
-
-    Returns
-    -------
-    np.array
-        rs, a K long array of sdf values. rays with no result after max_iters will contain zeros.
-
-    '''
-    if not trimesh.ray.has_embree:
-        logging.warning(
-            "calculating rays without pyembree, conda install pyembree for large speedup")
-
-    if ray_inter is None:
-        ray_inter = ray_pyembree.RayMeshIntersector(mesh)
-
-    rs = np.zeros(len(vertex_inds))
-    good_rs = np.full(len(rs), False)
-
-    it = 0
-    while not np.all(good_rs):
-        if verbose:
-            print(np.sum(~good_rs))
-        blank_inds = np.where(~good_rs)[0]
-        starts = (mesh.vertices -
-                  mesh.vertex_normals)[vertex_inds, :][~good_rs, :]
-        vs = -mesh.vertex_normals[vertex_inds, :] \
-            + (1.2**it)*rand_jitter*np.random.rand(*
-                                                   mesh.vertex_normals[vertex_inds, :].shape)
-        vs = vs[~good_rs, :]
-
-        rtrace = ray_inter.intersects_location(starts, vs, multiple_hits=False)
-
-        if len(rtrace[0] > 0):
-            # radius values
-            rs[blank_inds[rtrace[1]]] = np.linalg.norm(
-                mesh.vertices[vertex_inds, :][rtrace[1]]-rtrace[0], axis=1)
-            good_rs[blank_inds[rtrace[1]]] = True
-        it += 1
-        if it > max_iter:
-            break
-    return rs
