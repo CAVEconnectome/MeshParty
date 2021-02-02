@@ -348,7 +348,7 @@ def reduce_verts(verts, faces):
         used_verts, the index of the new_verts in the old verts
 
     """
-    used_verts = np.unique(faces.ravel())
+    used_verts = np.unique(faces.ravel(), dtype=int)
     new_verts = verts[used_verts, :]
     new_face = np.zeros(faces.shape, dtype=faces.dtype)
     for i in range(faces.shape[1]):

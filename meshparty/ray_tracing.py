@@ -5,6 +5,7 @@ from scipy.linalg import block_diag
 import numpy as np
 import multiwrapper.multiprocessing_utils as mu
 from meshparty import trimesh_io
+import logging
 
 
 def ray_trace_distance(vertex_inds, mesh, max_iter=10, rand_jitter=0.001, verbose=False, ray_inter=None):
