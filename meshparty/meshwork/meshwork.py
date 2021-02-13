@@ -1,4 +1,9 @@
-from .. import trimesh_vtk
+try:
+    from .. import trimesh_vtk
+    _vtk_loaded = True
+except:
+    _vtk_loaded = False
+
 from ..trimesh_io import Mesh
 from ..skeleton import Skeleton
 import pandas as pd
@@ -1403,10 +1408,23 @@ class Meshwork(object):
     # Visualization functions #
     ###########################
 
+    def requires_vtk(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            if _vtk_loaded:
+                return func(*args, **kwargs)
+            else:
+                return None
+        return wrapper
+
+    @requires_vtk
     def mesh_actor(self, **kwargs):
         if self.mesh is not None:
             return trimesh_vtk.mesh_actor(self.mesh, **kwargs)
+        else:
+            return None
 
+    @requires_vtk
     def anno_point_actor(self, anno_name, query=None, filter_query=None, **kwargs):
         row_filter = np.full(len(self.anno[anno_name].df), True)
         if query is not None:
@@ -1421,6 +1439,7 @@ class Meshwork(object):
             )
 
     @OnlyIfSkeleton.exists
+    @requires_vtk
     def skeleton_actor(self, **kwargs):
         if self.skeleton is not None:
             return trimesh_vtk.skeleton_actor(self.skeleton, **kwargs)
