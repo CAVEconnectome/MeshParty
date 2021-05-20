@@ -1,11 +1,12 @@
 from .utils import decompress_mesh_data
 from ..skeleton import Skeleton
+from ..skeleton_io import _write_dict_to_group
 from ..trimesh_io import Mesh
 import h5py
 import os
-from tqdm import tqdm
 import pandas as pd
 import warnings
+import json
 
 warnings.simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
 
@@ -80,7 +81,7 @@ def save_meshwork_skeleton(filename, mw):
     if mw.skeleton is None:
         return
 
-    sk = mw.skeleton.reset_mask()
+    sk = mw.skeleton.reset_mask() # why reset mask?
     with h5py.File(filename, "a") as f:
         f.create_group("skeleton")
         f.create_dataset("skeleton/vertices",
@@ -98,8 +99,11 @@ def save_meshwork_skeleton(filename, mw):
                 "skeleton/mesh_index", data=sk.mesh_index, compression="gzip"
             )
         if sk.voxel_scaling is not None:
-            f["skeleton"].attrs["voxel_scaling"] = mesh.voxel_scaling
-
+            f["skeleton"].attrs["voxel_scaling"] = sk.voxel_scaling
+        if sk.seg_id is not None:
+            f.create_dataset("skeleton/seg_id", data=sk.seg_id)
+        if len(sk.creation_parameters) > 0:
+            _write_dict_to_group(f, 'skeleton/creation_parameters', sk.creation_parameters)
 
 def load_meshwork_skeleton(filename):
     with h5py.File(filename, "r") as f:
@@ -120,6 +124,17 @@ def load_meshwork_skeleton(filename):
             mesh_index = f["skeleton/mesh_index"][()]
         else:
             mesh_index = None
+
+        if "seg_id" in f["skeleton"].keys():
+            seg_id = f["skeleton/seg_id"][()]
+        else:
+            seg_id = None
+
+        creation_parameters = {}
+        if 'creation_parameters' in f["skeleton"].keys():
+            for vp_key in f["skeleton"]['creation_parameters'].keys():
+                creation_parameters[vp_key] = json.loads(f["skeleton"]['creation_parameters'][vp_key][()]) 
+
         return Skeleton(
             verts,
             edges,
@@ -128,6 +143,8 @@ def load_meshwork_skeleton(filename):
             mesh_to_skel_map=mesh_to_skel_map,
             mesh_index=mesh_index,
             voxel_scaling=voxel_scaling,
+            seg_id=seg_id,
+            creation_parameters = creation_parameters
         )
 
 

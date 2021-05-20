@@ -312,7 +312,7 @@ def render_actors(actors, camera=None, do_save=False, filename=None,
         iren.Initialize()
         iren.Render()
         iren.Start()
-
+        
     if do_save is True:
         renWin.OffScreenRenderingOn()
         w2if = vtk.vtkWindowToImageFilter()
@@ -331,7 +331,7 @@ def render_actors(actors, camera=None, do_save=False, filename=None,
         return ren, key_frame_cameras
     else:
         return ren
-
+    
 
 def camera_from_quat(pos_nm, orient_quat, camera_distance=10000, ngl_correct=True):
     """define a vtk camera with a particular orientation
@@ -564,17 +564,17 @@ def skeleton_actor(sk,
         the skeleton class to create a render
     edge_property: str
         the key to the edge_properties dictionary on the sk object to use for coloring
-        default None .. use color instead
+        default None ... use color instead
     vertex_property: str
-        the key to the vertex_properteis dictionary on the sk object to use for coloring
-        default NOne ... use color instead
+        the key to the vertex_properties dictionary on the sk object to use for coloring
+        default None ... use color instead
     vertex_data: np.array
         what data to color skeleton vertices by
-        default None... use color intead
+        default None ... use color intead
     normalize_property: bool
         whether to normalize the property data (edge/vertex) with dividing by np.nanmax
     color: tuple
-        a 3 tuple in the [0,1] range of the color of the skeletoni
+        a 3 tuple in the [0,1] range of the color of the skeleton
     line_width: int
         the width of the skeleton (default 3)
     opacity: float

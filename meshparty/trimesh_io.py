@@ -7,8 +7,6 @@ try:
 except:
     KDTree = spatial.cKDTree
 import os
-import networkx as nx
-import requests
 import time
 import re
 from collections import defaultdict
@@ -26,7 +24,6 @@ except ImportError:
     from trimesh import io as exchange
 
 from pymeshfix import _meshfix
-from tqdm import trange
 import DracoPy
 from meshparty import utils, trimesh_repair
 
@@ -738,6 +735,7 @@ class Mesh(trimesh.Trimesh):
 
         self._voxel_scaling = None
         self._MeshIndex = None
+        self.seg_id = None
 
         super(Mesh, self).__init__(*new_args, **kwargs)
         if apply_mask:

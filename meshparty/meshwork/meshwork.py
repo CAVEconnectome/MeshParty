@@ -5,7 +5,6 @@ except:
     _vtk_loaded = False
 
 from ..trimesh_io import Mesh
-from ..skeleton import Skeleton
 import pandas as pd
 import numpy as np
 from scipy import sparse
@@ -515,7 +514,7 @@ class Meshwork(object):
         """Segmentation id for the object
         """
         return self._seg_id
-
+    
     @property
     def voxel_scaling(self):
         return self._voxel_scaling

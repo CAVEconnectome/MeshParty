@@ -1,19 +1,17 @@
 from scipy import sparse, spatial, optimize, signal
 import numpy as np
 import time
-from meshparty import utils, mesh_filters
+from meshparty import utils
 import pandas as pd
 try:
     from pykdtree.kdtree import KDTree
 except:
     KDTree = spatial.cKDTree
-from tqdm import trange, tqdm
+from tqdm import tqdm
 from meshparty.trimesh_io import Mesh
 from meshparty.skeleton import Skeleton
-from collections import defaultdict
 from .ray_tracing import ray_trace_distance, shape_diameter_function
 import fastremap
-import logging
 
 
 def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True, collapse_function='sphere',
@@ -193,11 +191,23 @@ def skeletonize_mesh(mesh, soma_pt=None, soma_radius=7500, collapse_soma=True, c
 
     sk = Skeleton(new_v, new_e, mesh_to_skel_map=skel_map_full_mesh,
                   mesh_index=props.get('mesh_index', None), radius=props.get('rs', None), root=root_ind,
-                  remove_zero_length_edges=remove_zero_length_edges)
+                  remove_zero_length_edges=remove_zero_length_edges, seg_id = mesh.seg_id)
 
     if compute_radius is True:
         _remove_nan_radius(sk)
 
+    param_keys = ['soma_radius', 'collapse_soma', 'collapse_function', 'invalidation_d',
+    'smooth_vertices', 'compute_radius', 'shape_function', 'compute_original_index',
+    'smooth_iterations', 'smooth_neighborhood', 'smooth_r', 'cc_vertex_thresh', 'root_index', 
+    'remove_zero_length_edges', 'collapse_params']
+
+    param_values = [soma_radius, collapse_soma, collapse_function, invalidation_d, 
+    smooth_vertices, compute_radius, shape_function, compute_original_index, 
+    smooth_iterations, smooth_neighborhood, smooth_r, cc_vertex_thresh,  root_index, 
+    remove_zero_length_edges, collapse_params]
+
+    sk._store_parameters(param_keys, param_values)
+    
     return sk
 
 

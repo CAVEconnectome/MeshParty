@@ -5,10 +5,8 @@ try:
     from pykdtree.kdtree import KDTree as pyKDTree
 except:
     pyKDTree = spatial.cKDTree
-import json
 from meshparty import skeleton_io
 from collections.abc import Iterable
-from meshparty.trimesh_io import Mesh
 
 
 class StaticSkeleton:
@@ -265,6 +263,8 @@ class Skeleton:
         voxel_scaling=None,
         remove_zero_length_edges=True,
         skeleton_index=None,
+        seg_id = None,
+        creation_parameters = {} 
     ):
 
         if remove_zero_length_edges:
@@ -299,10 +299,11 @@ class Skeleton:
             root=root,
             voxel_scaling=voxel_scaling,
         )
-
+        self._seg_id = seg_id
         self._node_mask = np.full(self._rooted.n_vertices, True)
         self._edges = None
         self._SkeletonIndex = skeleton_index
+        self.creation_parameters = creation_parameters
 
         # Derived properties of the filtered graph
         self._csgraph_filtered = None
@@ -346,6 +347,9 @@ class Skeleton:
             skeleton_index=self._SkeletonIndex,
             mesh_index=self._rooted.mesh_index,
             remove_zero_length_edges=False,
+            seg_id = self._seg_id,
+            creation_parameters = self.creation_parameters
+
         )
 
     def apply_mask(self, new_mask, in_place=False):
@@ -530,6 +534,16 @@ class Skeleton:
         if self._rooted.mesh_index is None:
             return None
         return self._rooted.mesh_index[self.node_mask]
+
+    @property
+    def seg_id(self):
+        """
+        Segmentation id for the object
+        """
+        return self._seg_id
+
+    def set_seg_id(self, segid):
+        self._seg_id = segid
 
     @property
     def csgraph(self):
@@ -880,9 +894,9 @@ class Skeleton:
             cinds = cinds[0]
         return cinds
 
-    #####################
+    ########################
     # Cover Path Functions #
-    #####################
+    ########################
 
     def _compute_cover_paths(self):
         """Compute the list of cover paths along the skeleton
@@ -909,6 +923,27 @@ class Skeleton:
         if self._cover_paths is None:
             self._cover_paths = self._compute_cover_paths()
         return self._cover_paths
+
+
+    ########################
+    # Provanence functions #
+    ########################
+
+    def _store_parameters(self, keys_list, values_list):
+        """Stores the parameters that went into creating this Skeleton object
+
+        Parameters
+        ----------
+            keys_list : list
+                List of the names of the parameters
+            values_list ([type]): [description]
+                List of the values of each parameter in keys_list
+        """
+        zip_iterator = zip(keys_list, values_list)
+
+        self.creation_parameters = dict(zip_iterator)
+
+
 
     ####################
     # Export functions #

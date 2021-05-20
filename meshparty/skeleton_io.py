@@ -1,5 +1,4 @@
 import os
-from . import trimesh_io
 import h5py
 import json
 import numpy as np
@@ -24,13 +23,15 @@ def write_skeleton_h5(sk, filename, overwrite=False):
                               edges=sk.edges,
                               mesh_to_skel_map=sk.mesh_to_skel_map,
                               vertex_properties=sk.vertex_properties,
+                              creation_parameters=sk.creation_parameters,
                               root=sk.root,
+                              seg_id=sk.seg_id,
                               overwrite=overwrite)
 
 
 def write_skeleton_h5_by_part(filename, vertices, edges, mesh_to_skel_map=None,
                               vertex_properties={}, root=None,
-                              overwrite=False):
+                              overwrite=False, seg_id = None, creation_parameters = {}):
     '''
     Helper function for writing all parts of a skeleton file to an h5.
 
@@ -71,16 +72,12 @@ def write_skeleton_h5_by_part(filename, vertices, edges, mesh_to_skel_map=None,
                              data=mesh_to_skel_map, compression='gzip')
         if len(vertex_properties) > 0:
             _write_dict_to_group(f, 'vertex_properties', vertex_properties)
+        if len(creation_parameters) > 0:
+            f.create_dataset('creation_parameters', data=json.dumps(str(creation_parameters)))
         if root is not None:
             f.create_dataset('root', data=root)
-
-
-def _write_dict_to_group(f, group_name, data_dict):
-    d_grp = f.create_group(group_name)
-    for d_name, d_data in data_dict.items():
-        is_np = type(d_data) is np.ndarray
-        d_grp.create_dataset(
-            d_name, data=json.dumps(d_data, cls=_NumpyEncoder))
+        if seg_id is not None:
+            f.create_dataset('seg_id', data=seg_id)
 
 
 def read_skeleton_h5_by_part(filename):
@@ -90,7 +87,7 @@ def read_skeleton_h5_by_part(filename):
     Parameters
     ----------
     filename : str
-        path to a h5 file with skeletons
+        path to a h5 file with skeletons or meshworks containing skeletons
 
     Returns
     -------
@@ -130,14 +127,22 @@ def read_skeleton_h5_by_part(filename):
         if 'vertex_properties' in f.keys():
             for vp_key in f['vertex_properties'].keys():
                 vertex_properties[vp_key] = json.loads(f['vertex_properties'][vp_key][()],
-                                                       object_hook=_convert_keys_to_int)
+                                                        object_hook=_convert_keys_to_int)
+        
+        if 'creation_parameters' in f.keys():
+            creation_parameters = json.loads(f['creation_parameters'][()])
 
         if 'root' in f.keys():
             root = f['root'][()]
         else:
             root = None
 
-    return vertices, edges, mesh_to_skel_map, vertex_properties, root
+        if 'seg_id' in f.keys():
+            seg_id = f['seg_id'][()]
+        else:
+            seg_id = None
+
+    return vertices, edges, mesh_to_skel_map, vertex_properties, creation_parameters, root, seg_id
 
 
 def read_skeleton_h5(filename,
@@ -158,13 +163,15 @@ def read_skeleton_h5(filename,
         skeleton object loaded from the h5 file
 
     '''
-    vertices, edges, mesh_to_skel_map, vertex_properties, root = read_skeleton_h5_by_part(
+    vertices, edges, mesh_to_skel_map, vertex_properties, creation_parameters, root, seg_id = read_skeleton_h5_by_part(
         filename)
+
     return skeleton.Skeleton(vertices=vertices,
                              edges=edges,
                              mesh_to_skel_map=mesh_to_skel_map,
                              vertex_properties=vertex_properties,
-                             root=root,
+                             creation_parameters = creation_parameters,
+                             root=root, seg_id = seg_id,
                              remove_zero_length_edges=remove_zero_length_edges)
 
 
@@ -247,6 +254,13 @@ class _NumpyEncoder(json.JSONEncoder):
         elif isinstance(obj, (np.ndarray,)):
             return obj.tolist()
         return json.JSONEncoder.default(self, obj)
+
+
+
+def _write_dict_to_group(f, group_name, data_dict):
+    d_grp = f.create_group(group_name)
+    for d_name, d_data in data_dict.items():
+        d_grp.create_dataset(d_name, data=json.dumps(d_data, cls=_NumpyEncoder))       
 
 
 def _convert_keys_to_int(x):
