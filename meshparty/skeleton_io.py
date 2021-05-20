@@ -232,7 +232,7 @@ def _build_swc_array(skel, node_labels, radius, xyz_scaling):
     xyz = skel.vertices[order_old]
     radius = radius[order_old]
     par_ids = np.array([order_map.get(nid, -1)
-                        for nid in skel._rooted._parent_node_array[order_old]])
+                        for nid in skel.parent_nodes(order_old)])
 
     swc_dat = np.hstack((new_ids[:, np.newaxis],
                          node_labels[:, np.newaxis],
