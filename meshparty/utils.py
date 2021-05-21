@@ -1,6 +1,53 @@
-import numpy as np 
+import numpy as np
 from scipy import sparse
 import networkx as nx
+import fastremap
+
+
+def array_if_scalar(values):
+    """If values is a single number or 0-dim array, make a shaped array"""
+    if values is None:
+        values = np.array([])
+        return_scalar = True
+    elif issubclass(type(values), np.ndarray):
+        if len(values.shape) == 0:
+            values = values.reshape(1)
+            return_scalar = True
+        else:
+            return_scalar = False
+    elif np.isscalar(values):
+        values = np.array([values])
+        return_scalar = True
+    else:
+        values = np.array(values)
+        return_scalar = False
+    return values, return_scalar
+
+def remove_unused_verts(verts, faces):
+    """removes unused vertices from a graph or mesh
+
+    Parameters
+    ----------
+    verts : np.array
+        NxD numpy array of vertex locations
+    faces : np.array
+        MxK numpy array of connected shapes (i.e. edges or tris)
+        (entries are indices into verts)
+
+    Returns
+    -------
+    np.array
+        new_verts a filtered set of vertices s
+    new_face
+        a reindexed set of faces
+
+    """
+    used_verts = np.unique(faces.ravel())
+    new_verts = verts[used_verts, :]
+    new_face = np.zeros(faces.shape, dtype=faces.dtype)
+    for i in range(faces.shape[1]):
+        new_face[:, i] = np.searchsorted(used_verts, faces[:, i])
+    return new_verts, new_face
 
 
 def connected_component_slice(G, ind=None, return_boolean=False):
@@ -24,24 +71,26 @@ def connected_component_slice(G, ind=None, return_boolean=False):
 
 
 def dist_from_line(pts, line_bound_pts, axis):
-    ps = (pts[:, axis] - line_bound_pts[0, axis]) / (line_bound_pts[1, axis] - line_bound_pts[0, axis])
-    line_pts = np.multiply(ps[:,np.newaxis], line_bound_pts[1] - line_bound_pts[0]) + line_bound_pts[0]
+    ps = (pts[:, axis] - line_bound_pts[0, axis]) / \
+        (line_bound_pts[1, axis] - line_bound_pts[0, axis])
+    line_pts = np.multiply(ps[:, np.newaxis], line_bound_pts[1] -
+                           line_bound_pts[0]) + line_bound_pts[0]
     ds = np.linalg.norm(pts - line_pts, axis=1)
     return ds
 
 
 def filter_close_to_line(mesh, line_bound_pts, line_dist_th, axis=1):
-    line_pt_ord = np.argsort(line_bound_pts[:,axis])
-    below_top = mesh.vertices[:,axis] > line_bound_pts[line_pt_ord[0], axis] 
-    above_bot = mesh.vertices[:,axis] < line_bound_pts[line_pt_ord[1], axis] 
-    ds = dist_from_line( mesh.vertices, line_bound_pts, axis)
+    line_pt_ord = np.argsort(line_bound_pts[:, axis])
+    below_top = mesh.vertices[:, axis] > line_bound_pts[line_pt_ord[0], axis]
+    above_bot = mesh.vertices[:, axis] < line_bound_pts[line_pt_ord[1], axis]
+    ds = dist_from_line(mesh.vertices, line_bound_pts, axis)
     is_close = (ds < line_dist_th) & below_top & above_bot
     return is_close
 
 
 def mutual_closest_edges(mesh_a, mesh_b, distance_upper_bound=250):
-    a_ds, a_inds = mesh_a.kdtree.query(mesh_b.vertices,
-                                       distance_upper_bound=distance_upper_bound)
+    _, a_inds = mesh_a.kdtree.query(mesh_b.vertices,
+                                    distance_upper_bound=distance_upper_bound)
     b_ds, b_inds = mesh_b.kdtree.query(mesh_a.vertices,
                                        distance_upper_bound=distance_upper_bound)
     mutual_closest = b_inds[a_inds[b_inds[~np.isinf(b_ds)]]] == b_inds[~np.isinf(b_ds)]
@@ -74,7 +123,7 @@ def find_far_points_graph(mesh_graph, start_ind=None, multicomponent=False):
     '''
     d = 0
     dn = 1
-   
+
     if start_ind is None:
         if multicomponent:
             a = connected_component_slice(mesh_graph)[0]
@@ -83,7 +132,7 @@ def find_far_points_graph(mesh_graph, start_ind=None, multicomponent=False):
     else:
         a = start_ind
     b = 1
-    
+
     k = 0
     pred = None
     ds = None
@@ -92,7 +141,7 @@ def find_far_points_graph(mesh_graph, start_ind=None, multicomponent=False):
         dsn, predn = sparse.csgraph.dijkstra(
             mesh_graph, False, a, return_predecessors=True)
         if multicomponent:
-            dsn[np.isinf(dsn)] = 0
+            dsn[np.isinf(dsn)] = -1
         bn = np.argmax(dsn)
         dn = dsn[bn]
         if dn > d:
@@ -106,16 +155,17 @@ def find_far_points_graph(mesh_graph, start_ind=None, multicomponent=False):
 
     return b, a, pred, d, ds
 
+
 def edge_averaged_vertex_property(edge_property, vertices, edges):
     '''
     Converts a per-edge property to a vertex property by taking the mean
     of the adjacent edges.
     '''
-    vertex_property = np.full((len(vertices),2), np.nan)
-    vertex_property[edges[:,0],0] = np.array(edge_property)
-    vertex_property[edges[:,1],1] = np.array(edge_property)
+    vertex_property = np.full((len(vertices), 2), np.nan)
+    vertex_property[edges[:, 0], 0] = np.array(edge_property)
+    vertex_property[edges[:, 1], 1] = np.array(edge_property)
     return np.nanmean(vertex_property, axis=1)
-    
+
 
 def reduce_vertices(vertices, vertex_shape, v_filter=None, e_filter=None, return_filter_inds=False):
     '''
@@ -147,13 +197,13 @@ def create_csgraph(vertices, edges, euclidean_weight=True, directed=False):
     over weights as boolean or based on Euclidean distance.
     '''
     if euclidean_weight:
-        xs = vertices[edges[:,0]]
-        ys = vertices[edges[:,1]]
+        xs = vertices[edges[:, 0]]
+        ys = vertices[edges[:, 1]]
         weights = np.linalg.norm(xs-ys, axis=1)
         use_dtype = np.float32
-    else:   
+    else:
         weights = np.ones((len(edges),)).astype(np.int8)
-        use_dtype = np.int8 
+        use_dtype = np.int8
 
     if directed:
         edges = edges.T
@@ -170,8 +220,8 @@ def create_csgraph(vertices, edges, euclidean_weight=True, directed=False):
 
 def create_nxgraph(vertices, edges, euclidean_weight=True, directed=False):
     if euclidean_weight:
-        xs = vertices[edges[:,0]]
-        ys = vertices[edges[:,1]]
+        xs = vertices[edges[:, 0]]
+        ys = vertices[edges[:, 1]]
         weights = np.linalg.norm(xs-ys, axis=1)
         use_dtype = np.float32
     else:
@@ -218,6 +268,7 @@ def paths_to_edges(path_list):
         e = np.vstack((p[0:-1], p[1:])).T
         arrays.append(e)
     return np.vstack(arrays)
+
 
 def filter_shapes(node_ids, shapes):
     """ node_ids has to be sorted! """
@@ -281,3 +332,176 @@ def path_from_predecessors(Ps, ind_start):
         path.append(next_ind)
         next_ind = Ps[next_ind]
     return np.array(path)
+
+
+def map_indices_to_unmasked(indices_unmasked, unmapped_indices):
+    '''
+    For a set of masked indices, returns the corresponding unmasked indices
+
+    Parameters
+    ----------
+    unmapped_indices: np.array
+        a set of indices in the masked index space
+
+    Returns
+    -------
+    np.array
+        the indices mapped back to the original mesh index space
+    '''
+    return np.where(unmapped_indices >= 0, indices_unmasked[unmapped_indices], -1)
+
+
+def map_boolean_to_unmasked(unmasked_size, node_mask, unmapped_boolean):
+    '''
+    For a boolean index in the masked indices, returns the corresponding unmasked boolean index
+
+    Parameters
+    ----------
+    unmapped_boolean : np.array
+        a bool array in the masked index space
+
+    Returns
+    -------
+    np.array
+        a bool array in the original index space.  Is True if the unmapped_boolean suggests it should be.
+    '''
+    if len(unmapped_boolean) == unmasked_size:   # Already is unmasked
+        return unmapped_boolean
+    full_boolean = np.full(unmasked_size, False)
+    full_boolean[node_mask] = unmapped_boolean
+    return full_boolean
+
+
+def filter_unmasked_boolean(node_mask, unmasked_boolean):
+    '''
+    For an unmasked boolean slice, returns a boolean slice filtered to the masked mesh
+
+    Parameters
+    ----------
+    unmasked_boolean : np.array
+        a bool array in the original mesh index space
+
+    Returns
+    -------
+    np.array
+        returns the elements of unmasked_boolean that are still relevant in the masked index space
+    '''
+    return unmasked_boolean[node_mask]
+
+
+def filter_unmasked_indices(node_mask, unmasked_shape):
+    """
+    filters a set of indices in the original mesh space
+    and returns it in the masked space
+
+    Parameters
+    ----------
+    mask: np.array or None
+        the mask to apply. default None will use this Mesh node_mask
+
+    unmasked_shape: np.array
+        a set of indices into vertices in the unmasked index space
+
+    Returns
+    -------
+    np.array
+        the unmasked_shape indices mapped into the masked index space
+    """
+    new_shape = filter_unmasked_indices_padded(node_mask, unmasked_shape)
+
+    if len(new_shape.shape) > 1:
+        keep_rows = np.all(new_shape >= 0, axis=1)
+    else:
+        keep_rows = new_shape >= 0
+
+    return new_shape[keep_rows]
+
+
+def filter_unmasked_indices_padded(node_mask, unmasked_shape):
+    new_index = np.zeros(node_mask.shape, dtype=np.int64)-1
+    new_index[node_mask] = np.arange(np.sum(node_mask))
+
+    if np.isscalar(unmasked_shape) is True:
+        new_shape = int(new_index[unmasked_shape])
+    else:
+        unmasked_shape = np.array(unmasked_shape)
+        unmasked_shape[unmasked_shape == None] = -1
+        new_shape = new_index[unmasked_shape.ravel().astype(
+            np.int64)].reshape(unmasked_shape.shape)
+        new_shape[unmasked_shape == -1] = -1
+    return new_shape
+
+
+def remap_dict(n_vertices, map_dict):
+    "Assumes only do remap of indices that are keys in map dict"
+    ind_filter = np.full(n_vertices, True)
+    remove_inds = list(map_dict.keys())
+    ind_filter[np.array(remove_inds, dtype=int)] = False
+
+    new_index = np.full(n_vertices, None)
+    new_index[ind_filter] = np.arange(ind_filter.sum())
+    for k, v in map_dict.items():
+        new_index[k] = new_index[v]
+    return {ii: new_index[ii] for ii in range(len(new_index))}, ind_filter
+
+
+def collapse_zero_length_edges(vertices, edges, root, radius, mesh_to_skel_map, mesh_index, node_mask, vertex_properties={}):
+    "Remove zero length edges from a skeleton"
+
+    zl = np.linalg.norm(vertices[edges[:, 0]]-vertices[edges[:, 1]], axis=1) == 0
+    if not np.any(zl):
+        return vertices, edges, root, radius, mesh_to_skel_map, mesh_index, node_mask, vertex_properties
+
+    consolidate_dict = {x[0]: x[1] for x in edges[zl]}
+    # Compress multiple zero edges in a row
+    while np.any(
+        np.isin(np.array(list(consolidate_dict.keys())),
+                np.array(list(consolidate_dict.values()))
+                )
+    ):
+        all_keys = np.array(list(consolidate_dict.keys()))
+        dup_keys = np.flatnonzero(np.isin(all_keys,
+                                          np.array(list(consolidate_dict.values()))))
+        first_key = all_keys[dup_keys[0]]
+        first_val = consolidate_dict.pop(first_key)
+        for ii, jj in consolidate_dict.items():
+            if jj == first_key:
+                consolidate_dict[ii] = first_val
+
+    new_index_dict, node_filter = remap_dict(len(vertices), consolidate_dict)
+
+    new_vertices = vertices[node_filter]
+    new_edges = fastremap.remap(edges, new_index_dict)
+    new_edges = new_edges[new_edges[:, 0] != new_edges[:, 1]]
+
+    if mesh_to_skel_map is not None:
+        new_index_dict[-1] = -1
+        new_mesh_to_skel_map = fastremap.remap(
+            mesh_to_skel_map, new_index_dict)
+    else:
+        new_mesh_to_skel_map = None
+
+    new_root = new_index_dict.get(root, root)
+    if radius is not None:
+        new_radius = radius[node_filter]
+    else:
+        new_radius = None
+
+    if mesh_index is not None:
+        new_mesh_index = mesh_index[node_filter]
+    else:
+        new_mesh_index = None
+
+    if node_mask is not None:
+        new_node_mask = node_mask[node_filter]
+    else:
+        new_node_mask = None
+
+    new_vp = {}
+    for vp, val in vertex_properties.items():
+        try:
+            new_vp[vp] = val[node_filter]
+        except:
+            pass
+
+    return new_vertices, new_edges, new_root, new_radius, new_mesh_to_skel_map, new_mesh_index, new_node_mask, new_vp

@@ -4,10 +4,11 @@ import numpy as np
 import pytest
 import os
 import imageio
-import json 
+import json
 import matplotlib.cm as cm
 
-def compare_img_to_test_file(fname, back_val = 255, close=15, pre_path=None):
+
+def compare_img_to_test_file(fname, back_val=255, close=15, pre_path=None):
     img_test = imageio.imread(fname)
     if pre_path is None:
         pre_path = 'test/test_files/'
@@ -15,14 +16,18 @@ def compare_img_to_test_file(fname, back_val = 255, close=15, pre_path=None):
     img_tmpl = imageio.imread(tmpl_path)
     assert(img_test.shape == img_tmpl.shape)
 
-    non_background = np.any((img_test != back_val) | (img_tmpl != back_val), axis=2)
+    non_background = np.any((img_test != back_val) |
+                            (img_tmpl != back_val), axis=2)
     newshape = (img_test.shape[0]*img_test.shape[1], img_test.shape[2])
-    img_test_non_back = img_test.reshape(newshape)[non_background.ravel(),:]
-    img_tmpl_non_back = img_tmpl.reshape(newshape)[non_background.ravel(),:]
+    img_test_non_back = img_test.reshape(newshape)[non_background.ravel(), :]
+    img_tmpl_non_back = img_tmpl.reshape(newshape)[non_background.ravel(), :]
 
-    assert(np.all((np.mean(img_test_non_back, axis=0)- np.mean(img_tmpl_non_back, axis=0)) < close))
-    assert(np.all((np.std(img_test_non_back, axis=0)- np.std(img_tmpl_non_back, axis=0)) < close))
+    assert(np.all((np.mean(img_test_non_back, axis=0) -
+                   np.mean(img_tmpl_non_back, axis=0)) < close))
+    assert(np.all((np.std(img_test_non_back, axis=0) -
+                   np.std(img_tmpl_non_back, axis=0)) < close))
     return True
+
 
 def eval_actor_image(actors, fname, tmp_path, camera=None, scale=2, make_image=False):
     filepath = os.path.join(tmp_path, fname)
@@ -31,15 +36,16 @@ def eval_actor_image(actors, fname, tmp_path, camera=None, scale=2, make_image=F
         fpath = fname
     else:
         fpath = filepath
-    trimesh_vtk.render_actors(actors, do_save =True,
+    trimesh_vtk.render_actors(actors, do_save=True,
                               scale=scale,
                               camera=camera,
                               filename=fpath,
-                              back_color=(1,1,1))
+                              back_color=(1, 1, 1))
     if make_image:
         return True
     else:
-        return compare_img_to_test_file(filepath)    
+        return compare_img_to_test_file(filepath)
+
 
 def eval_actor_360(actors, dir_name, tmp_path, camera=None, scale=2, nframes=30, make_image=False):
 
@@ -50,58 +56,60 @@ def eval_actor_360(actors, dir_name, tmp_path, camera=None, scale=2, nframes=30,
 
     trimesh_vtk.render_actors_360(actors, fpath,
                                   nframes=nframes,
-                                  do_save =True,
+                                  do_save=True,
                                   camera_start=camera,
                                   scale=scale,
-                                  back_color=(1,1,1))
+                                  back_color=(1, 1, 1))
     if make_image:
         return True
     else:
-        is_good=np.zeros(nframes, np.bool)
+        is_good = np.zeros(nframes, np.bool)
         for i in range(nframes):
-            img_file = os.path.join(fpath, f'%04d.png'%i)
-            is_good[i]=compare_img_to_test_file(img_file, pre_path='test/test_files/full_cell_movie')    
+            img_file = os.path.join(fpath, f'%04d.png' % i)
+            is_good[i] = compare_img_to_test_file(
+                img_file, pre_path='test/test_files/full_cell_movie')
         return np.all(is_good)
+
 
 @contextlib.contextmanager
 def build_basic_mesh():
     verts = np.array([[-0.5, -0.5, -0.5],
-        [-0.5, -0.5,  0.5],
-        [-0.5,  0.5, -0.5],
-        [-0.5,  0.5,  0.5],
-        [ 0.5, -0.5, -0.5],
-        [ 0.5, -0.5,  0.5],
-        [ 0.5,  0.5, -0.5],
-        [ 0.5,  0.5,  0.5],
-        [-0.5, -0.5, -0.5],
-        [-0.5, -0.5,  0.5],
-        [ 0.5, -0.5, -0.5],
-        [ 0.5, -0.5,  0.5],
-        [-0.5,  0.5, -0.5],
-        [-0.5,  0.5,  0.5],
-        [ 0.5,  0.5, -0.5],
-        [ 0.5,  0.5,  0.5],
-        [-0.5, -0.5, -0.5],
-        [ 0.5, -0.5, -0.5],
-        [-0.5,  0.5, -0.5],
-        [ 0.5,  0.5, -0.5],
-        [-0.5, -0.5,  0.5],
-        [ 0.5, -0.5,  0.5],
-        [-0.5,  0.5,  0.5],
-        [ 0.5,  0.5,  0.5]], dtype=np.float32)
-    faces = np.array([[ 0,  1,  2],
-        [ 3,  2,  1],
-        [ 4,  6,  5],
-        [ 7,  5,  6],
-        [ 8, 10,  9],
-        [11,  9, 10],
-        [12, 13, 14],
-        [15, 14, 13],
-        [16, 18, 17],
-        [19, 17, 18],
-        [20, 21, 22],
-        [23, 22, 21]], np.uint32)
-   
+                      [-0.5, -0.5,  0.5],
+                      [-0.5,  0.5, -0.5],
+                      [-0.5,  0.5,  0.5],
+                      [0.5, -0.5, -0.5],
+                      [0.5, -0.5,  0.5],
+                      [0.5,  0.5, -0.5],
+                      [0.5,  0.5,  0.5],
+                      [-0.5, -0.5, -0.5],
+                      [-0.5, -0.5,  0.5],
+                      [0.5, -0.5, -0.5],
+                      [0.5, -0.5,  0.5],
+                      [-0.5,  0.5, -0.5],
+                      [-0.5,  0.5,  0.5],
+                      [0.5,  0.5, -0.5],
+                      [0.5,  0.5,  0.5],
+                      [-0.5, -0.5, -0.5],
+                      [0.5, -0.5, -0.5],
+                      [-0.5,  0.5, -0.5],
+                      [0.5,  0.5, -0.5],
+                      [-0.5, -0.5,  0.5],
+                      [0.5, -0.5,  0.5],
+                      [-0.5,  0.5,  0.5],
+                      [0.5,  0.5,  0.5]], dtype=np.float32)
+    faces = np.array([[0,  1,  2],
+                      [3,  2,  1],
+                      [4,  6,  5],
+                      [7,  5,  6],
+                      [8, 10,  9],
+                      [11,  9, 10],
+                      [12, 13, 14],
+                      [15, 14, 13],
+                      [16, 18, 17],
+                      [19, 17, 18],
+                      [20, 21, 22],
+                      [23, 22, 21]], np.uint32)
+
     yield verts, faces
 
 
@@ -116,6 +124,7 @@ def build_full_cell_skeleton():
 def cube_verts_faces():
     with build_basic_mesh() as m:
         yield m
+
 
 @pytest.fixture(scope='session')
 def cell_skel():
@@ -133,10 +142,11 @@ def test_basic_mesh_actor(cube_verts_faces):
 
     assert(np.all(verts == verts_out))
     assert(np.all(faces_out == faces))
-    
+
 
 def test_skeleton_viz(cell_skel, tmp_path):
-    skel_actor = trimesh_vtk.skeleton_actor(cell_skel, vertex_property='rs', line_width=5)
+    skel_actor = trimesh_vtk.skeleton_actor(
+        cell_skel, vertex_property='rs', line_width=5)
     pd = skel_actor.GetMapper().GetInput()
     verts_out, faces_out, edges_out = trimesh_vtk.poly_to_mesh_components(pd)
     assert(np.all(cell_skel.vertices == verts_out))
@@ -148,84 +158,85 @@ def test_skeleton_viz(cell_skel, tmp_path):
 def test_full_cell_camera(full_cell_mesh, full_cell_soma_pt, tmp_path):
     mesh_actor = trimesh_vtk.mesh_actor(full_cell_mesh)
     camera = trimesh_vtk.oriented_camera(full_cell_soma_pt, backoff=100)
-    eval_actor_image([mesh_actor], 'full_cell_orient_camera.png', tmp_path, camera=camera, scale=1)
-    scale_bar_actor = trimesh_vtk.scale_bar_actor(full_cell_soma_pt-[15000,0,0], camera)
-    eval_actor_image([mesh_actor, scale_bar_actor], 'full_cell_scale_bar.png', tmp_path, camera=camera, scale=1)
+    eval_actor_image([mesh_actor], 'full_cell_orient_camera.png',
+                     tmp_path, camera=camera, scale=1)
+    scale_bar_actor = trimesh_vtk.scale_bar_actor(
+        full_cell_soma_pt-[15000, 0, 0], camera)
+    eval_actor_image([mesh_actor, scale_bar_actor], 'full_cell_scale_bar.png',
+                     tmp_path, camera=camera, scale=1)
 
 
-def test_full_cell_movie(full_cell_mesh, full_cell_soma_pt, tmp_path):
-    mesh_actor = trimesh_vtk.mesh_actor(full_cell_mesh)
-    camera = trimesh_vtk.oriented_camera(full_cell_soma_pt, backoff=100)
-    eval_actor_360([mesh_actor], 'full_cell_movie', tmp_path, camera=camera, scale=1)
+# def test_full_cell_movie(full_cell_mesh, full_cell_soma_pt, tmp_path):
+#     mesh_actor = trimesh_vtk.mesh_actor(full_cell_mesh)
+#     camera = trimesh_vtk.oriented_camera(full_cell_soma_pt, backoff=100)
+#     eval_actor_360([mesh_actor], 'full_cell_movie', tmp_path, camera=camera, scale=1)
 
 
 def test_vtk_errors():
-    verts = np.random.rand(10,3)
-    tris = np.random.randint(0,10,(5,3))
+    verts = np.random.rand(10, 3)
+    tris = np.random.randint(0, 10, (5, 3))
     with pytest.raises(ValueError) as e:
-        pd=trimesh_vtk.graph_to_vtk(verts,tris)
+        pd = trimesh_vtk.graph_to_vtk(verts, tris)
 
-    bad_edges = np.arange(0,12).reshape(6,2)
+    bad_edges = np.arange(0, 12).reshape(6, 2)
     with pytest.raises(ValueError) as e:
-        pd=trimesh_vtk.graph_to_vtk(verts,bad_edges)
+        pd = trimesh_vtk.graph_to_vtk(verts, bad_edges)
 
-    quads = np.random.randint(0,10,(5,4))
+    quads = np.random.randint(0, 10, (5, 4))
     with pytest.raises(ValueError) as e:
         pd = trimesh_vtk.trimesh_to_vtk(verts, quads)
 
-    bad_tris = np.arange(0,12).reshape(4,3)
+    bad_tris = np.arange(0, 12).reshape(4, 3)
     with pytest.raises(ValueError) as e:
         pd = trimesh_vtk.trimesh_to_vtk(verts, bad_tris)
 
-def test_full_cell_with_links(full_cell_mesh, full_cell_merge_log, tmp_path, monkeypatch):
 
-    class MyChunkedGraph(object):
-        def __init__(a, **kwargs):
-            pass
+def test_full_cell_with_links(full_cell_mesh, full_cell_merge_log, tmp_path):
 
-        def get_merge_log(self, atomic_id):    
-            return full_cell_merge_log
-
-    monkeypatch.setattr(trimesh_io.trimesh_repair.chunkedgraph,
-                        'ChunkedGraphClient',
-                        MyChunkedGraph)
-
-    full_cell_mesh.add_link_edges('test', 5)
+    full_cell_mesh.add_link_edges(
+        merge_log=full_cell_merge_log, base_resolution=[1, 1, 1])
 
     mesh_actor = trimesh_vtk.mesh_actor(full_cell_mesh)
-    eval_actor_image([mesh_actor], 'full_cell_with_links.png', tmp_path, scale=1)
+    eval_actor_image(
+        [mesh_actor], 'full_cell_with_links.png', tmp_path, scale=1)
 
     mesh_actor = trimesh_vtk.mesh_actor(full_cell_mesh,
                                         opacity=1.0,
-                                        show_link_edges = True)
+                                        show_link_edges=True)
 
-    m1  =np.array(full_cell_merge_log['merge_edge_coords'][0]) 
+    m1 = np.array(full_cell_merge_log['merge_edge_coords'][0])
     ctr = np.mean(m1, axis=0)
-    camera = trimesh_vtk.oriented_camera(ctr, backoff=5, up_vector = (0,0,1), backoff_vector=(0,1,0))
+    camera = trimesh_vtk.oriented_camera(
+        ctr, backoff=5, up_vector=(0, 0, 1), backoff_vector=(0, 1, 0))
 
-    eval_actor_image([mesh_actor], 'full_cell_show_links.png', tmp_path, camera=camera)
-              
+    eval_actor_image([mesh_actor], 'full_cell_show_links.png',
+                     tmp_path, camera=camera)
+
 
 def test_vertex_colors(full_cell_mesh, tmp_path):
-    d = np.linalg.norm(full_cell_mesh.vertices - full_cell_mesh.centroid, axis=1)
+    d = np.linalg.norm(full_cell_mesh.vertices -
+                       full_cell_mesh.centroid, axis=1)
     cmap = np.array(cm.viridis.colors)
     vclrs = trimesh_vtk.values_to_colors(d, cmap, 0, 80000)
-    clr_mesh_actor = trimesh_vtk.mesh_actor(full_cell_mesh, vertex_colors=vclrs, opacity=1.0)
+    clr_mesh_actor = trimesh_vtk.mesh_actor(
+        full_cell_mesh, vertex_colors=vclrs, opacity=1.0)
     eval_actor_image([clr_mesh_actor], 'full_cell_colors.png', tmp_path)
 
     vclrs = trimesh_vtk.values_to_colors(d, cmap)
-    clr_mesh_actor = trimesh_vtk.mesh_actor(full_cell_mesh, vertex_colors=vclrs, opacity=1.0)
+    clr_mesh_actor = trimesh_vtk.mesh_actor(
+        full_cell_mesh, vertex_colors=vclrs, opacity=1.0)
     eval_actor_image([clr_mesh_actor], 'full_cell_auto_colors.png', tmp_path)
 
 
 def test_ngl_state(full_cell_mesh, tmp_path):
     with open('test/test_files/view_state.json', 'r') as fp:
         ngl_state = json.load(fp)
-    
+
     camera = trimesh_vtk.camera_from_ngl_state(ngl_state)
     mesh_actor = trimesh_vtk.mesh_actor(full_cell_mesh)
-    eval_actor_image([mesh_actor], 'full_cell_ngl_view.png', tmp_path, camera=camera)
-    
+    eval_actor_image([mesh_actor], 'full_cell_ngl_view.png',
+                     tmp_path, camera=camera)
+
 
 def test_point_cloud(full_cell_mesh, full_cell_synapses, full_cell_soma_pt, tmp_path):
 
@@ -236,48 +247,56 @@ def test_point_cloud(full_cell_mesh, full_cell_synapses, full_cell_soma_pt, tmp_
     # size points by size, fixed color
     syn_actor = trimesh_vtk.point_cloud_actor(full_cell_synapses['positions'],
                                               size=sizes,
-                                              color=(1,0,0))
-    eval_actor_image([mesh_actor, syn_actor], 'full_cell_with_synapes_size_scaled.png', tmp_path, camera=camera)
+                                              color=(1, 0, 0),
+                                              opacity=1)
+    eval_actor_image([mesh_actor, syn_actor],
+                     'full_cell_with_synapes_size_scaled.png', tmp_path, camera=camera)
 
     # color points by size, mapping sizes
     syn_actor = trimesh_vtk.point_cloud_actor(full_cell_synapses['positions'],
-                                            size=500,
-                                            color=np.clip(sizes, 0, 1000))
-    eval_actor_image([mesh_actor, syn_actor], 'full_cell_synapes_colored_size.png', tmp_path, camera=camera)
+                                              size=500,
+                                              color=np.clip(sizes, 0, 1000),
+                                              opacity=1)
+    eval_actor_image([mesh_actor, syn_actor],
+                     'full_cell_synapes_colored_size.png', tmp_path, camera=camera)
 
     # color and size points
     syn_actor = trimesh_vtk.point_cloud_actor(full_cell_synapses['positions'],
-                                            size=sizes,
-                                            color=np.clip(sizes, 0, 1000))
-    eval_actor_image([mesh_actor, syn_actor], 'full_cell_synapes_colored_and_size.png', tmp_path, camera=camera)
+                                              size=sizes,
+                                              color=np.clip(sizes, 0, 1000),
+                                              opacity=1)
+    eval_actor_image([mesh_actor, syn_actor],
+                     'full_cell_synapes_colored_and_size.png', tmp_path, camera=camera)
 
     # random colors
-    x = np.linspace(0,1.0,len(sizes))   
-    rand_colors = np.hstack([x[:, np.newaxis], 
-                        np.abs(x-.5)[:, np.newaxis], 
-                        (1-x)[:,np.newaxis]]) 
-    
+    x = np.linspace(0, 1.0, len(sizes))
+    rand_colors = np.hstack([x[:, np.newaxis],
+                             np.abs(x-.5)[:, np.newaxis],
+                             (1-x)[:, np.newaxis]])
+
     syn_actor = trimesh_vtk.point_cloud_actor(full_cell_synapses['positions'],
-                                            size=500,
-                                            color=rand_colors)
-    eval_actor_image([mesh_actor, syn_actor], 'full_cell_synapes_random_colors.png', tmp_path, camera=camera)
+                                              size=500,
+                                              color=rand_colors,
+                                              opacity=1)
+    eval_actor_image([mesh_actor, syn_actor],
+                     'full_cell_synapes_random_colors.png', tmp_path, camera=camera)
 
     # random colors uint8
     rand_colors_uint8 = np.uint8(rand_colors*255)
     syn_actor = trimesh_vtk.point_cloud_actor(full_cell_synapses['positions'],
                                               size=500,
-                                              color=rand_colors_uint8)
-    eval_actor_image([mesh_actor, syn_actor], 'full_cell_synapes_random_colors_uint8.png', tmp_path, camera=camera)
+                                              color=rand_colors_uint8,
+                                              opacity=1)
+    eval_actor_image([mesh_actor, syn_actor],
+                     'full_cell_synapes_random_colors_uint8.png', tmp_path, camera=camera)
 
     # test failure modes
     with pytest.raises(ValueError) as e:
         syn_actor = trimesh_vtk.point_cloud_actor(full_cell_synapses['positions'],
-                                                  size=np.random.rand(10,10),
-                                                  color=(1,0,0))
+                                                  size=np.random.rand(10, 10),
+                                                  color=(1, 0, 0))
 
     with pytest.raises(ValueError) as e:
         syn_actor = trimesh_vtk.point_cloud_actor(full_cell_synapses['positions'],
                                                   size=300,
-                                                  color=np.random.rand(len(x),2))
-
-    
+                                                  color=np.random.rand(len(x), 2))
