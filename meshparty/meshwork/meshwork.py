@@ -1,5 +1,6 @@
 try:
     from .. import trimesh_vtk
+
     _vtk_loaded = True
 except:
     _vtk_loaded = False
@@ -26,7 +27,10 @@ from . import meshwork_io
 
 class AnchoredAnnotationManager(object):
     def __init__(
-        self, anchor_mesh=None, filter_mesh=None, voxel_resolution=None,
+        self,
+        anchor_mesh=None,
+        filter_mesh=None,
+        voxel_resolution=None,
     ):
         """Collection of dataframes anchored to a common mesh and filter.
 
@@ -139,6 +143,9 @@ class AnchoredAnnotationManager(object):
             raise ValueError(
                 "Table name already taken. Overwrite or choose a different name."
             )
+        else:
+            self.remove_annotations(name)
+
         if voxel_resolution is None:
             voxel_resolution = self.voxel_resolution
 
@@ -218,11 +225,13 @@ class AnchoredAnnotation(object):
             if isinstance(data, np.ndarray):
                 data = data.tolist()
             if point_column is None:
-                point_column = 'position'
+                point_column = "position"
             data = pd.DataFrame({point_column: data})
         elif mask == True:
-            data = pd.DataFrame({'mesh_index': data.ravel()})
-            index_column = 'mesh_index'
+            if isinstance(data, np.ndarray):
+                data = data.ravel()
+            index_column = "mesh_index"
+            data = pd.DataFrame({index_column: data})
 
         self._name = name
         self._data = data.reset_index()
@@ -237,7 +246,7 @@ class AnchoredAnnotation(object):
             defined_index = True
         self._defined_index = defined_index
         self._index_column_base = index_column
-        self._index_column_filt = f'{index_column}_filt'
+        self._index_column_filt = f"{index_column}_filt"
 
         # Initalize to -1 so the column exists
         self._data[self._index_column_base] = -1
@@ -246,7 +255,8 @@ class AnchoredAnnotation(object):
         if self._defined_index:
             if mesh is not None and anchor_to_mesh is True:
                 self._data[self._index_column_base] = mesh.map_indices_to_unmasked(
-                    data[index_column])
+                    data[index_column]
+                )
                 self._data[self._index_column_filt] = data[index_column]
 
         if self._defined_index:
@@ -359,6 +369,18 @@ class AnchoredAnnotation(object):
             return None
 
     @property
+    def skel_index(self):
+        return self.mesh_index.to_skel_index
+
+    @property
+    def mesh_mask(self):
+        return self.mesh_index.to_mesh_mask
+
+    @property
+    def skel_mask(self):
+        return self.mesh_index.to_skel_mask
+
+    @property
     def _mesh_index_base(self):
         return self._data[self._index_column_base].values
 
@@ -381,8 +403,7 @@ class AnchoredAnnotation(object):
         self._filter_mesh = self._anchor_mesh
 
     def _filter_data(self, filter_mesh):
-        """Get the subset of data points that are associated with the mesh
-        """
+        """Get the subset of data points that are associated with the mesh"""
         if self._anchored:
             self._data[self._mask_column] = filter_mesh.node_mask[self._mesh_index_base]
             self._data[
@@ -424,8 +445,7 @@ class AnchoredAnnotation(object):
         return _FilterQueryResponse(row_filter)
 
     def _filter_query(self, node_mask):
-        """Returns the data contained with a given filter without changing any indexing.
-        """
+        """Returns the data contained with a given filter without changing any indexing."""
         node_mask_base = self._filter_mesh.map_boolean_to_unmasked(node_mask)
         if self._anchored:
             keep_rows = node_mask_base[self._mesh_index_base]
@@ -512,8 +532,7 @@ class Meshwork(object):
 
     @property
     def seg_id(self):
-        """Segmentation id for the object
-        """
+        """Segmentation id for the object"""
         return self._seg_id
 
     @property
@@ -539,8 +558,7 @@ class Meshwork(object):
 
     @property
     def MeshIndex(self):
-        """Numpy array-like object for mesh indices with handy conversion features
-        """
+        """Numpy array-like object for mesh indices with handy conversion features"""
         if self._MeshIndex is None:
             self._recompute_indices()
         return self._MeshIndex
@@ -557,8 +575,7 @@ class Meshwork(object):
 
     @property
     def SkeletonIndex(self):
-        """Numpy array-like object for skeleton indices with handy conversion features
-        """
+        """Numpy array-like object for skeleton indices with handy conversion features"""
         if self._SkeletonIndex is None:
             self._recompute_indices()
         return self._SkeletonIndex
@@ -582,14 +599,12 @@ class Meshwork(object):
 
     @property
     def mesh(self):
-        """Copy of the neuronal mesh
-        """
+        """Copy of the neuronal mesh"""
         return self._mesh
 
     @property
     def mesh_mask(self):
-        """The mesh mask, a boolean array the length of the number of mesh vertices.
-        """
+        """The mesh mask, a boolean array the length of the number of mesh vertices."""
         return self.mesh.node_mask
 
     @property
@@ -635,10 +650,8 @@ class Meshwork(object):
         if self._original_mesh_data is not None:
             self._anno.remove_filter()
 
-            vs, fs, es, nm, vxsc = decompress_mesh_data(
-                *self._original_mesh_data)
-            self._mesh = Mesh(vs, fs, link_edges=es,
-                              node_mask=nm, voxel_scaling=vxsc)
+            vs, fs, es, nm, vxsc = decompress_mesh_data(*self._original_mesh_data)
+            self._mesh = Mesh(vs, fs, link_edges=es, node_mask=nm, voxel_scaling=vxsc)
 
             self._original_mesh_data = None
             if self.skeleton is not None:
@@ -654,8 +667,7 @@ class Meshwork(object):
 
     @property
     def anno(self):
-        """AnchoredAnnotationManager associated with the anchor mesh
-        """
+        """AnchoredAnnotationManager associated with the anchor mesh"""
         return self._anno
 
     def add_annotations(
@@ -687,10 +699,10 @@ class Meshwork(object):
         point_column : str or None, optional
             Column name holding 3-element point position in voxel units. Must be specified for anchored annotations.
         max_distance : numeric, optional
-            Maximum distance between annotation point and mesh vertex to connect. If a row is 
+            Maximum distance between annotation point and mesh vertex to connect. If a row is
             farther than this distance, it is silently filtered out of the annotation data. By default, np.inf.
         index_column : str or None, optional
-            If mesh indices are already computed, entries here are used instead of closest-distance. 
+            If mesh indices are already computed, entries here are used instead of closest-distance.
         overwrite : bool, optional
             If True, overwrite an existing annotation with the same name.
         """
@@ -703,7 +715,7 @@ class Meshwork(object):
             point_column=point_column,
             max_distance=max_distance,
             index_column=index_column,
-            overwrite=overwrite
+            overwrite=overwrite,
         )
 
     def remove_annotations(self, name):
@@ -781,10 +793,8 @@ class Meshwork(object):
         from meshparty.skeletonize import skeletonize_mesh
 
         if self._original_mesh_data is not None:
-            vs, fs, es, nm, vxsc = decompress_mesh_data(
-                *self._original_mesh_data)
-            mesh_to_sk = Mesh(vs, fs, link_edges=es,
-                              node_mask=nm, voxel_scaling=vxsc)
+            vs, fs, es, nm, vxsc = decompress_mesh_data(*self._original_mesh_data)
+            mesh_to_sk = Mesh(vs, fs, link_edges=es, node_mask=nm, voxel_scaling=vxsc)
         else:
             mesh_to_sk = self.mesh
 
@@ -835,8 +845,7 @@ class Meshwork(object):
         return np.flatnonzero(self._skind_to_mind_mask(skinds))
 
     def _skind_regions(self, skinds):
-        out = in1d_items(
-            self.skeleton.mesh_to_skel_map[self.mesh.node_mask], skinds)
+        out = in1d_items(self.skeleton.mesh_to_skel_map[self.mesh.node_mask], skinds)
         return out
 
     def _skind_region_first(self, skinds):
@@ -867,64 +876,55 @@ class Meshwork(object):
     @property
     @OnlyIfSkeleton.exists
     def branch_points_skel(self):
-        """Skeleton index of branch points
-        """
+        """Skeleton index of branch points"""
         return self.SkeletonIndex(self.skeleton.branch_points)
 
     @property
     @OnlyIfSkeleton.exists
     def branch_points_region(self):
-        """List of arrays of all mesh indices associated with each branch point.
-        """
+        """List of arrays of all mesh indices associated with each branch point."""
         return self.branch_points_skel.to_mesh_region
 
     @property
     @OnlyIfSkeleton.exists
     def branch_points(self):
-        """Array with one mesh point per skeleton branch point.
-        """
+        """Array with one mesh point per skeleton branch point."""
         return self.branch_points_skel.to_mesh_region_point
 
     @property
     @OnlyIfSkeleton.exists
     def end_points_skel(self):
-        """Skeleton index of each end point
-        """
+        """Skeleton index of each end point"""
         return self.SkeletonIndex(self.skeleton.end_points)
 
     @property
     @OnlyIfSkeleton.exists
     def end_points(self):
-        """Array with one mesh point per skeleton end point.
-        """
+        """Array with one mesh point per skeleton end point."""
         return self.end_points_skel.to_mesh_region_point
 
     @property
     @OnlyIfSkeleton.exists
     def end_points_region(self):
-        """List of arrays of all mesh indices associated with each end point.
-        """
+        """List of arrays of all mesh indices associated with each end point."""
         return self.end_points_skel.to_mesh_region
 
     @property
     @OnlyIfSkeleton.exists
     def root_skel(self):
-        """Skeleton index of the root node (as a single element array)
-        """
+        """Skeleton index of the root node (as a single element array)"""
         return self.SkeletonIndex([self.skeleton.root])
 
     @property
     @OnlyIfSkeleton.exists
     def root_region(self):
-        """Array of all mesh indices associated with the root node.
-        """
+        """Array of all mesh indices associated with the root node."""
         return self.root_skel.to_mesh_region[0]
 
     @property
     @OnlyIfSkeleton.exists
     def root(self):
-        """Mesh index of one (arbitrary) point associated with the root node.
-        """
+        """Mesh index of one (arbitrary) point associated with the root node."""
         return self.root_skel.to_mesh_region_point[0]
 
     @OnlyIfSkeleton.exists
@@ -969,7 +969,7 @@ class Meshwork(object):
 
         Returns
         -------
-        list 
+        list
             List of arrays of child indices in the desired form
         """
         if np.isscalar(mesh_inds):
@@ -986,7 +986,7 @@ class Meshwork(object):
 
     @OnlyIfSkeleton.exists
     def jump_proximal(self, ind, include_initial=False, hops=1):
-        """ Find the next branch point (or root) towards root from a given index.
+        """Find the next branch point (or root) towards root from a given index.
 
         Parameters
         ----------
@@ -1020,12 +1020,12 @@ class Meshwork(object):
 
     @OnlyIfSkeleton.exists
     def jump_distal(self, ind):
-        """Finds the next topologically interesting (branch or end point) away from root starting from an initial mesh index. 
+        """Finds the next topologically interesting (branch or end point) away from root starting from an initial mesh index.
 
         Parameters
         ----------
         ind : Mesh index
-            Index of the initial mesh to use for 
+            Index of the initial mesh to use for
 
         Returns
         -------
@@ -1034,7 +1034,9 @@ class Meshwork(object):
         """
         ind = self._convert_to_meshindex(ind)
         skind = ind.to_skel_index
-        if skind in np.concatenate((self.skeleton.end_points, self.skeleton.branch_points)):
+        if skind in np.concatenate(
+            (self.skeleton.end_points, self.skeleton.branch_points)
+        ):
             return ind  # If it's an end point, return immediately
 
         d = sparse.csgraph.dijkstra(
@@ -1042,9 +1044,7 @@ class Meshwork(object):
         )
 
         topo_pts = self.skeleton.topo_points
-        proximal_pt = topo_pts[
-            np.argmin(d[0, topo_pts])
-        ]
+        proximal_pt = topo_pts[np.argmin(d[0, topo_pts])]
         return self.SkeletonIndex(proximal_pt).to_mesh_region_point
 
     @OnlyIfSkeleton.exists
@@ -1074,7 +1074,7 @@ class Meshwork(object):
 
         Parameters
         ----------
-        mesh_index : int or array-like 
+        mesh_index : int or array-like
             Mesh index or collection of mesh indices
         return_as_skel : bool, optional
             If True, returns downstream indices as SkeletonIndex. Default is False.
@@ -1091,8 +1091,7 @@ class Meshwork(object):
         else:
             use_scalar = False
         mesh_index = self._convert_to_meshindex(mesh_index)
-        skinds_downstream = self.skeleton.downstream_nodes(
-            mesh_index.to_skel_index)
+        skinds_downstream = self.skeleton.downstream_nodes(mesh_index.to_skel_index)
         if return_as_skel:
             return skinds_downstream
         minds_downstream = []
@@ -1183,7 +1182,7 @@ class Meshwork(object):
         ind = self._convert_to_meshindex(ind)
 
         if ind in self.root_region:
-            raise ValueError('Index is in root, branch is not defined')
+            raise ValueError("Index is in root, branch is not defined")
 
         skind = ind.to_skel_index
         if extend_to_root:
@@ -1193,11 +1192,12 @@ class Meshwork(object):
 
         ptb = self.path_between(ind, base_ind, return_as_skel=True)
         source_ind = self.SkeletonIndex(ptb[-2])
-        return self.downstream_of(source_ind.to_mesh_region_point[0], return_as_skel=return_as_skel)
+        return self.downstream_of(
+            source_ind.to_mesh_region_point[0], return_as_skel=return_as_skel
+        )
 
     def _distance_between(self, inds_source, inds_target, graph, squeeze):
-        ds = sparse.csgraph.dijkstra(
-            graph, directed=False, indices=inds_source)
+        ds = sparse.csgraph.dijkstra(graph, directed=False, indices=inds_source)
         if squeeze:
             return ds[:, inds_target].squeeze()
         else:
@@ -1205,7 +1205,7 @@ class Meshwork(object):
 
     @OnlyIfSkeleton.exists
     def distance_between(self, inds_source, inds_target, along_path=True, squeeze=True):
-        """Get distance matrix between source and target mesh indices along the object 
+        """Get distance matrix between source and target mesh indices along the object
 
         Parameters
         ----------
@@ -1216,7 +1216,7 @@ class Meshwork(object):
         along_path : bool, optional
             If True (default), use the skeleton
         squeeze : bool, optional
-            If True (default), squeezes singlet dimensions of the distance matrix. 
+            If True (default), squeezes singlet dimensions of the distance matrix.
         Returns
         -------
         array
@@ -1333,8 +1333,8 @@ class Meshwork(object):
 
         Returns
         -------
-        path_length : float 
-            Path length in mesh units. 
+        path_length : float
+            Path length in mesh units.
         """
         if inds is None:
             return self.skeleton.path_length()
@@ -1347,7 +1347,12 @@ class Meshwork(object):
 
     @OnlyIfSkeleton.exists
     def linear_density(
-        self, inds, width, weight=None, normalize=True, exclude_root=False,
+        self,
+        inds,
+        width,
+        weight=None,
+        normalize=True,
+        exclude_root=False,
     ):
         """Compute a sliding window average linear density of points across the object
 
@@ -1388,8 +1393,7 @@ class Meshwork(object):
         if normalize:
             if exclude_root:
                 g = self.skeleton.cut_graph(
-                    self.skeleton.child_nodes([self.skeleton.root])[
-                        0], directed=False
+                    self.skeleton.child_nodes([self.skeleton.root])[0], directed=False
                 )
                 len_per = np.array(g.sum(axis=1) / 2).ravel()
             else:
@@ -1415,6 +1419,7 @@ class Meshwork(object):
                 return func(*args, **kwargs)
             else:
                 return None
+
         return wrapper
 
     @requires_vtk
@@ -1484,8 +1489,7 @@ def load_meshwork(filename):
         mesh,
         skeleton=skel,
         seg_id=meta.get("seg_id", None),
-        voxel_resolution=meta.get(
-            "voxel_resolution", DEFAULT_VOXEL_RESOLUTION),
+        voxel_resolution=meta.get("voxel_resolution", DEFAULT_VOXEL_RESOLUTION),
     )
     for name, data in annos.items():
         mw.add_annotations(
