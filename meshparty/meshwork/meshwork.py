@@ -1458,7 +1458,7 @@ class Meshwork(object):
     # Saving #
     ##########
 
-    def save_meshwork(self, filename, overwrite=False,driver=None, **driver_kwargs):
+    def save_meshwork(self, filename, overwrite=False, driver=None, **driver_kwargs):
         """Save meshwork to hdf5 file.
 
         Parameters
