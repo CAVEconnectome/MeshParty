@@ -10,8 +10,8 @@ import warnings
 warnings.simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
 
 
-def save_meshwork_metadata(filename, mw):
-    with h5py.File(filename, "a") as f:
+def save_meshwork_metadata(filename, mw, driver=None, **driver_kwargs):
+    with h5py.File(filename, "a", driver=driver, **driver_kwargs) as f:
         f.attrs["voxel_resolution"] = mw.anno.voxel_resolution
         if mw.seg_id is not None:
             f.attrs["seg_id"] = mw.seg_id
@@ -25,7 +25,7 @@ def load_meshwork_metadata(filename):
     return meta
 
 
-def save_meshwork_mesh(filename, mw):
+def save_meshwork_mesh(filename, mw, driver=None, **driver_kwargs):  
     node_mask = mw.mesh_mask
     if mw._original_mesh_data is not None:
         vs, fs, es, nm, vxsc = decompress_mesh_data(*mw._original_mesh_data)
@@ -33,7 +33,7 @@ def save_meshwork_mesh(filename, mw):
     else:
         mesh = mw.mesh
 
-    with h5py.File(filename, "a") as f:
+    with h5py.File(filename, "a", driver=driver, **driver_kwargs) as f:
         f.create_group("mesh")
         f.create_dataset("mesh/vertices", data=mesh.vertices,
                          compression="gzip")
@@ -76,12 +76,12 @@ def load_meshwork_mesh(filename):
     )
 
 
-def save_meshwork_skeleton(filename, mw):
+def save_meshwork_skeleton(filename, mw, driver=None, **driver_kwargs):
     if mw.skeleton is None:
         return
 
     sk = mw.skeleton.reset_mask()
-    with h5py.File(filename, "a") as f:
+    with h5py.File(filename, "a", driver=driver, **driver_kwargs) as f:
         f.create_group("skeleton")
         f.create_dataset("skeleton/vertices",
                          data=sk.vertices, compression="gzip")
@@ -98,7 +98,7 @@ def save_meshwork_skeleton(filename, mw):
                 "skeleton/mesh_index", data=sk.mesh_index, compression="gzip"
             )
         if sk.voxel_scaling is not None:
-            f["skeleton"].attrs["voxel_scaling"] = mesh.voxel_scaling
+            f["skeleton"].attrs["voxel_scaling"] = mw.mesh.voxel_scaling
 
 
 def load_meshwork_skeleton(filename):
@@ -131,10 +131,10 @@ def load_meshwork_skeleton(filename):
         )
 
 
-def save_meshwork_annotations(filename, mw):
+def save_meshwork_annotations(filename, mw, driver=None, **driver_kwargs):
     annos = mw.anno
     for table_name in annos.table_names:
-        with h5py.File(filename, "a") as f:
+        with h5py.File(filename, "a", driver=driver, **driver_kwargs) as f:
             dset = f.create_group(f"annotations/{table_name}")
             anno = annos[table_name]
             dset.attrs["anchor_to_mesh"] = int(anno.anchored)
@@ -178,20 +178,20 @@ def load_meshwork_annotations(filename):
     return annotation_dfs
 
 
-def _save_meshwork(filename, mw, overwrite=False):
+def _save_meshwork(filename, mw, overwrite=False, driver=None, **driver_kwargs):
     if os.path.exists(filename):
         if overwrite is False:
             raise FileExistsError()
         else:
             print(f"\tDeleting existing data in {filename}...")
-            with h5py.File(filename, "r+") as f:
+            with h5py.File(filename, "r+", driver=driver, **driver_kwargs) as f:
                 for d in f.keys():
                     del f[d]
 
-    save_meshwork_metadata(filename, mw)
-    save_meshwork_mesh(filename, mw)
-    save_meshwork_skeleton(filename, mw)
-    save_meshwork_annotations(filename, mw)
+    save_meshwork_metadata(filename, mw, driver=driver, **driver_kwargs)
+    save_meshwork_mesh(filename, mw, driver=driver, **driver_kwargs)
+    save_meshwork_skeleton(filename, mw, driver=driver, **driver_kwargs)
+    save_meshwork_annotations(filename, mw, driver=driver, **driver_kwargs)
 
 
 def _load_meshwork(filename):
