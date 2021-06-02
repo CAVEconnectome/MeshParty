@@ -1458,7 +1458,7 @@ class Meshwork(object):
     # Saving #
     ##########
 
-    def save_meshwork(self, filename, overwrite=False):
+    def save_meshwork(self, filename, overwrite=False,driver=None, **driver_kwargs):
         """Save meshwork to hdf5 file.
 
         Parameters
@@ -1468,7 +1468,8 @@ class Meshwork(object):
         overwrite : bool, optional
             If True, overwrites an existing file. Default is False.
         """
-        meshwork_io._save_meshwork(filename, self, overwrite=overwrite)
+        meshwork_io._save_meshwork(filename, self, overwrite=overwrite,
+                                   driver=driver, **driver_kwargs)
 
 
 def load_meshwork(filename):
