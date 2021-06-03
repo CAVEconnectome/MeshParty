@@ -12,6 +12,7 @@ vtk<9
 shapely
 imageio
 pandas
+orjson
 blosc
 numba
 tables
