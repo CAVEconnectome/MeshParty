@@ -1,11 +1,14 @@
 import os
 import h5py
 import orjson
+import json
 
-# from .utils_io import NumpyEncoder
+from .utils_io import NumpyEncoder
 import numpy as np
 from meshparty import skeleton
 from dataclasses import asdict
+
+FILE_VERSION = 2
 
 
 def write_skeleton_h5(sk, filename, overwrite=False):
@@ -79,6 +82,8 @@ def write_skeleton_h5_by_part(
         else:
             return
     with h5py.File(filename, "w") as f:
+        f.attrs["file_version"] = FILE_VERSION
+
         f.create_dataset("vertices", data=vertices, compression="gzip")
         f.create_dataset("edges", data=edges, compression="gzip")
         f.create_dataset(
@@ -100,9 +105,7 @@ def write_skeleton_h5_by_part(
 def _write_dict_to_group(f, group_name, data_dict):
     d_grp = f.create_group(group_name)
     for d_name, d_data in data_dict.items():
-        d_grp.create_dataset(
-            d_name, data=orjson.dumps(d_data, option=orjson.OPT_SERIALIZE_NUMPY)
-        )
+        d_grp.create_dataset(d_name, data=json.dumps(d_data, cls=NumpyEncoder))
 
 
 def read_skeleton_h5_by_part(filename):
@@ -151,8 +154,8 @@ def read_skeleton_h5_by_part(filename):
         vertex_properties = {}
         if "vertex_properties" in f.keys():
             for vp_key in f["vertex_properties"].keys():
-                vertex_properties[vp_key] = orjson.loads(
-                    f["vertex_properties"][vp_key][()]
+                vertex_properties[vp_key] = json.loads(
+                    f["vertex_properties"][vp_key][()], object_hook=_convert_keys_to_int
                 )
 
         if "meta" in f.keys():
