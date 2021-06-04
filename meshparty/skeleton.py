@@ -1,7 +1,7 @@
 import numpy as np
 from meshparty import utils
 from scipy import spatial, sparse
-from dataclasses import dataclass, fields, asdict
+from dataclasses import dataclass, fields, asdict, make_dataclass
 
 try:
     from pykdtree.kdtree import KDTree as pyKDTree
@@ -9,6 +9,14 @@ except:
     pyKDTree = spatial.cKDTree
 from meshparty import skeleton_io
 from collections.abc import Iterable
+
+
+def _metadata_from_dict(
+    meta_dict,
+    dataclass_name="MetaMetadata",
+):
+    meta = make_dataclass(dataclass_name, fields=meta_dict.keys())
+    return meta(**meta_dict)
 
 
 @dataclass
@@ -32,11 +40,33 @@ class SkeletonMetadata:
     collapse_params: dict = None
     timestamp: float = None
     skeleton_type: str = None
+    meta: object = None
 
-    _extra_fields = ["root_id", "timestamp", "skeleton_type"]
+    # Fields used for skeletonization
+    _skeletonize_fields = [
+        "soma_radius",
+        "collapse_soma",
+        "collapse_function",
+        "invalidation_d",
+        "smooth_vertices",
+        "compute_radius",
+        "shape_function",
+        "smooth_iterations",
+        "smooth_neighborhood",
+        "smooth_r",
+        "cc_vertex_thres",
+        "remove_zero_length_edges",
+        "collapse_params",
+    ]
 
     def __init__(self, **kwargs):
         names = [f.name for f in fields(self)]
+
+        if kwargs.get("meta") is not None:
+            setattr(
+                self, "meta", _metadata_from_dict(kwargs.pop("meta"), "MetaMetadata")
+            )
+
         for k, v in kwargs.items():
             if k in names:
                 if isinstance(v, np.ndarray):
@@ -45,7 +75,19 @@ class SkeletonMetadata:
 
     def skeletonize_kwargs(self):
         params = asdict(self)
-        for k in self._extra_fields:
+
+        # reassemble soma point into list
+        soma_pt = [
+            params.pop("soma_pt_x"),
+            params.pop("soma_pt_y"),
+            params.pop("soma_pt_z"),
+        ]
+        if soma_pt[0] is not None:
+            params["soma_pt"] = soma_pt
+        else:
+            params["soma_pt"] = None
+
+        for k in self._skeletonize_fields:
             params.pop(k)
         return params
 
