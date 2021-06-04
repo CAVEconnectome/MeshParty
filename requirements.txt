@@ -16,3 +16,4 @@ orjson
 blosc
 numba
 tables
+dataclasses
