@@ -6,7 +6,7 @@ scikit-learn
 networkx
 multiwrapper
 cloud-volume>=1.16.0
-trimesh>=3.0.14
+trimesh[easy]>=3.0.14
 pymeshfix>=0.12.3
 vtk
 shapely
