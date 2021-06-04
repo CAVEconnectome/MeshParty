@@ -237,9 +237,8 @@ def _save_meshwork(filename, mw, overwrite=False, version=LATEST_VERSION):
                 raise FileExistsError()
             else:
                 print(f"\tDeleting existing data in {filename}...")
-                with h5py.File(filename, "r+") as f:
-                    for d in f.keys():
-                        del f[d]
+                with h5py.File(filename, "w") as f:
+                    pass
 
     save_meshwork_metadata(filename, mw, version=version)
     save_meshwork_mesh(filename, mw, version=version)
