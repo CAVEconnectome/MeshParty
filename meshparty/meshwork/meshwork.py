@@ -810,6 +810,7 @@ class Meshwork(object):
                 shape_function=shape_function,
                 collapse_function=collapse_function,
                 collapse_params=collapse_params,
+                meta={"root_id": self.seg_id},
             )
             self._reset_indices()
         else:

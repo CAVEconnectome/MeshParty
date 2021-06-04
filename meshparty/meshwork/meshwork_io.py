@@ -7,6 +7,7 @@ import orjson
 import pandas as pd
 import warnings
 import numpy as np
+from dataclasses import asdict
 
 warnings.simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
 
@@ -91,6 +92,13 @@ def save_meshwork_skeleton(filename, mw, version=LATEST_VERSION):
         f.create_dataset("skeleton/edges", data=sk.edges, compression="gzip")
         f.create_dataset("skeleton/root", data=sk.root)
         f.create_dataset(
+            "skeleton/meta",
+            data=np.string_(
+                orjson.dumps(asdict(sk.meta), option=orjson.OPT_SERIALIZE_NUMPY)
+            ),
+        )
+
+        f.create_dataset(
             "skeleton/mesh_to_skel_map", data=sk.mesh_to_skel_map, compression="gzip"
         )
         if sk.radius is not None:
@@ -118,6 +126,11 @@ def load_meshwork_skeleton(filename, version=NULL_VERSION):
             radius = None
         voxel_scaling = f["skeleton"].attrs.get("voxel_scaling", None)
 
+        if "meta" in f["skeleton"].keys():
+            meta = orjson.loads(f["skeleton/meta"][()].tobytes())
+        else:
+            meta = {}
+
         if "mesh_index" in f["skeleton"].keys():
             mesh_index = f["skeleton/mesh_index"][()]
         else:
@@ -130,6 +143,7 @@ def load_meshwork_skeleton(filename, version=NULL_VERSION):
             mesh_to_skel_map=mesh_to_skel_map,
             mesh_index=mesh_index,
             voxel_scaling=voxel_scaling,
+            meta=meta,
         )
 
 
@@ -197,7 +211,6 @@ def load_meshwork_annotations(filename, version=NULL_VERSION):
     annotation_dfs = {}
     for table_name in table_names:
         annotation_dfs[table_name] = {}
-        # df = pd.read_hdf(filename, f"annotations/{table_name}/data")
         annotation_dfs[table_name]["data"] = anno_load_function[version](
             filename, table_name
         )

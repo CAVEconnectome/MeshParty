@@ -1,9 +1,11 @@
 import os
 import h5py
-import json
-from .utils_io import NumpyEncoder
+import orjson
+
+# from .utils_io import NumpyEncoder
 import numpy as np
 from meshparty import skeleton
+from dataclasses import asdict
 
 
 def write_skeleton_h5(sk, filename, overwrite=False):
@@ -19,10 +21,14 @@ def write_skeleton_h5(sk, filename, overwrite=False):
     overwrite : bool
          Allows overwriting.(default False).
     """
+    if not hasattr(sk, "meta"):
+        sk.meta = {}
+
     write_skeleton_h5_by_part(
         filename,
         vertices=sk.vertices,
         edges=sk.edges,
+        meta=sk.meta,
         mesh_to_skel_map=sk.mesh_to_skel_map,
         vertex_properties=sk.vertex_properties,
         root=sk.root,
@@ -34,6 +40,7 @@ def write_skeleton_h5_by_part(
     filename,
     vertices,
     edges,
+    meta,
     mesh_to_skel_map=None,
     vertex_properties={},
     root=None,
@@ -74,6 +81,12 @@ def write_skeleton_h5_by_part(
     with h5py.File(filename, "w") as f:
         f.create_dataset("vertices", data=vertices, compression="gzip")
         f.create_dataset("edges", data=edges, compression="gzip")
+        f.create_dataset(
+            "meta",
+            data=np.string_(
+                orjson.dumps(asdict(meta), option=orjson.OPT_SERIALIZE_NUMPY)
+            ),
+        )
         if mesh_to_skel_map is not None:
             f.create_dataset(
                 "mesh_to_skel_map", data=mesh_to_skel_map, compression="gzip"
@@ -87,8 +100,9 @@ def write_skeleton_h5_by_part(
 def _write_dict_to_group(f, group_name, data_dict):
     d_grp = f.create_group(group_name)
     for d_name, d_data in data_dict.items():
-        is_np = type(d_data) is np.ndarray
-        d_grp.create_dataset(d_name, data=json.dumps(d_data, cls=NumpyEncoder))
+        d_grp.create_dataset(
+            d_name, data=orjson.dumps(d_data, option=orjson.OPT_SERIALIZE_NUMPY)
+        )
 
 
 def read_skeleton_h5_by_part(filename):
@@ -137,16 +151,22 @@ def read_skeleton_h5_by_part(filename):
         vertex_properties = {}
         if "vertex_properties" in f.keys():
             for vp_key in f["vertex_properties"].keys():
-                vertex_properties[vp_key] = json.loads(
-                    f["vertex_properties"][vp_key][()], object_hook=_convert_keys_to_int
+                vertex_properties[vp_key] = orjson.loads(
+                    f["vertex_properties"][vp_key][()]
                 )
+
+        if "meta" in f.keys():
+            dat = f["meta"][()].tobytes()
+            meta = orjson.loads(dat)
+        else:
+            meta = {}
 
         if "root" in f.keys():
             root = f["root"][()]
         else:
             root = None
 
-    return vertices, edges, mesh_to_skel_map, vertex_properties, root
+    return vertices, edges, meta, mesh_to_skel_map, vertex_properties, root
 
 
 def read_skeleton_h5(filename, remove_zero_length_edges=False):
@@ -169,6 +189,7 @@ def read_skeleton_h5(filename, remove_zero_length_edges=False):
     (
         vertices,
         edges,
+        meta,
         mesh_to_skel_map,
         vertex_properties,
         root,
@@ -180,6 +201,7 @@ def read_skeleton_h5(filename, remove_zero_length_edges=False):
         vertex_properties=vertex_properties,
         root=root,
         remove_zero_length_edges=remove_zero_length_edges,
+        meta=meta,
     )
 
 
