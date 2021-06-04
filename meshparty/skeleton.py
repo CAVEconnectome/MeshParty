@@ -44,6 +44,7 @@ class SkeletonMetadata:
 
     # Fields used for skeletonization
     _skeletonize_fields = [
+        "soma_pt",
         "soma_radius",
         "collapse_soma",
         "collapse_function",
@@ -54,7 +55,7 @@ class SkeletonMetadata:
         "smooth_iterations",
         "smooth_neighborhood",
         "smooth_r",
-        "cc_vertex_thres",
+        "cc_vertex_thresh",
         "remove_zero_length_edges",
         "collapse_params",
     ]
@@ -87,9 +88,20 @@ class SkeletonMetadata:
         else:
             params["soma_pt"] = None
 
-        for k in self._skeletonize_fields:
-            params.pop(k)
+        for k in list(params.keys()):
+            if k not in self._skeletonize_fields:
+                params.pop(k)
         return params
+
+    def update_metameta(self, metameta):
+        if self.meta is not None:
+            meta_dict = asdict(self.meta)
+        else:
+            meta_dict = {}
+
+        meta_dict.update(metameta)
+        setattr(self, "meta", _metadata_from_dict(meta_dict, "MetaMetadata"))
+        pass
 
 
 class StaticSkeleton:
