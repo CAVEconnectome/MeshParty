@@ -195,7 +195,8 @@ def save_meshwork_annotations(filename, mw, version=LATEST_VERSION):
             dset.attrs["max_distance"] = anno._max_distance
             dset.attrs["defined_index"] = int(anno._defined_index)
             if anno._defined_index is True:
-                dset.attrs["index_column"] = anno._index_column_base
+                dset.attrs["index_column"] = anno.index_column_original
+            
         anno_save_function[version](
             annos[table_name].data_original, table_name, filename
         )

@@ -234,7 +234,7 @@ class AnchoredAnnotation(object):
             data = pd.DataFrame({index_column: data})
 
         self._name = name
-        self._data = data.reset_index()
+        self._data = data.reset_index(drop=True)
         self._original_columns = data.columns
         self._max_distance = max_distance
 
@@ -257,7 +257,7 @@ class AnchoredAnnotation(object):
                 self._data[self._index_column_base] = mesh.map_indices_to_unmasked(
                     data[index_column]
                 )
-                self._data[self._index_column_filt] = data[index_column]
+                self._data[self._index_column_filt] = data[index_column].values
 
         if self._defined_index:
             self._orig_col_plus_index = list(self._original_columns)
@@ -308,6 +308,10 @@ class AnchoredAnnotation(object):
     @property
     def index_column(self):
         return self._index_column_filt
+
+    @property
+    def index_column_original(self):
+        return self._index_column_base
 
     @property
     def _is_valid(self):
