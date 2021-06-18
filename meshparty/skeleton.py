@@ -542,8 +542,8 @@ class Skeleton:
         """
         return self._seg_id
 
-    def set_seg_id(self, segid):
-        self._seg_id = segid
+    def set_seg_id(self, seg_id):
+        self._seg_id = seg_id
 
     @property
     def csgraph(self):

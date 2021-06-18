@@ -131,6 +131,8 @@ def read_skeleton_h5_by_part(filename):
         
         if 'creation_parameters' in f.keys():
             creation_parameters = json.loads(f['creation_parameters'][()])
+        else:
+            creation_parameters = None
 
         if 'root' in f.keys():
             root = f['root'][()]

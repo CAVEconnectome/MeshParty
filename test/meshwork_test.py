@@ -1,7 +1,5 @@
 import pytest
 import numpy as np
-import pandas as pd
-from basic_test import full_cell_mesh, full_cell_synapses, full_cell_soma_pt
 from meshparty import meshwork, mesh_filters
 
 
