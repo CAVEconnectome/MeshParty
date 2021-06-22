@@ -81,7 +81,7 @@ def save_meshwork_skeleton(filename, mw):
     if mw.skeleton is None:
         return
 
-    sk = mw.skeleton.reset_mask() # why reset mask?
+    sk = mw.skeleton.reset_mask() 
     with h5py.File(filename, "a") as f:
         f.create_group("skeleton")
         f.create_dataset("skeleton/vertices",
