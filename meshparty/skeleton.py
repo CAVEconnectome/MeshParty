@@ -1,14 +1,107 @@
 import numpy as np
 from meshparty import utils
 from scipy import spatial, sparse
+from dataclasses import dataclass, fields, asdict, make_dataclass
+
 try:
     from pykdtree.kdtree import KDTree as pyKDTree
 except:
     pyKDTree = spatial.cKDTree
-import json
 from meshparty import skeleton_io
 from collections.abc import Iterable
-from meshparty.trimesh_io import Mesh
+
+
+def _metadata_from_dict(
+    meta_dict,
+    dataclass_name="MetaMetadata",
+):
+    meta = make_dataclass(dataclass_name, fields=meta_dict.keys())
+    return meta(**meta_dict)
+
+
+@dataclass
+class SkeletonMetadata:
+    root_id: int = None
+    soma_pt_x: float = None
+    soma_pt_y: float = None
+    soma_pt_z: float = None
+    soma_radius: float = None
+    collapse_soma: bool = None
+    collapse_function: str = None
+    invalidation_d: float = None
+    smooth_vertices: bool = None
+    compute_radius: bool = None
+    shape_function: str = None
+    smooth_iterations: int = None
+    smooth_neighborhood: int = None
+    smooth_r: float = None
+    cc_vertex_thresh: int = None
+    remove_zero_length_edges: bool = None
+    collapse_params: dict = None
+    timestamp: float = None
+    skeleton_type: str = None
+    meta: object = None
+
+    # Fields used for skeletonization
+    _skeletonize_fields = [
+        "soma_pt",
+        "soma_radius",
+        "collapse_soma",
+        "collapse_function",
+        "invalidation_d",
+        "smooth_vertices",
+        "compute_radius",
+        "shape_function",
+        "smooth_iterations",
+        "smooth_neighborhood",
+        "smooth_r",
+        "cc_vertex_thresh",
+        "remove_zero_length_edges",
+        "collapse_params",
+    ]
+
+    def __init__(self, **kwargs):
+        names = [f.name for f in fields(self)]
+
+        if kwargs.get("meta") is not None:
+            setattr(
+                self, "meta", _metadata_from_dict(kwargs.pop("meta"), "MetaMetadata")
+            )
+
+        for k, v in kwargs.items():
+            if k in names:
+                if isinstance(v, np.ndarray):
+                    v = v.tolist()
+                setattr(self, k, v)
+
+    def skeletonize_kwargs(self):
+        params = asdict(self)
+
+        # reassemble soma point into list
+        soma_pt = [
+            params.pop("soma_pt_x"),
+            params.pop("soma_pt_y"),
+            params.pop("soma_pt_z"),
+        ]
+        if soma_pt[0] is not None:
+            params["soma_pt"] = soma_pt
+        else:
+            params["soma_pt"] = None
+
+        for k in list(params.keys()):
+            if k not in self._skeletonize_fields:
+                params.pop(k)
+        return params
+
+    def update_metameta(self, metameta):
+        if self.meta is not None:
+            meta_dict = asdict(self.meta)
+        else:
+            meta_dict = {}
+
+        meta_dict.update(metameta)
+        setattr(self, "meta", _metadata_from_dict(meta_dict, "MetaMetadata"))
+        pass
 
 
 class StaticSkeleton:
@@ -126,8 +219,7 @@ class StaticSkeleton:
             Should not often be set to True by a user.
         """
         if new_root > self.n_vertices:
-            raise ValueError(
-                "New root must correspond to a skeleton vertex index")
+            raise ValueError("New root must correspond to a skeleton vertex index")
         self._root = int(new_root)
         self._parent_node_array = np.full(self.n_vertices, None)
 
@@ -221,8 +313,7 @@ class StaticSkeleton:
 
     @property
     def distance_to_root(self):
-        """ np.array : N length array with the distance to the root node along the skeleton.
-        """
+        """np.array : N length array with the distance to the root node along the skeleton."""
         if self._distance_to_root is None:
             self._distance_to_root = sparse.csgraph.dijkstra(
                 self.csgraph, directed=False, indices=self.root
@@ -265,6 +356,7 @@ class Skeleton:
         voxel_scaling=None,
         remove_zero_length_edges=True,
         skeleton_index=None,
+        meta={},
     ):
 
         if remove_zero_length_edges:
@@ -313,8 +405,17 @@ class Skeleton:
         self._pykdtree = None
         self._reset_derived_properties_filtered()
         self.vertex_properties = vertex_properties
+
+        if isinstance(meta, SkeletonMetadata):
+            self._meta = meta
+        else:
+            self._meta = SkeletonMetadata(**meta)
         if node_mask is not None:
             self.apply_mask(node_mask, in_place=True)
+
+    @property
+    def meta(self):
+        return self._meta
 
     ###################
     # Mask properties #
@@ -346,6 +447,7 @@ class Skeleton:
             skeleton_index=self._SkeletonIndex,
             mesh_index=self._rooted.mesh_index,
             remove_zero_length_edges=False,
+            meta=self.meta,
         )
 
     def apply_mask(self, new_mask, in_place=False):
@@ -503,7 +605,7 @@ class Skeleton:
 
     @property
     def mesh_to_skel_map(self):
-        """ numpy.array : N_mesh length array giving the associated skeleton
+        """numpy.array : N_mesh length array giving the associated skeleton
         vertex for each mesh vertex"""
         if self._rooted.mesh_to_skel_map is None:
             return None
@@ -512,7 +614,7 @@ class Skeleton:
 
     @property
     def mesh_to_skel_map_base(self):
-        """ numpy.array : N_mesh length array giving the associated skeleton
+        """numpy.array : N_mesh length array giving the associated skeleton
         vertex for each mesh vertex"""
         if self._rooted.mesh_to_skel_map is None:
             return None
@@ -641,8 +743,7 @@ class Skeleton:
         return self._pykdtree
 
     def _single_path_length(self, path):
-        """Compute the length of a single path (assumed to be correct)
-        """
+        """Compute the length of a single path (assumed to be correct)"""
         path = np.unique(path)
         return np.sum(self.csgraph[:, path][path])
 
@@ -675,8 +776,7 @@ class Skeleton:
     ################################
 
     def _create_branch_and_end_points(self):
-        """Pre-compute branch and end points from the graph
-        """
+        """Pre-compute branch and end points from the graph"""
         n_children = np.sum(self.csgraph_binary > 0, axis=0).squeeze()
         self._branch_points = np.flatnonzero(n_children > 1)
         self._end_points = np.flatnonzero(n_children == 0)
@@ -711,8 +811,7 @@ class Skeleton:
 
     @property
     def end_points_undirected(self):
-        """End points without skeleton orientation, including root and disconnected components.
-        """
+        """End points without skeleton orientation, including root and disconnected components."""
         return self.SkeletonIndex(
             np.flatnonzero(np.sum(self.csgraph_binary_undirected, axis=0) == 1)
         )
@@ -745,7 +844,7 @@ class Skeleton:
 
     @property
     def segments(self):
-        """ list : A list of numpy.array indicies of segments, paths from each branch or
+        """list : A list of numpy.array indicies of segments, paths from each branch or
         end point (inclusive) to the next rootward branch/root point (exclusive), that
         cover the skeleton"""
         if self._segments is None:
@@ -754,7 +853,7 @@ class Skeleton:
 
     @property
     def segment_map(self):
-        """ np.array : N set of of indices between 0 and len(self.segments)-1, denoting
+        """np.array : N set of of indices between 0 and len(self.segments)-1, denoting
         which segment a given skeleton vertex is in.
         """
         if self._segment_map is None:
@@ -873,8 +972,7 @@ class Skeleton:
 
         cinds = []
         for vind in vinds:
-            cinds.append(self.SkeletonIndex(
-                self.edges[self.edges[:, 1] == vind, 0]))
+            cinds.append(self.SkeletonIndex(self.edges[self.edges[:, 1] == vind, 0]))
 
         if return_single:
             cinds = cinds[0]
@@ -885,8 +983,7 @@ class Skeleton:
     #####################
 
     def _compute_cover_paths(self):
-        """Compute the list of cover paths along the skeleton
-        """
+        """Compute the list of cover paths along the skeleton"""
         cover_paths = []
         seen = np.full(self.n_vertices, False)
         ep_order = np.argsort(self.distance_to_root[self.end_points])[::-1]
@@ -898,7 +995,7 @@ class Skeleton:
 
     @property
     def cover_paths(self):
-        """ list : List of numpy.array objects with self.n_end_points elements, each a rootward
+        """list : List of numpy.array objects with self.n_end_points elements, each a rootward
         path (ordered set of indices) starting from an endpoint and continuing until it reaches
         a point on a path earlier on the list. Paths are ordered by end point distance from root,
         starting with the most distal. When traversed from begining to end, gives the longest rootward
