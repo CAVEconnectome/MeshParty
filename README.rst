@@ -36,7 +36,7 @@ to make optional features of ray tracing and interaction with the PyChunkedGraph
 ::
 
     conda install pyembree
-    pip install annotationframeworkclient
+    pip install caveclient
     
 
 

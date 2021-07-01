@@ -31,12 +31,12 @@ import DracoPy
 from meshparty import utils, trimesh_repair
 
 try:
-    from annotationframeworkclient import infoservice
-    allow_framework_client = True
+    from caveclient import infoservice
+    allow_cave_client = True
 except ImportError:
     logging.warning(
-        "Need to pip install annotationframeworkclient to use dataset_name parameters")
-    allow_framework_client = False
+        "Need to pip install caveclient to use dataset_name parameters")
+    allow_cave_client = False
 
 
 class EmptyMaskException(Exception):
@@ -48,9 +48,9 @@ def _get_cv_path_from_info(dataset_name, server_address=None, segmentation_type=
     """Get the cloudvolume path from a dataset name. Segmentation type should be
        either `graphene` or `flat`.
     """
-    if allow_framework_client is False:
+    if allow_cave_client is False:
         logging.warning(
-            "Need to pip install annotationframeworkclient to use dataset_name parameters")
+            "Need to pip install caveclient to use dataset_name parameters")
         return None
 
     info = infoservice.InfoServiceClient(
@@ -1171,8 +1171,8 @@ class Mesh(trimesh.Trimesh):
             Defaults to 300.
         server_address: str or None, optional
             the server address to find the pcg endpoint (defaults to None)
-        client : annotationframeworkclient.FrameworkClient or None, optional
-            Framework client for a specific datastack. If provided, ingores datastack name and
+        client : caveclient.CAVEclient or None, optional
+            CAVE client for a specific datastack. If provided, ingores datastack name and
             server_address parameters. defaults to None
         verbose : bool, optional
             If True, provides more debugging statements, default is False
