@@ -228,9 +228,9 @@ def skeletonize_mesh(
         props["rs"] = rs
 
     sk_params = {
-        "soma_pt_x": soma_pt[0] if soma_pt is not None else None,
-        "soma_pt_y": soma_pt[1] if soma_pt is not None else None,
-        "soma_pt_z": soma_pt[2] if soma_pt is not None else None,
+        "soma_pt_x": soma_pt[0,0] if soma_pt is not None else None,
+        "soma_pt_y": soma_pt[0,1] if soma_pt is not None else None,
+        "soma_pt_z": soma_pt[0,2] if soma_pt is not None else None,
         "soma_radius": soma_radius,
         "collapse_soma": collapse_soma,
         "collapse_function": collapse_function,
