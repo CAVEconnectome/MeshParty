@@ -536,18 +536,22 @@ class MeshMeta(object):
         """np.array : 3 element vector to rescale mesh vertices"""
         return self._voxel_scaling
 
-    def _filename(self, seg_id):
+    def _filename(self, seg_id, lod=None):
         """ a method to define what path this seg_id will or is saved to
 
         Parameters
         ----------
         seg_id: np.uint64 or int
             the seg_id to get the filename for
+        lod: int or None
+            the level of detail oof the mesh
 
         """
         assert self.disk_cache_path is not None
-
-        return "%s/%d.h5" % (self.disk_cache_path, seg_id)
+        if lod is not None:
+            return "%s/%d_%d.h5" % (self.disk_cache_path, seg_id, lod)
+        else:
+            return "%s/%d.h5" % (self.disk_cache_path, seg_id)
 
     def mesh(self, filename=None, seg_id=None, cache_mesh=True,
              merge_large_components=False,
@@ -603,6 +607,9 @@ class MeshMeta(object):
             if filename is not None, and seg_id and cv_path are not both set
             then it doesn't know how to get your mesh
         """
+        if not isinstance(self.cv.mesh, ShardedMultiLevelPrecomputedMeshSource):
+            lod = None
+
         if voxel_scaling == 'default':
             voxel_scaling = self.voxel_scaling
 
@@ -620,11 +627,11 @@ class MeshMeta(object):
 
             if self.disk_cache_path is not None and \
                     overwrite_merge_large_components:
-                mesh.write_to_file(self._filename(seg_id))
+                mesh.write_to_file(self._filename(seg_id, lod=lod))
         else:
             if self.disk_cache_path is not None and force_download is False:
-                if os.path.exists(self._filename(seg_id)):
-                    mesh = self.mesh(filename=self._filename(seg_id),
+                if os.path.exists(self._filename(seg_id, lod=lod)):
+                    mesh = self.mesh(filename=self._filename(seg_id, lod=lod),
                                      cache_mesh=cache_mesh,
                                      merge_large_components=merge_large_components,
                                      overwrite_merge_large_components=overwrite_merge_large_components,
@@ -655,7 +662,7 @@ class MeshMeta(object):
 
                 if self.disk_cache_path is not None:
                     mesh.write_to_file(self._filename(
-                        seg_id), overwrite=force_download)
+                        seg_id, lod=lod), overwrite=force_download)
             else:
                 mesh = self._mesh_cache[seg_id]
 
