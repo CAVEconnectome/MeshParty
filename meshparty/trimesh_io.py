@@ -1,3 +1,4 @@
+import collections
 import numpy as np
 import h5py
 from scipy import spatial, sparse
@@ -16,6 +17,7 @@ import warnings
 import logging
 from functools import wraps
 import cloudvolume
+from cloudvolume.datasource.precomputed.mesh.multilod import ShardedMultiLevelPrecomputedMeshSource
 from multiwrapper import multiprocessing_utils as mu
 
 import trimesh
@@ -31,12 +33,12 @@ import DracoPy
 from meshparty import utils, trimesh_repair
 
 try:
-    from caveclient import infoservice
-    allow_cave_client = True
+    from annotationframeworkclient import infoservice
+    allow_framework_client = True
 except ImportError:
     logging.warning(
-        "Need to pip install caveclient to use dataset_name parameters")
-    allow_cave_client = False
+        "Need to pip install annotationframeworkclient to use dataset_name parameters")
+    allow_framework_client = False
 
 
 class EmptyMaskException(Exception):
@@ -48,9 +50,9 @@ def _get_cv_path_from_info(dataset_name, server_address=None, segmentation_type=
     """Get the cloudvolume path from a dataset name. Segmentation type should be
        either `graphene` or `flat`.
     """
-    if allow_cave_client is False:
+    if allow_framework_client is False:
         logging.warning(
-            "Need to pip install caveclient to use dataset_name parameters")
+            "Need to pip install annotationframeworkclient to use dataset_name parameters")
         return None
 
     info = infoservice.InfoServiceClient(
@@ -534,18 +536,22 @@ class MeshMeta(object):
         """np.array : 3 element vector to rescale mesh vertices"""
         return self._voxel_scaling
 
-    def _filename(self, seg_id):
+    def _filename(self, seg_id, lod=None):
         """ a method to define what path this seg_id will or is saved to
 
         Parameters
         ----------
         seg_id: np.uint64 or int
             the seg_id to get the filename for
+        lod: int or None
+            the level of detail oof the mesh
 
         """
         assert self.disk_cache_path is not None
-
-        return "%s/%d.h5" % (self.disk_cache_path, seg_id)
+        if lod is not None:
+            return "%s/%d_%d.h5" % (self.disk_cache_path, seg_id, lod)
+        else:
+            return "%s/%d.h5" % (self.disk_cache_path, seg_id)
 
     def mesh(self, filename=None, seg_id=None, cache_mesh=True,
              merge_large_components=False,
@@ -553,6 +559,7 @@ class MeshMeta(object):
              overwrite_merge_large_components=False,
              remove_duplicate_vertices=False,
              force_download=False,
+             lod=0,
              voxel_scaling='default'):
         """ Loads mesh either from cache, disk or google storage
 
@@ -581,6 +588,8 @@ class MeshMeta(object):
             if True: recalculate large components (default False)
         remove_duplicate_vertices: bool
             whether to bluntly removed duplicate vertices (default False)
+        lod: int
+            what level of detail to download, only relevent for multi-resolution meshes (default =0 )
         force_download: bool
             whether to force the mesh to be redownloaded from cloudvolume
         voxel_scaling: 3 element numeric or None
@@ -598,6 +607,9 @@ class MeshMeta(object):
             if filename is not None, and seg_id and cv_path are not both set
             then it doesn't know how to get your mesh
         """
+        if not isinstance(self.cv.mesh, ShardedMultiLevelPrecomputedMeshSource):
+            lod = None
+
         if voxel_scaling == 'default':
             voxel_scaling = self.voxel_scaling
 
@@ -615,11 +627,11 @@ class MeshMeta(object):
 
             if self.disk_cache_path is not None and \
                     overwrite_merge_large_components:
-                mesh.write_to_file(self._filename(seg_id))
+                mesh.write_to_file(self._filename(seg_id, lod=lod))
         else:
             if self.disk_cache_path is not None and force_download is False:
-                if os.path.exists(self._filename(seg_id)):
-                    mesh = self.mesh(filename=self._filename(seg_id),
+                if os.path.exists(self._filename(seg_id, lod=lod)):
+                    mesh = self.mesh(filename=self._filename(seg_id, lod=lod),
                                      cache_mesh=cache_mesh,
                                      merge_large_components=merge_large_components,
                                      overwrite_merge_large_components=overwrite_merge_large_components,
@@ -627,9 +639,13 @@ class MeshMeta(object):
                     return mesh
             assert (seg_id is not None and self.cv is not None)
             if seg_id not in self._mesh_cache or force_download is True:
-                cv_mesh_d = self.cv.mesh.get(
-                    seg_id,  remove_duplicate_vertices=remove_duplicate_vertices)
-                if type(cv_mesh_d) == dict:
+                
+                if isinstance(self.cv.mesh, ShardedMultiLevelPrecomputedMeshSource):
+                    cv_mesh_d = self.cv.mesh.get(seg_id, lod=lod)
+                else:
+                    cv_mesh_d = self.cv.mesh.get(
+                        seg_id,  remove_duplicate_vertices=remove_duplicate_vertices)
+                if isinstance(cv_mesh_d, (dict, collections.defaultdict)):
                     cv_mesh = cv_mesh_d[seg_id]
                 else:
                     cv_mesh = cv_mesh_d
@@ -639,13 +655,14 @@ class MeshMeta(object):
 
                 mesh = Mesh(vertices=cv_mesh.vertices,
                             faces=faces)
-
+                if isinstance(self.cv.mesh, ShardedMultiLevelPrecomputedMeshSource):
+                    mesh=mesh.process()
                 if cache_mesh and len(self._mesh_cache) < self.cache_size:
                     self._mesh_cache[seg_id] = mesh
 
                 if self.disk_cache_path is not None:
                     mesh.write_to_file(self._filename(
-                        seg_id), overwrite=force_download)
+                        seg_id, lod=lod), overwrite=force_download)
             else:
                 mesh = self._mesh_cache[seg_id]
 
@@ -1171,8 +1188,8 @@ class Mesh(trimesh.Trimesh):
             Defaults to 300.
         server_address: str or None, optional
             the server address to find the pcg endpoint (defaults to None)
-        client : caveclient.CAVEclient or None, optional
-            CAVE client for a specific datastack. If provided, ingores datastack name and
+        client : annotationframeworkclient.FrameworkClient or None, optional
+            Framework client for a specific datastack. If provided, ingores datastack name and
             server_address parameters. defaults to None
         verbose : bool, optional
             If True, provides more debugging statements, default is False
