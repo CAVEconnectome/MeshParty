@@ -1,2 +1,2 @@
-annotationframeworkclient>=0.2.0
+caveclient>=4.0.0
 pyembree

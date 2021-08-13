@@ -982,12 +982,15 @@ class Skeleton:
     # Cover Path Functions #
     #####################
 
-    def _compute_cover_paths(self):
+    def _compute_cover_paths(self, end_points=None):
         """Compute the list of cover paths along the skeleton"""
         cover_paths = []
         seen = np.full(self.n_vertices, False)
-        ep_order = np.argsort(self.distance_to_root[self.end_points])[::-1]
-        for ep in self.end_points[ep_order]:
+        if end_points is None:
+            end_points = self.end_points
+
+        ep_order = np.argsort(self.distance_to_root[end_points])[::-1]
+        for ep in end_points[ep_order]:
             ptr = np.array(self.path_to_root(ep))
             cover_paths.append(self.SkeletonIndex(ptr[~seen[ptr]]))
             seen[ptr] = True
@@ -1006,6 +1009,23 @@ class Skeleton:
         if self._cover_paths is None:
             self._cover_paths = self._compute_cover_paths()
         return self._cover_paths
+
+    def cover_paths_specific(self, end_points):
+        """Compute nonoverlapping paths from specified endpoints
+
+        Parameters
+        ----------
+            end_points : array-like
+                Array of skeleton vertices to use as end points
+
+        Returns
+        -------
+            array
+                List of cover paths using the specified end points. Note that this is not sorted in the same order
+                (or necessarily the same length) as specified end points.
+        """
+        paths = self._compute_cover_paths(end_points=end_points)
+        return [p for p in paths if len(p) > 0]
 
     ####################
     # Export functions #
