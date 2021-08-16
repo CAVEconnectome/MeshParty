@@ -124,6 +124,9 @@ def skeletonize_mesh(
     if root_index is not None and soma_pt is None:
         soma_pt = mesh.vertices[root_index]
 
+    if soma_pt is not None:
+        soma_pt = np.array(soma_pt).reshape(1, 3)
+
     rs = None
 
     if collapse_soma is True and soma_pt is not None:
@@ -133,7 +136,6 @@ def skeletonize_mesh(
             mesh_index=mesh.map_indices_to_unmasked(orig_skel_index),
             mesh_to_skel_map=skel_map,
         )
-        soma_pt = np.array(soma_pt).reshape(1, 3)
         _, close_ind = temp_sk.kdtree.query(soma_pt)
         temp_sk.reroot(close_ind[0])
 
@@ -228,9 +230,9 @@ def skeletonize_mesh(
         props["rs"] = rs
 
     sk_params = {
-        "soma_pt_x": soma_pt[0,0] if soma_pt is not None else None,
-        "soma_pt_y": soma_pt[0,1] if soma_pt is not None else None,
-        "soma_pt_z": soma_pt[0,2] if soma_pt is not None else None,
+        "soma_pt_x": soma_pt[0, 0] if soma_pt is not None else None,
+        "soma_pt_y": soma_pt[0, 1] if soma_pt is not None else None,
+        "soma_pt_z": soma_pt[0, 2] if soma_pt is not None else None,
         "soma_radius": soma_radius,
         "collapse_soma": collapse_soma,
         "collapse_function": collapse_function,
