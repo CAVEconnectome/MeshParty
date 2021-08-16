@@ -33,11 +33,11 @@ import DracoPy
 from meshparty import utils, trimesh_repair
 
 try:
-    from annotationframeworkclient import infoservice
+    from caveclient import infoservice
     allow_framework_client = True
 except ImportError:
     logging.warning(
-        "Need to pip install annotationframeworkclient to use dataset_name parameters")
+        "Need to pip install caveclient to use dataset_name parameters")
     allow_framework_client = False
 
 
@@ -52,7 +52,7 @@ def _get_cv_path_from_info(dataset_name, server_address=None, segmentation_type=
     """
     if allow_framework_client is False:
         logging.warning(
-            "Need to pip install annotationframeworkclient to use dataset_name parameters")
+            "Need to pip install caveclient to use dataset_name parameters")
         return None
 
     info = infoservice.InfoServiceClient(
