@@ -592,6 +592,20 @@ class Skeleton:
             self._vertices = self._rooted.vertices[self.node_mask]
         return self._vertices
 
+    @vertices.setter
+    def vertices(self, new_vertices):
+        new_vertices = np.atleast_2d(new_vertices)
+        if new_vertices.shape[1] != 3:
+            raise ValueError("New vertices must be 3 dimensional")
+        if len(new_vertices) == self._rooted.n_vertices:
+            self._rooted._vertices = new_vertices
+        elif len(new_vertices) == self.n_vertices:
+            self._rooted._vertices[self.node_mask] = new_vertices
+        else:
+            raise ValueError("New vertices must be the same size as existing vertices")
+        self._reset_derived_properties_rooted()
+        self._reset_derived_properties_filtered()
+
     @property
     def edges(self):
         if self._edges is None:
