@@ -604,7 +604,7 @@ class Skeleton:
         else:
             raise ValueError("New vertices must be the same size as existing vertices")
         self._reset_derived_properties_rooted()
-        self._reset_derived_properties_filtered()
+        self._reset_derived_properties_filtered(index_changed=False)
 
     @property
     def edges(self):
@@ -674,7 +674,7 @@ class Skeleton:
     @voxel_scaling.setter
     def voxel_scaling(self, new_scaling):
         self._rooted.voxel_scaling = new_scaling
-        self._reset_derived_properties_filtered()
+        self._reset_derived_properties_filtered(index_changed=False)
 
     #####################
     # Rooted properties #
@@ -726,18 +726,18 @@ class Skeleton:
     # Filtered properties #
     #######################
 
-    def _reset_derived_properties_filtered(self):
+    def _reset_derived_properties_filtered(self, index_changed=True):
         self._vertices = None
         self._edges = None
         self._kdtree = None
         self._pykdtree = None
-        self._branch_points = None
-        self._end_points = None
 
-        self._segments = None
-        self._segment_map = None
-        self._SkeletonIndex = None
-        self._cover_paths = None
+        if index_changed:
+            self._branch_points = None
+            self._end_points = None
+            self._segment_map = None
+            self._SkeletonIndex = None
+            self._cover_paths = None
 
     #########################
     # Geometric quantitites #
