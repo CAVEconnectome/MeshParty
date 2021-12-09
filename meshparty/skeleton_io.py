@@ -208,12 +208,54 @@ def read_skeleton_h5(filename, remove_zero_length_edges=False):
     )
 
 
+def swc_node_labels(
+    sk,
+    dendrite_indices=None,
+    apical_indices=None,
+    soma_indices=None,
+    axon_indices=None,
+):
+    """Assemble swc node labels based on compartment labels. By default, unlabeled indices are considered dendrite.
+
+    Parameters
+    ----------
+    sk : Skeleton
+        Neuron skeleton object with N vertices
+    dendrite_indices : array, optional
+        Array of indices associated with the dendrites (or basal dendrites if apicals are distinct), by default None.
+    apical_indices : array, optional
+        Array of indices (or boolean mask) for the apical dendrite, by default None.
+    soma_indices : array, optional
+        Array of indices (or boolean mask) for the soma, by default None.
+    axon_indices : axon, optional
+        Array of indices (or boolean mask) for the axon, by default None.
+
+    Returns
+    -------
+    nodelabels
+        N-length vector with the appropriate SWC label for each compartment. Unlabeled vertices are given the label 0.
+    """
+    SOMA_LABEL = 1
+    AXON_LABEL = 2
+    DENDRITE_LABEL = 3
+    APICAL_LABEL = 4
+
+    inds = [dendrite_indices, apical_indices, soma_indices, axon_indices]
+    labels = [DENDRITE_LABEL, APICAL_LABEL, SOMA_LABEL, AXON_LABEL]
+
+    node_labels = np.zeros(len(sk.vertices))
+    for ii, label in zip(inds, labels):
+        if ii is not None:
+            node_labels[np.array(ii)] = label
+    return node_labels
+
+
 def export_to_swc(
     skel, filename, node_labels=None, radius=None, header=None, xyz_scaling=1000
 ):
     """
     Export a skeleton file to an swc file
-    (see http://research.mssm.edu/cnic/swc.html for swc definition)
+    (see http://www.neuronland.org/NLMorphologyConverter/MorphologyFormats/SWC/Spec.html for swc definition)
 
     Parameters
     ----------
