@@ -7,6 +7,8 @@ except:
 
 from ..trimesh_io import Mesh
 from ..skeleton import Skeleton
+import contextlib
+import io
 import pandas as pd
 import numpy as np
 from scipy import sparse
@@ -444,7 +446,9 @@ class AnchoredAnnotation(object):
 
             @property
             def mesh_index(self):
-                return _parent.MeshIndex(self.df[_parent._index_column_filt].values)
+                return _parent.MeshIndex(
+                    _parent._data[_parent._index_column_filt][self.row_filter].values
+                )
 
         return _FilterQueryResponse(row_filter)
 
@@ -549,6 +553,16 @@ class Meshwork(object):
         if self.skeleton is not None:
             self._skeleton.voxel_scaling = new_scaling
         self._recompute_indices()
+
+    def __copy__(self):
+        with io.BytesIO() as bio:
+            self.save_meshwork(bio)
+            bio.seek(0)
+            nrn_copy = load_meshwork(bio)
+        return nrn_copy
+
+    def copy(self):
+        return self.__copy__()
 
     ##################
     # Mesh functions #
@@ -664,6 +678,25 @@ class Meshwork(object):
 
             if to is not None:
                 self.apply_mask(to)
+
+    @contextlib.contextmanager
+    def mask_context(self, mask):
+        """Use with-statement context to temporarily act on a masked state of an object.
+
+        Parameters
+        ----------
+        mask : array or None,
+            A boolean array with the same number of elements as mesh vertices. True elements are kept, False are masked out. If None, resets the mask entirely.
+        """
+        current_mask = self.mesh_mask
+        try:
+            if mask is None:
+                self.reset_mask()
+            else:
+                self.apply_mask(mask)
+            yield self
+        finally:
+            self.reset_mask(to=current_mask)
 
     ##################
     # Anno functions #
@@ -1053,7 +1086,7 @@ class Meshwork(object):
         return self.SkeletonIndex(proximal_pt).to_mesh_region_point
 
     @OnlyIfSkeleton.exists
-    def distance_to_root(self, mesh_indices):
+    def distance_to_root(self, mesh_indices=None):
         """Distance to root for mesh indices along skeleton.
 
         Parameters
@@ -1067,6 +1100,8 @@ class Meshwork(object):
             Array of distances to root measured along the skeleton. If no corresponding
             skeleton index exists for a mesh point, a NaN is used.
         """
+        if mesh_indices is None:
+            mesh_indices = np.arange(len(self.mesh.vertices))
         mesh_indices = self._convert_to_meshindex(mesh_indices)
         ds = np.full(len(mesh_indices), np.nan)
         skinds = mesh_indices.to_skel_index_padded
