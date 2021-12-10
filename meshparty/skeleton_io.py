@@ -4,7 +4,6 @@ import orjson
 import json
 
 from .utils_io import NumpyEncoder
-from .skeletonize import resample
 
 import numpy as np
 from meshparty import skeleton
@@ -309,7 +308,7 @@ def export_to_swc(
         node_labels = np.full(len(skel.vertices), 0)
 
     if resample_spacing is not None:
-        skel_r, output_map = resample(
+        skel, output_map = skeleton.resample(
             skel,
             spacing=resample_spacing,
             tip_length_ratio=tip_length_ratio,
@@ -318,7 +317,7 @@ def export_to_swc(
         node_labels = node_labels[output_map]
         radius = radius[output_map]
 
-    swc_dat = _build_swc_array(skel_r, node_labels, radius, xyz_scaling)
+    swc_dat = _build_swc_array(skel, node_labels, radius, xyz_scaling)
 
     np.savetxt(
         filename,

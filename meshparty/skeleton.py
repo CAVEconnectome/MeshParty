@@ -9,6 +9,7 @@ except:
     pyKDTree = spatial.cKDTree
 from meshparty import skeleton_io
 from collections.abc import Iterable
+from .skeleton_utils import resample_path
 
 
 def _metadata_from_dict(
@@ -1105,3 +1106,67 @@ class Skeleton:
             interp_kind=interp_kind,
             tip_length_ratio=tip_length_ratio,
         )
+
+
+def resample(sk, spacing, kind="linear", tip_length_ratio=0.25):
+    """Resample a skeleton's vertices
+
+    Parameters
+    ----------
+    sk : Skeleton
+        Input skeleton file with a skeleton
+    spacing : numeric
+        Desired spacing in nanometers
+    kind : str, optional
+        Type of interpolation to use when resampling. Options follow scipy.interpolate.interp1d. By default "linear"
+    tip_length_ratio : float, optional
+        The ratio of spacing to branch tip length that a branch tip must have in order to be included in the final skeleton
+        for example: spacing is 10 and branch length is 8. do you want to include that final 8 length tip?
+        then perhaps consider a tip_length_ratio of .75, by default 0.25
+
+    Returns
+    -------
+    Skeleton
+        New skeleton with resampled vertices.
+
+    resample_map
+        Array where the ith index corresponds to the ith vertex of the resampled skeleton and the value
+        is the associated index in the original skeleton. To assign vertices, we assign a "domain" to each
+        vertex in the original skeleton that is halfway between the vertex and its neighbors. Resampled
+        vertices that fall within that domain (based on topology and distance-to-root) are then associated
+        with the original vertex.
+    """
+    path_counter = 0
+    branch_d = {}
+    vert_list = []
+    edge_list = []
+    output_map_list = []
+
+    for path in sk.cover_paths:
+        new_verts, new_edges, output_map_path, branch_d = resample_path(
+            path,
+            sk,
+            path_counter,
+            spacing,
+            kind,
+            tip_length_ratio,
+            branch_d,
+        )
+        vert_list.append(new_verts)
+        edge_list.append(new_edges)
+        output_map_list.append(output_map_path)
+        path_counter += len(new_verts)
+
+    new_verts = np.vstack(vert_list)
+    new_edges = np.vstack(edge_list)
+    resample_map = np.concatenate(output_map_list)
+
+    return (
+        Skeleton(
+            new_verts,
+            new_edges,
+            root=branch_d[int(sk.root)],
+            remove_zero_length_edges=False,
+        ),
+        resample_map,
+    )

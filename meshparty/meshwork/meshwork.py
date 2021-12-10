@@ -7,8 +7,7 @@ except:
 
 from ..skeleton_io import swc_node_labels
 from ..trimesh_io import Mesh
-from ..skeleton import Skeleton
-from ..skeletonize import resample
+from ..skeleton import Skeleton, resample
 
 import contextlib
 import io
