@@ -13,7 +13,6 @@ from .ray_tracing import ray_trace_distance, shape_diameter_function
 import fastremap
 import logging
 from . import skeleton_utils
-from .meshwork import Meshwork
 
 
 def skeletonize_mesh(
@@ -1045,8 +1044,8 @@ def resample(sk, spacing, kind="linear", tip_length_ratio=0.25):
 
     Parameters
     ----------
-    sk : Skeleton or Meshwork
-        Input skeleton or meshwork file with a skeleton
+    sk : Skeleton
+        Input skeleton file with a skeleton
     spacing : numeric
         Desired spacing in nanometers
     kind : str, optional
@@ -1068,11 +1067,6 @@ def resample(sk, spacing, kind="linear", tip_length_ratio=0.25):
         vertices that fall within that domain (based on topology and distance-to-root) are then associated
         with the original vertex.
     """
-    if isinstance(sk, Meshwork):
-        sk = sk.skeleton
-        if sk is None:
-            raise ValueError("Meshwork file must have a skeleton to resample!")
-
     path_counter = 0
     branch_d = {}
     vert_list = []

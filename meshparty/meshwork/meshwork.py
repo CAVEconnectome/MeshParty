@@ -5,8 +5,11 @@ try:
 except:
     _vtk_loaded = False
 
+from ..skeleton_io import swc_node_labels
 from ..trimesh_io import Mesh
 from ..skeleton import Skeleton
+from ..skeletonize import resample
+
 import contextlib
 import io
 import pandas as pd
@@ -1510,6 +1513,92 @@ class Meshwork(object):
             If True, overwrites an existing file. Default is False.
         """
         meshwork_io._save_meshwork(filename, self, overwrite=overwrite, version=version)
+
+    @OnlyIfSkeleton.exists
+    def export_to_swc(
+        self,
+        filename,
+        resample_spacing=None,
+        apical_anno=None,
+        axon_anno=None,
+        dendrite_anno=None,
+        soma_anno=None,
+        dendrite_default=True,
+        interp_kind="linear",
+        tip_length_ratio=0.5,
+        radius=None,
+        header=None,
+        scaling=1000,
+    ):
+        """Export a neuron to SWC, optionally resampling and using annotations to label compartments.
+
+        Parameters
+        ----------
+        filename : str
+            Location where the swc file will be saved
+        resample_spacing : float or None, optional
+            Desired spacing between skeleton vertices. If None, no resampling is performed. Default is None.
+        apical_anno : str, optional
+            Name of annotation spanning the apical dendrite compartment, by default None.
+        axon_anno : str, optional
+            Name of annotation spanning the axon compartment, by default None.
+        dendrite_anno : str, optional
+            Name of annotation spanning the (basal) dendrite compartment, by default None.
+        soma_anno : str, optional
+            Name of annotation spanning the soma compartment, by default None.
+        dendrite_default : bool, optional
+            If True, assumes any vertex without a specific label is basal dendrite, by default True.
+        interp_kind : str, optional
+            Interpolation method used by scipy.interpolate.interp1d, by default "linear".
+        tip_length_ratio : float, optional
+            Ratio of spacing of branch tip length to desired spacing to keep a final tip, by default 0.5.
+        radius : array, optional
+            Array of radius values for the skeleton (in the same units as vertex coordinates), by default None.
+        header : str, optional
+            Header string for the SWC file, by default None.
+        scaling : float, optional
+            Scaling between coordinates of the file and exported coordiates, by default 1000 because for EM
+            we usually have coordinates in nanometers and SWC usually expects microns.
+        """
+
+        def _extract_annotation(anno_name):
+            if anno_name is not None:
+                return self.anno[anno_name].skel_mask
+            else:
+                return None
+
+        apical_inds = _extract_annotation(apical_anno)
+        axon_inds = _extract_annotation(axon_anno)
+        dendrite_inds = _extract_annotation(dendrite_anno)
+        soma_inds = _extract_annotation(soma_anno)
+
+        node_labels = swc_node_labels(
+            self.skeleton,
+            dendrite_indices=dendrite_inds,
+            apical_indices=apical_inds,
+            soma_indices=soma_inds,
+            axon_indices=axon_inds,
+            dendrite_default=dendrite_default,
+        )
+
+        if resample_spacing is not None:
+            sk_r, output_map = resample(
+                self.skeleton,
+                spacing=resample_spacing,
+                tip_length_ratio=tip_length_ratio,
+                kind=interp_kind,
+            )
+            node_labels = node_labels[output_map]
+            if radius is not None:
+                radius = radius[output_map]
+
+        sk_r.export_to_swc(
+            filename=filename,
+            node_labels=node_labels,
+            radius=radius,
+            header=header,
+            xyz_scaling=scaling,
+        )
 
 
 def load_meshwork(filename):

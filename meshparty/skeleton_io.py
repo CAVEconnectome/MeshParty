@@ -214,6 +214,7 @@ def swc_node_labels(
     apical_indices=None,
     soma_indices=None,
     axon_indices=None,
+    dendrite_default=True,
 ):
     """Assemble swc node labels based on compartment labels. By default, unlabeled indices are considered dendrite.
 
@@ -229,11 +230,14 @@ def swc_node_labels(
         Array of indices (or boolean mask) for the soma, by default None.
     axon_indices : axon, optional
         Array of indices (or boolean mask) for the axon, by default None.
+    dendrite_default : bool, optional,
+        If True, assumed unlabeled vertices are dendrite. Otherwise, give a label of 0.
 
     Returns
     -------
     nodelabels
-        N-length vector with the appropriate SWC label for each compartment. Unlabeled vertices are given the label 0.
+        N-length vector with the appropriate SWC label for each compartment. Unlabeled vertices are given a default label.
+        Default label is 3 (basal dendrite) if dendrite default is True, else 0.
     """
     SOMA_LABEL = 1
     AXON_LABEL = 2
@@ -243,7 +247,11 @@ def swc_node_labels(
     inds = [dendrite_indices, apical_indices, soma_indices, axon_indices]
     labels = [DENDRITE_LABEL, APICAL_LABEL, SOMA_LABEL, AXON_LABEL]
 
-    node_labels = np.zeros(len(sk.vertices))
+    if dendrite_default:
+        val = DENDRITE_LABEL
+    else:
+        val = 0
+    node_labels = np.full(len(sk.vertices), val)
     for ii, label in zip(inds, labels):
         if ii is not None:
             node_labels[np.array(ii)] = label
@@ -283,7 +291,7 @@ def export_to_swc(
         header_string = "\n# ".join(header)
 
     if radius is None:
-        radius = np.full(len(skel.vertices), 1000)
+        radius = np.full(len(skel.vertices), xyz_scaling)
     elif np.issubdtype(type(radius), int):
         radius = np.full(len(skel.vertices), radius)
 
@@ -292,15 +300,14 @@ def export_to_swc(
 
     swc_dat = _build_swc_array(skel, node_labels, radius, xyz_scaling)
 
-    with open(filename, "w") as f:
-        np.savetxt(
-            f,
-            swc_dat,
-            delimiter=" ",
-            header=header_string,
-            comments="#",
-            fmt=["%i", "%i", "%.3f", "%.3f", "%.3f", "%.3f", "%i"],
-        )
+    np.savetxt(
+        filename,
+        swc_dat,
+        delimiter=" ",
+        header=header_string,
+        comments="#",
+        fmt=["%i", "%i", "%.3f", "%.3f", "%.3f", "%.3f", "%i"],
+    )
 
 
 def _build_swc_array(skel, node_labels, radius, xyz_scaling):
