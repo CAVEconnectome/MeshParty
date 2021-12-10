@@ -4,6 +4,7 @@ import orjson
 import json
 
 from .utils_io import NumpyEncoder
+
 import numpy as np
 from meshparty import skeleton
 from dataclasses import asdict
@@ -208,12 +209,70 @@ def read_skeleton_h5(filename, remove_zero_length_edges=False):
     )
 
 
+def swc_node_labels(
+    sk,
+    dendrite_indices=None,
+    apical_indices=None,
+    soma_indices=None,
+    axon_indices=None,
+    dendrite_default=True,
+):
+    """Assemble swc node labels based on compartment labels. By default, unlabeled indices are considered dendrite.
+
+    Parameters
+    ----------
+    sk : Skeleton
+        Neuron skeleton object with N vertices
+    dendrite_indices : array, optional
+        Array of indices associated with the dendrites (or basal dendrites if apicals are distinct), by default None.
+    apical_indices : array, optional
+        Array of indices (or boolean mask) for the apical dendrite, by default None.
+    soma_indices : array, optional
+        Array of indices (or boolean mask) for the soma, by default None.
+    axon_indices : axon, optional
+        Array of indices (or boolean mask) for the axon, by default None.
+    dendrite_default : bool, optional,
+        If True, assumed unlabeled vertices are dendrite. Otherwise, give a label of 0.
+
+    Returns
+    -------
+    nodelabels
+        N-length vector with the appropriate SWC label for each compartment. Unlabeled vertices are given a default label.
+        Default label is 3 (basal dendrite) if dendrite default is True, else 0.
+    """
+    SOMA_LABEL = 1
+    AXON_LABEL = 2
+    DENDRITE_LABEL = 3
+    APICAL_LABEL = 4
+
+    inds = [dendrite_indices, apical_indices, soma_indices, axon_indices]
+    labels = [DENDRITE_LABEL, APICAL_LABEL, SOMA_LABEL, AXON_LABEL]
+
+    if dendrite_default:
+        val = DENDRITE_LABEL
+    else:
+        val = 0
+    node_labels = np.full(len(sk.vertices), val)
+    for ii, label in zip(inds, labels):
+        if ii is not None:
+            node_labels[np.array(ii)] = label
+    return node_labels
+
+
 def export_to_swc(
-    skel, filename, node_labels=None, radius=None, header=None, xyz_scaling=1000
+    skel,
+    filename,
+    node_labels=None,
+    radius=None,
+    header=None,
+    xyz_scaling=1000,
+    resample_spacing=None,
+    interp_kind="linear",
+    tip_length_ratio=0.5,
 ):
     """
     Export a skeleton file to an swc file
-    (see http://research.mssm.edu/cnic/swc.html for swc definition)
+    (see http://www.neuronland.org/NLMorphologyConverter/MorphologyFormats/SWC/Spec.html for swc definition)
 
     Parameters
     ----------
@@ -241,24 +300,33 @@ def export_to_swc(
         header_string = "\n# ".join(header)
 
     if radius is None:
-        radius = np.full(len(skel.vertices), 1000)
+        radius = np.full(len(skel.vertices), xyz_scaling)
     elif np.issubdtype(type(radius), int):
         radius = np.full(len(skel.vertices), radius)
 
     if node_labels is None:
-        node_labels = np.full(len(skel.vertices), 3)
+        node_labels = np.full(len(skel.vertices), 0)
+
+    if resample_spacing is not None:
+        skel, output_map = skeleton.resample(
+            skel,
+            spacing=resample_spacing,
+            tip_length_ratio=tip_length_ratio,
+            kind=interp_kind,
+        )
+        node_labels = node_labels[output_map]
+        radius = radius[output_map]
 
     swc_dat = _build_swc_array(skel, node_labels, radius, xyz_scaling)
 
-    with open(filename, "w") as f:
-        np.savetxt(
-            f,
-            swc_dat,
-            delimiter=" ",
-            header=header_string,
-            comments="#",
-            fmt=["%i", "%i", "%.3f", "%.3f", "%.3f", "%.3f", "%i"],
-        )
+    np.savetxt(
+        filename,
+        swc_dat,
+        delimiter=" ",
+        header=header_string,
+        comments="#",
+        fmt=["%i", "%i", "%.3f", "%.3f", "%.3f", "%.3f", "%i"],
+    )
 
 
 def _build_swc_array(skel, node_labels, radius, xyz_scaling):

@@ -5,8 +5,12 @@ try:
 except:
     _vtk_loaded = False
 
+from ..skeleton_io import swc_node_labels
 from ..trimesh_io import Mesh
-from ..skeleton import Skeleton
+from ..skeleton import Skeleton, resample
+
+import contextlib
+import io
 import pandas as pd
 import numpy as np
 from scipy import sparse
@@ -444,7 +448,9 @@ class AnchoredAnnotation(object):
 
             @property
             def mesh_index(self):
-                return _parent.MeshIndex(self.df[_parent._index_column_filt].values)
+                return _parent.MeshIndex(
+                    _parent._data[_parent._index_column_filt][self.row_filter].values
+                )
 
         return _FilterQueryResponse(row_filter)
 
@@ -549,6 +555,16 @@ class Meshwork(object):
         if self.skeleton is not None:
             self._skeleton.voxel_scaling = new_scaling
         self._recompute_indices()
+
+    def __copy__(self):
+        with io.BytesIO() as bio:
+            self.save_meshwork(bio)
+            bio.seek(0)
+            nrn_copy = load_meshwork(bio)
+        return nrn_copy
+
+    def copy(self):
+        return self.__copy__()
 
     ##################
     # Mesh functions #
@@ -664,6 +680,25 @@ class Meshwork(object):
 
             if to is not None:
                 self.apply_mask(to)
+
+    @contextlib.contextmanager
+    def mask_context(self, mask):
+        """Use with-statement context to temporarily act on a masked state of an object.
+
+        Parameters
+        ----------
+        mask : array or None,
+            A boolean array with the same number of elements as mesh vertices. True elements are kept, False are masked out. If None, resets the mask entirely.
+        """
+        current_mask = self.mesh_mask
+        try:
+            if mask is None:
+                self.reset_mask()
+            else:
+                self.apply_mask(mask)
+            yield self
+        finally:
+            self.reset_mask(to=current_mask)
 
     ##################
     # Anno functions #
@@ -878,6 +913,46 @@ class Meshwork(object):
         mesh_property[skids >= 0] = skeleton_property[skids[skids >= 0]]
         return mesh_property
 
+    @OnlyIfSkeleton.exists
+    def mesh_property_to_skeleton(
+        self,
+        mesh_property,
+        aggfunc="mean",
+    ):
+        """Map a property at all mesh vertices to skeletons, aggregating mesh vertices as desired.
+
+        Parameters
+        ----------
+        mesh_property : array
+            N-element array with same length as mesh vertices
+        aggfunc : str or function, optional
+            Either a pre-defined aggregation function or one of "mean", "median", "max, or "min". By default 'mean'.
+
+        Returns
+        -------
+        np.ndarray
+            Array of aggregated values
+        """
+        if aggfunc == "mean":
+            aggfunc = np.mean
+        elif aggfunc == "median":
+            aggfunc = np.median
+        elif aggfunc == "max":
+            aggfunc = np.max
+        elif aggfunc == "min":
+            aggfunc = np.min
+        elif isinstance(aggfunc, str):
+            raise ValueError(
+                "Only string values allowed are 'mean', 'median', 'max', and 'min'."
+            )
+
+        arr = np.vstack((self.skeleton.mesh_to_skel_map, mesh_property)).T
+        arr = arr[np.argsort(arr[:, 0])]
+        arr_grouped = np.split(
+            arr[:, 1], np.unique(arr[:, 0], return_index=True)[1][1:]
+        )
+        return np.array([aggfunc(x) for x in arr_grouped])
+
     @property
     @OnlyIfSkeleton.exists
     def branch_points_skel(self):
@@ -1053,7 +1128,7 @@ class Meshwork(object):
         return self.SkeletonIndex(proximal_pt).to_mesh_region_point
 
     @OnlyIfSkeleton.exists
-    def distance_to_root(self, mesh_indices):
+    def distance_to_root(self, mesh_indices=None):
         """Distance to root for mesh indices along skeleton.
 
         Parameters
@@ -1067,6 +1142,8 @@ class Meshwork(object):
             Array of distances to root measured along the skeleton. If no corresponding
             skeleton index exists for a mesh point, a NaN is used.
         """
+        if mesh_indices is None:
+            mesh_indices = np.arange(len(self.mesh.vertices))
         mesh_indices = self._convert_to_meshindex(mesh_indices)
         ds = np.full(len(mesh_indices), np.nan)
         skinds = mesh_indices.to_skel_index_padded
@@ -1475,6 +1552,106 @@ class Meshwork(object):
             If True, overwrites an existing file. Default is False.
         """
         meshwork_io._save_meshwork(filename, self, overwrite=overwrite, version=version)
+
+    @OnlyIfSkeleton.exists
+    def export_to_swc(
+        self,
+        filename,
+        resample_spacing=None,
+        apical_label=None,
+        axon_label=None,
+        dendrite_label=None,
+        soma_label=None,
+        dendrite_default=True,
+        interp_kind="linear",
+        tip_length_ratio=0.5,
+        radius=None,
+        radius_agg="mean",
+        header=None,
+        scaling=1000,
+    ):
+        """Export a neuron to SWC, optionally resampling and using annotations to label compartments.
+
+        Parameters
+        ----------
+        filename : str
+            Location where the swc file will be saved
+        resample_spacing : float or None, optional
+            Desired spacing between skeleton vertices. If None, no resampling is performed. Default is None.
+        apical_label : str or array, optional
+            If a string, name of annotation spanning the apical dendrite compartment. If a numpy array, one that
+            includes all mesh vertices that should be labeled as apical. SkeletonIndex or MeshIndex arrays that
+            cover all such apical vertices are also interpreted correctly. By default, None
+        axon_label : str or array, optional
+            Same as apical_label, but for the axon compartment. by default None.
+        dendrite_label : str or array, optional
+            Same as apical_label, but for the (basal) dendrite compartment. by default None.
+        soma_label : str or array, optional
+            Same as apical_label, but for the soma compartment. by default None.
+        dendrite_default : bool, optional
+            If True, assumes any vertex without a specific label is basal dendrite, by default True.
+        interp_kind : str, optional
+            Interpolation method used by scipy.interpolate.interp1d, by default "linear".
+        tip_length_ratio : float, optional
+            Ratio of spacing of branch tip length to desired spacing to keep a final tip, by default 0.5.
+        radius : float or array, optional
+            Array of radius values for the skeleton (in the same units as vertex coordinates), by default None.
+            Array can be either one value per mesh vertex (in which case values are aggregated) or one value per skeleton vertex.
+            Alternatively, a single number will be assigned for all vertices.
+        radius_agg : str or func, optional
+            If mapping mesh radius values to skeleton vertices, how to aggregate values. Options are 'mean', 'median',
+            'min', 'max', and a user-defined aggregation function. By default, "mean".
+        header : str, optional
+            Header string for the SWC file, by default None.
+        scaling : float, optional
+            Scaling between coordinates of the file and exported coordiates, by default 1000 because for EM
+            we usually have coordinates in nanometers and SWC usually expects microns.
+        """
+
+        def _extract_annotation(anno_value):
+            if anno_value is not None:
+                if isinstance(anno_value, str):
+                    return self.anno[anno_value].skel_mask
+                else:
+                    anno_minds = self._convert_to_meshindex(anno_value)
+                    return anno_minds.to_skel_mask
+            else:
+                return None
+
+        apical_inds = _extract_annotation(apical_label)
+        axon_inds = _extract_annotation(axon_label)
+        dendrite_inds = _extract_annotation(dendrite_label)
+        soma_inds = _extract_annotation(soma_label)
+
+        node_labels = swc_node_labels(
+            self.skeleton,
+            dendrite_indices=dendrite_inds,
+            apical_indices=apical_inds,
+            soma_indices=soma_inds,
+            axon_indices=axon_inds,
+            dendrite_default=dendrite_default,
+        )
+
+        if radius is not None:
+            if np.isscalar(radius):
+                radius = np.full(self.skeleton.n_vertices, radius)
+            elif len(radius) == self.mesh.n_vertices:
+                radius = self.mesh_property_to_skeleton(radius, aggfunc=radius_agg)
+            elif len(radius) != self.skeleton.n_vertices:
+                raise ValueError(
+                    "Radius array must correspond to either mesh or skeleton vertices"
+                )
+
+        self.skeleton.export_to_swc(
+            filename=filename,
+            node_labels=node_labels,
+            radius=radius,
+            header=header,
+            xyz_scaling=scaling,
+            resample_spacing=resample_spacing,
+            interp_kind=interp_kind,
+            tip_length_ratio=tip_length_ratio,
+        )
 
 
 def load_meshwork(filename):
