@@ -4,6 +4,8 @@ import orjson
 import json
 
 from .utils_io import NumpyEncoder
+from .skeletonize import resample
+
 import numpy as np
 from meshparty import skeleton
 from dataclasses import asdict
@@ -259,7 +261,15 @@ def swc_node_labels(
 
 
 def export_to_swc(
-    skel, filename, node_labels=None, radius=None, header=None, xyz_scaling=1000
+    skel,
+    filename,
+    node_labels=None,
+    radius=None,
+    header=None,
+    xyz_scaling=1000,
+    resample_spacing=None,
+    interp_kind="linear",
+    tip_length_ratio=0.5,
 ):
     """
     Export a skeleton file to an swc file
@@ -296,9 +306,19 @@ def export_to_swc(
         radius = np.full(len(skel.vertices), radius)
 
     if node_labels is None:
-        node_labels = np.full(len(skel.vertices), 3)
+        node_labels = np.full(len(skel.vertices), 0)
 
-    swc_dat = _build_swc_array(skel, node_labels, radius, xyz_scaling)
+    if resample_spacing is not None:
+        skel_r, output_map = resample(
+            skel,
+            spacing=resample_spacing,
+            tip_length_ratio=tip_length_ratio,
+            kind=interp_kind,
+        )
+        node_labels = node_labels[output_map]
+        radius = radius[output_map]
+
+    swc_dat = _build_swc_array(skel_r, node_labels, radius, xyz_scaling)
 
     np.savetxt(
         filename,

@@ -1061,7 +1061,15 @@ class Skeleton:
         self.voxel_scaling = existing_voxel_scaling
 
     def export_to_swc(
-        self, filename, node_labels=None, radius=None, header=None, xyz_scaling=1000
+        self,
+        filename,
+        node_labels=None,
+        radius=None,
+        header=None,
+        xyz_scaling=1000,
+        resample_spacing=None,
+        interp_kind="linear",
+        tip_length_ratio=0.5,
     ):
         """
         Export a skeleton file to an swc file
@@ -1093,4 +1101,7 @@ class Skeleton:
             radius=radius,
             header=header,
             xyz_scaling=xyz_scaling,
+            resample_spacing=resample_spacing,
+            interp_kind=interp_kind,
+            tip_length_ratio=tip_length_ratio,
         )

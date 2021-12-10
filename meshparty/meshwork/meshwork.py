@@ -914,6 +914,46 @@ class Meshwork(object):
         mesh_property[skids >= 0] = skeleton_property[skids[skids >= 0]]
         return mesh_property
 
+    @OnlyIfSkeleton.exists
+    def mesh_property_to_skeleton(
+        self,
+        mesh_property,
+        aggfunc="mean",
+    ):
+        """Map a property at all mesh vertices to skeletons, aggregating mesh vertices as desired.
+
+        Parameters
+        ----------
+        mesh_property : array
+            N-element array with same length as mesh vertices
+        aggfunc : str or function, optional
+            Either a pre-defined aggregation function or one of "mean", "median", "max, or "min". By default 'mean'.
+
+        Returns
+        -------
+        np.ndarray
+            Array of aggregated values
+        """
+        if aggfunc == "mean":
+            aggfunc = np.mean
+        elif aggfunc == "median":
+            aggfunc = np.median
+        elif aggfunc == "max":
+            aggfunc = np.max
+        elif aggfunc == "min":
+            aggfunc = np.min
+        elif isinstance(aggfunc, str):
+            raise ValueError(
+                "Only string values allowed are 'mean', 'median', 'max', and 'min'."
+            )
+
+        arr = np.vstack((self.skeleton.mesh_to_skel_map, mesh_property)).T
+        arr = arr[np.argsort(arr[:, 0])]
+        arr_grouped = np.split(
+            arr[:, 1], np.unique(arr[:, 0], return_index=True)[1][1:]
+        )
+        return np.array([aggfunc(x) for x in arr_grouped])
+
     @property
     @OnlyIfSkeleton.exists
     def branch_points_skel(self):
@@ -1519,14 +1559,15 @@ class Meshwork(object):
         self,
         filename,
         resample_spacing=None,
-        apical_anno=None,
-        axon_anno=None,
-        dendrite_anno=None,
-        soma_anno=None,
+        apical_label=None,
+        axon_label=None,
+        dendrite_label=None,
+        soma_label=None,
         dendrite_default=True,
         interp_kind="linear",
         tip_length_ratio=0.5,
         radius=None,
+        radius_agg="mean",
         header=None,
         scaling=1000,
     ):
@@ -1538,22 +1579,29 @@ class Meshwork(object):
             Location where the swc file will be saved
         resample_spacing : float or None, optional
             Desired spacing between skeleton vertices. If None, no resampling is performed. Default is None.
-        apical_anno : str, optional
-            Name of annotation spanning the apical dendrite compartment, by default None.
-        axon_anno : str, optional
-            Name of annotation spanning the axon compartment, by default None.
-        dendrite_anno : str, optional
-            Name of annotation spanning the (basal) dendrite compartment, by default None.
-        soma_anno : str, optional
-            Name of annotation spanning the soma compartment, by default None.
+        apical_label : str or array, optional
+            If a string, name of annotation spanning the apical dendrite compartment. If a numpy array, one that
+            includes all mesh vertices that should be labeled as apical. SkeletonIndex or MeshIndex arrays that
+            cover all such apical vertices are also interpreted correctly. By default, None
+        axon_label : str or array, optional
+            Same as apical_label, but for the axon compartment. by default None.
+        dendrite_label : str or array, optional
+            Same as apical_label, but for the (basal) dendrite compartment. by default None.
+        soma_label : str or array, optional
+            Same as apical_label, but for the soma compartment. by default None.
         dendrite_default : bool, optional
             If True, assumes any vertex without a specific label is basal dendrite, by default True.
         interp_kind : str, optional
             Interpolation method used by scipy.interpolate.interp1d, by default "linear".
         tip_length_ratio : float, optional
             Ratio of spacing of branch tip length to desired spacing to keep a final tip, by default 0.5.
-        radius : array, optional
+        radius : float or array, optional
             Array of radius values for the skeleton (in the same units as vertex coordinates), by default None.
+            Array can be either one value per mesh vertex (in which case values are aggregated) or one value per skeleton vertex.
+            Alternatively, a single number will be assigned for all vertices.
+        radius_agg : str or func, optional
+            If mapping mesh radius values to skeleton vertices, how to aggregate values. Options are 'mean', 'median',
+            'min', 'max', and a user-defined aggregation function. By default, "mean".
         header : str, optional
             Header string for the SWC file, by default None.
         scaling : float, optional
@@ -1561,16 +1609,20 @@ class Meshwork(object):
             we usually have coordinates in nanometers and SWC usually expects microns.
         """
 
-        def _extract_annotation(anno_name):
-            if anno_name is not None:
-                return self.anno[anno_name].skel_mask
+        def _extract_annotation(anno_value):
+            if anno_value is not None:
+                if isinstance(anno_value, str):
+                    return self.anno[anno_value].skel_mask
+                else:
+                    anno_minds = self._convert_to_meshindex(anno_value)
+                    return anno_minds.to_skel_mask
             else:
                 return None
 
-        apical_inds = _extract_annotation(apical_anno)
-        axon_inds = _extract_annotation(axon_anno)
-        dendrite_inds = _extract_annotation(dendrite_anno)
-        soma_inds = _extract_annotation(soma_anno)
+        apical_inds = _extract_annotation(apical_label)
+        axon_inds = _extract_annotation(axon_label)
+        dendrite_inds = _extract_annotation(dendrite_label)
+        soma_inds = _extract_annotation(soma_label)
 
         node_labels = swc_node_labels(
             self.skeleton,
@@ -1581,23 +1633,25 @@ class Meshwork(object):
             dendrite_default=dendrite_default,
         )
 
-        if resample_spacing is not None:
-            sk_r, output_map = resample(
-                self.skeleton,
-                spacing=resample_spacing,
-                tip_length_ratio=tip_length_ratio,
-                kind=interp_kind,
-            )
-            node_labels = node_labels[output_map]
-            if radius is not None:
-                radius = radius[output_map]
+        if radius is not None:
+            if np.isscalar(radius):
+                radius = np.full(self.skeleton.n_vertices, radius)
+            elif len(radius) == self.mesh.n_vertices:
+                radius = self.mesh_property_to_skeleton(radius, aggfunc=radius_agg)
+            elif len(radius) != self.skeleton.n_vertices:
+                raise ValueError(
+                    "Radius array must correspond to either mesh or skeleton vertices"
+                )
 
-        sk_r.export_to_swc(
+        self.skeleton.export_to_swc(
             filename=filename,
             node_labels=node_labels,
             radius=radius,
             header=header,
             xyz_scaling=scaling,
+            resample_spacing=resample_spacing,
+            interp_kind=interp_kind,
+            tip_length_ratio=tip_length_ratio,
         )
 
 
