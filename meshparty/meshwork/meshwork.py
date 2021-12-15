@@ -1569,6 +1569,7 @@ class Meshwork(object):
         radius_agg="mean",
         header=None,
         scaling=1000,
+        resample_soma=False,
     ):
         """Export a neuron to SWC, optionally resampling and using annotations to label compartments.
 
@@ -1651,6 +1652,7 @@ class Meshwork(object):
             resample_spacing=resample_spacing,
             interp_kind=interp_kind,
             tip_length_ratio=tip_length_ratio,
+            avoid_root=not resample_soma,
         )
 
 

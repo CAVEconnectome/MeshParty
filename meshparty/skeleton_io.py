@@ -269,6 +269,7 @@ def export_to_swc(
     resample_spacing=None,
     interp_kind="linear",
     tip_length_ratio=0.5,
+    avoid_root=True,
 ):
     """
     Export a skeleton file to an swc file
@@ -313,6 +314,7 @@ def export_to_swc(
             spacing=resample_spacing,
             tip_length_ratio=tip_length_ratio,
             kind=interp_kind,
+            avoid_root=avoid_root,
         )
         node_labels = node_labels[output_map]
         radius = radius[output_map]

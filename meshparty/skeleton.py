@@ -1071,6 +1071,7 @@ class Skeleton:
         resample_spacing=None,
         interp_kind="linear",
         tip_length_ratio=0.5,
+        avoid_root=True,
     ):
         """
         Export a skeleton file to an swc file
@@ -1105,10 +1106,11 @@ class Skeleton:
             resample_spacing=resample_spacing,
             interp_kind=interp_kind,
             tip_length_ratio=tip_length_ratio,
+            avoid_root=avoid_root,
         )
 
 
-def resample(sk, spacing, kind="linear", tip_length_ratio=0.25):
+def resample(sk, spacing, kind="linear", tip_length_ratio=0.5, avoid_root=True):
     """Resample a skeleton's vertices
 
     Parameters
@@ -1151,6 +1153,7 @@ def resample(sk, spacing, kind="linear", tip_length_ratio=0.25):
             kind,
             tip_length_ratio,
             branch_d,
+            avoid_root,
         )
         vert_list.append(new_verts)
         edge_list.append(new_edges)

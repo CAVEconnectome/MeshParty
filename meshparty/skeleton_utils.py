@@ -28,7 +28,9 @@ def assign_windows(des_d, init_d):
     return inds
 
 
-def resample_path(path, sk, path_counter, spacing, kind, tip_length_ratio, branch_d):
+def resample_path(
+    path, sk, path_counter, spacing, kind, tip_length_ratio, branch_d, avoid_root
+):
     "Resample a specific path to get a desired spacing"
     if path[-1] != sk.root:
         # find that last edge whose start point was the first vertex in the path
@@ -44,11 +46,23 @@ def resample_path(path, sk, path_counter, spacing, kind, tip_length_ratio, branc
 
     # use the distance from root to parameterize the path
     input_d = sk.distance_to_root[mod_path]
-    # the desired distances from root are evenly spaced according to spacing
-    des_d = np.arange(np.min(input_d), np.max(input_d), spacing)
 
     # setup an interpolation function based upon distance to root as input and xyz as output
     fi = interpolate.interp1d(input_d, sk.vertices[mod_path, :], kind=kind, axis=0)
+
+    # the desired distances from root are evenly spaced according to spacing
+    des_d = np.arange(np.min(input_d), np.max(input_d), spacing)
+
+    if avoid_root and mod_path[-1] == sk.root:
+        # Use the tip length ratio or 1/2, whichever is larger to keep new nodes out of soma domain.
+        # This keeps desired points out of domain of the root node.
+        d_last = np.abs(input_d[-1] - input_d[-2])
+        des_d = des_d[
+            np.logical_or(
+                des_d > (d_last * np.max((tip_length_ratio, 0.5))), des_d == 0
+            )
+        ]
+
     # use the function to interpolate the new values
     # we need to add that last node to the verts ONLY IF the last edge length
     # meets the cutoff defined in tip_length_ratio
