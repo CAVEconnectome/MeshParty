@@ -8,15 +8,19 @@ import numba
 
 
 def split_axon_by_synapses(
-    nrn, pre_inds, post_inds, return_quality=True, extend_to_segment=True
+    nrn,
+    pre_inds,
+    post_inds,
+    return_quality=True,
+    extend_to_segment=True,
 ):
     """Split a skeleton where the most paths flow between pre and postsynaptic synapse points.
-    
+
     This method assumes that the axon can be split off by a single skeleton point.
 
     Parameters
     ----------
-    sk : skeleton.Skeleton 
+    sk : skeleton.Skeleton
         Skeleton with N vertices to split
     pre_inds : array
         Indices of presynaptic sites
@@ -27,7 +31,9 @@ def split_axon_by_synapses(
     extend_to_segment : bool, optional
         If True (default), places the cut at the proximal base of the segment where the max flow occurs.
         Probably does not make sense to use if the soma is not root.
-    
+    n_times : int, optional
+        Number of successive times to run the algoritm. This should be the number of distinct axon initial segments a neuron has.
+
     Returns
     -------
     is_axon : N array
@@ -64,6 +70,43 @@ def split_axon_by_synapses(
         return is_axon, split_quality
     else:
         return is_axon
+
+
+def split_axon_by_annotation(
+    nrn,
+    pre_anno,
+    post_anno,
+    return_quality=True,
+    extend_to_segment=True,
+    n_times=1,
+):
+    all_is_axon = []
+    mask = nrn.mesh_mask
+    for _ in range(n_times):
+        with nrn.mask_context(mask) as nrnm:
+            is_axon = split_axon_by_synapses(
+                nrnm,
+                nrnm.anno[pre_anno].mesh_index,
+                nrnm.anno[post_anno].mesh_index,
+                return_quality=False,
+                extend_to_segment=extend_to_segment,
+            )
+        all_is_axon.append(is_axon.to_mesh_index_base)
+        mask = np.logical_and(mask, np.invert(is_axon.to_mesh_mask_base))
+
+    is_axon_all = nrn.MeshIndex(
+        nrn.mesh.filter_unmasked_indices(np.concatenate(all_is_axon))
+    )
+
+    if return_quality:
+        split_quality = axon_split_quality(
+            is_axon_all.to_mesh_mask,
+            nrn.anno[pre_anno].mesh_index,
+            nrn.anno[post_anno].mesh_index,
+        )
+        return is_axon_all, split_quality
+    else:
+        return is_axon_all
 
 
 def axon_split_quality(is_axon, pre_inds, post_inds):
@@ -111,7 +154,7 @@ def _synapse_betweenness(sk, pre_inds, post_inds, use_entropy=False):
     split_index = np.zeros(len(sk.vertices))
     cov_paths_rev = sk.cover_paths[::-1]
     if use_entropy:
-        entropy_normalization = distribution_split_entropy(
+        entropy_normalization = _distribution_split_entropy(
             np.array([[Npre, Npost], [0, 0]])
         )
     for path in cov_paths_rev:
@@ -132,7 +175,7 @@ def _synapse_betweenness(sk, pre_inds, post_inds, use_entropy=False):
                     ]
                 )
                 split_index[ind] = (
-                    1 - distribution_split_entropy(counts) / entropy_normalization
+                    1 - _distribution_split_entropy(counts) / entropy_normalization
                 )
         # Deposit each branch's synapses at the branch point.
         bp_ind = sk.parent_nodes(path[-1])
@@ -176,14 +219,14 @@ def _find_axon_split(
 
 def branch_order(nrn, return_as_skel=False):
     """Compute simple branch order, counting how many branch points are between a node and root.
-    
+
     Parameters
     ----------
     nrn : Meshwork
         Meshwork with skeleton
     return_as_skel : bool, optional
         If True, returns an array for the skeleton instead of the mesh. Default is False.
-    
+
     Returns
     -------
     branch_order
@@ -228,14 +271,14 @@ def _strahler_path(baseline):
 def strahler_order(nrn, return_as_skel=False):
     """Computes strahler number. Tips have strahler number 1, and strahler number increments
     when a two branches with the same strahler number merge.
-    
+
     Parameters
     ----------
     nrn : Meshwork
         Meshwork neuron with skeleton
     return_as_skel : bool, optional
         Description
-    
+
     Returns
     -------
     strahler_number : array
@@ -259,85 +302,89 @@ def strahler_order(nrn, return_as_skel=False):
     else:
         return nrn.skeleton_property_to_mesh(strahler, no_map_value=-1)
 
-        ######################
-        # Density estimation #
-        ######################
-
-    def _gaussian_kernel(x, sigma):
-        def func(x):
-            return np.exp(-x * x / (2 * sigma * sigma))
-
-        return func
-
-    def _normalize_flat(W, nrn, exclude_root):
-        if exclude_root:
-            g = nrn.skeleton.cut_graph(
-                nrn.skeleton.child_nodes([nrn.skeleton.root])[0], directed=False
-            )
-            len_per = np.array(g.sum(axis=1) / 2).ravel()
-        else:
-            len_per = np.array(nrn.skeleton.csgraph_undirected.sum(axis=1) / 2).ravel()
-        return W.dot(len_per.reshape(-1, 1)).ravel()
-
-    def _normalize_gausssian(W):
-        return W.sum(axis=1).squeeze()
-
-    def linear_density(
-        nrn,
-        inds,
-        width,
-        weight=None,
-        kernel="flat",
-        normalize=True,
-        exclude_root=False,
-    ):
-        """Compute a sliding window average linear density of points across the object
-        
-        Parameters
-        ----------
-        inds : array
-            Mesh indices for density (e.g. synapse locations).
-        width : numeric
-            width of average window (in all directions).
-        weight : array None, optional
-            Weight for each point for weighted average. If None, assumes weight of unity.
-        normalize : bool, optional
-            If False, sums the weights but does not normalize by amount of cable.
-            Default is True.
-        exclude_root : bool, optional
-            If True, disconnects root from the graph for the case that the root is not
-            well-approximated by a line (e.g. a cell body.). The density for those vertices
-            will be infinite or nan.
-            Default is False.
+    #####################
+    # Density estimation #
+    ######################
 
 
-        Returns
-        -------
-        density_estimate : array
-            N-length array of density at all mesh vertices.
-        """
+def _gaussian_kernel(x, sigma):
+    def func(x):
+        return np.exp(-x * x / (2 * sigma * sigma))
+
+    return func
+
+
+def _normalize_flat(W, nrn, exclude_root):
+    if exclude_root:
+        g = nrn.skeleton.cut_graph(
+            nrn.skeleton.child_nodes([nrn.skeleton.root])[0], directed=False
+        )
+        len_per = np.array(g.sum(axis=1) / 2).ravel()
+    else:
+        len_per = np.array(nrn.skeleton.csgraph_undirected.sum(axis=1) / 2).ravel()
+    return W.dot(len_per.reshape(-1, 1)).ravel()
+
+
+def _normalize_gausssian(W):
+    return W.sum(axis=1).squeeze()
+
+
+def linear_density(
+    nrn,
+    inds,
+    width,
+    weight=None,
+    kernel="flat",
+    normalize=True,
+    exclude_root=False,
+):
+    """Compute a sliding window average linear density of points across the object
+
+    Parameters
+    ----------
+    inds : array
+        Mesh indices for density (e.g. synapse locations).
+    width : numeric
+        width of average window (in all directions).
+    weight : array None, optional
+        Weight for each point for weighted average. If None, assumes weight of unity.
+    normalize : bool, optional
+        If False, sums the weights but does not normalize by amount of cable.
+        Default is True.
+    exclude_root : bool, optional
+        If True, disconnects root from the graph for the case that the root is not
+        well-approximated by a line (e.g. a cell body.). The density for those vertices
+        will be infinite or nan.
+        Default is False.
+
+
+    Returns
+    -------
+    density_estimate : array
+        N-length array of density at all mesh vertices.
+    """
+    if kernel == "flat":
+        W = window_matrix(nrn.skeleton, width)
+    elif kernel == "gaussian":
+        dist_func = _gaussian_kernel(width)
+        W = window_matrix(nrn.skeleton, 4 * width, dist_func)
+    inds = nrn._convert_to_meshindex(inds)
+    has_inds = np.full(nrn.skeleton.n_vertices, 0)
+    if weight is None:
+        skinds, count = np.unique(inds.to_skel_index, return_counts=True)
+        has_inds[skinds] = count
+    else:
+        for w, skind in zip(weight, inds.to_skel_index):
+            has_inds[skind] += w
+    item_count = W.dot(has_inds.reshape(-1, 1)).ravel()
+    if normalize:
         if kernel == "flat":
-            W = window_matrix(nrn.skeleton, width)
+            norm = _normalize_flat(W, nrn, exclude_root)
         elif kernel == "gaussian":
-            dist_func = _gaussian_kernel(width)
-            W = window_matrix(nrn.skeleton, 4 * width, dist_func)
-        inds = nrn._convert_to_meshindex(inds)
-        has_inds = np.full(nrn.skeleton.n_vertices, 0)
-        if weight is None:
-            skinds, count = np.unique(inds.to_skel_index, return_counts=True)
-            has_inds[skinds] = count
-        else:
-            for w, skind in zip(weight, inds.to_skel_index):
-                has_inds[skind] += w
-        item_count = W.dot(has_inds.reshape(-1, 1)).ravel()
-        if normalize:
-            if kernel == "flat":
-                norm = _normalize_flat(W, nrn, exclude_root)
-            elif kernel == "gaussian":
-                norm = _normalize_gausssian(W)
+            norm = _normalize_gausssian(W)
 
-            with np.errstate(divide="ignore"):
-                rho = item_count / norm
-        else:
-            rho = item_count
-        return rho[nrn.skeleton.mesh_to_skel_map][nrn.mesh.node_mask]
+        with np.errstate(divide="ignore"):
+            rho = item_count / norm
+    else:
+        rho = item_count
+    return rho[nrn.skeleton.mesh_to_skel_map][nrn.mesh.node_mask]
