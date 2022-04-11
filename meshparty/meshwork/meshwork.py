@@ -263,12 +263,9 @@ class AnchoredAnnotation(object):
                 )
                 self._data[self._index_column_filt] = data[index_column].values
 
-        if self._defined_index:
-            self._orig_col_plus_index = list(self._original_columns)
-        else:
-            self._orig_col_plus_index = list(self._original_columns) + [
-                self._index_column_filt
-            ]
+        self._orig_col_plus_index = list(self._original_columns) + [
+            self._index_column_filt
+        ]
 
         valid_column = unique_column_name(index_column, "valid", data)
         self._data[valid_column] = True

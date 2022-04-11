@@ -234,7 +234,7 @@ class StaticSkeleton:
 
         for comp in comps_to_reroot:
             if comp == root_comp:
-                comp_root = new_root
+                comp_root = int(new_root)
             else:
                 comp_root = utils.find_far_points_graph(
                     self.csgraph_binary,
@@ -736,6 +736,7 @@ class Skeleton:
         if index_changed:
             self._branch_points = None
             self._end_points = None
+            self._segments = None
             self._segment_map = None
             self._SkeletonIndex = None
             self._cover_paths = None
