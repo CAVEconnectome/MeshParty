@@ -36,9 +36,12 @@ def resample_path(
         # find that last edge whose start point was the first vertex in the path
         # do this so we don't get big gaps from soma->branch or branch->branch
         last_node = int(sk.parent_nodes(path[-1]))
-        path_as_list = list(path)
-        path_as_list.append(last_node)
-        mod_path = sk.SkeletonIndex(path_as_list)
+        if last_node == sk.root:
+            mod_path = path
+        else:
+            path_as_list = list(path)
+            path_as_list.append(last_node)
+            mod_path = sk.SkeletonIndex(path_as_list)
         add_last_edge = True
     else:
         mod_path = path
