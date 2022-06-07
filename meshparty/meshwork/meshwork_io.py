@@ -33,7 +33,7 @@ def load_meshwork_metadata(filename):
 
 
 def save_meshwork_mesh(filename, mw, version=LATEST_VERSION):
-    node_mask = mw.mesh_mask
+    mesh_mask = mw.mesh_mask
     if mw._original_mesh_data is not None:
         vs, fs, es, nm, vxsc = decompress_mesh_data(*mw._original_mesh_data)
         mesh = Mesh(vs, fs, link_edges=es, node_mask=nm, voxel_scaling=vxsc)
@@ -51,7 +51,7 @@ def save_meshwork_mesh(filename, mw, version=LATEST_VERSION):
             f.create_dataset(
                 "mesh/link_edges", data=mesh.link_edges, compression="gzip"
             )
-        f.create_dataset("mesh/mesh_mask", data=node_mask, compression="gzip")
+        f.create_dataset("mesh/mesh_mask", data=mesh_mask, compression="gzip")
 
 
 def load_meshwork_mesh(filename, version=NULL_VERSION):
@@ -162,6 +162,10 @@ def _load_dataframe_generic(filename, table_name):
     with h5py.File(filename, "r") as f:
         dat = f[key][()].tobytes()
         df = pd.DataFrame.from_records(orjson.loads(dat))
+        try:
+            df.index = np.array(df.index, dtype="int")
+        except:
+            pass
     return df
 
 
@@ -196,7 +200,7 @@ def save_meshwork_annotations(filename, mw, version=LATEST_VERSION):
             dset.attrs["defined_index"] = int(anno._defined_index)
             if anno._defined_index is True:
                 dset.attrs["index_column"] = anno.index_column_original
-            
+
         anno_save_function[version](
             annos[table_name].data_original, table_name, filename
         )
