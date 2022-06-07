@@ -52,7 +52,11 @@ class AnchoredAnnotationManager(object):
             self._anchor_mesh = None
         else:
             self._anchor_mesh = MaskedMeshMemory(anchor_mesh)
-        self._filter_mesh = filter_mesh
+
+        if filter_mesh is None:
+            filter_mesh = self._anchor_mesh
+        self._filter_mesh = MaskedMeshMemory(filter_mesh)
+
         self._MeshIndex = np.array
         self._data_tables = dict()
 
@@ -118,8 +122,8 @@ class AnchoredAnnotationManager(object):
                 index_column=index_column,
                 voxel_resolution=self.voxel_resolution,
             )
-            if self._filter_mesh is not None:
-                self._data_tables[name]._filter_data(self._filter_mesh)
+
+            self._data_tables[name]._filter_data(self._filter_mesh)
 
     def _add_attribute(self, key):
         if key in dir(self):
@@ -164,7 +168,7 @@ class AnchoredAnnotationManager(object):
         self._data_tables[name] = AnchoredAnnotation(
             name,
             data,
-            self._anchor_mesh,
+            self._filter_mesh,
             point_column=point_column,
             mask=mask,
             point_array=point_array,
@@ -174,6 +178,8 @@ class AnchoredAnnotationManager(object):
             voxel_resolution=voxel_resolution,
         )
         self._data_tables[name]._register_MeshIndex(self._MeshIndex)
+        self._data_tables[name]._filter_data(self._filter_mesh)
+
         self._add_attribute(name)
 
     def remove_annotations(self, name):
@@ -189,8 +195,7 @@ class AnchoredAnnotationManager(object):
             name = [name]
         for n in name:
             self._data_tables[n]._anchor_to_mesh(self._anchor_mesh)
-            if self._filter_mesh is not None:
-                self._data_tables[n]._filter_data(self._filter_mesh)
+            self._data_tables[n]._filter_data(self._filter_mesh)
 
     def filter_annotations(self, new_mesh):
         "Use a masked mesh to filter all anchored annotations"
@@ -200,7 +205,7 @@ class AnchoredAnnotationManager(object):
 
     def remove_filter(self):
         "Remove filters from the annotations"
-        self._filter_mesh = None
+        self._filter_mesh = self._anchor_mesh
         for tn in self.table_names:
             self._data_tables[tn]._reset_filter()
 
@@ -1682,6 +1687,6 @@ def load_meshwork(filename):
             max_distance=data.get("max_distance"),
             index_column=data.get("index_column", None),
         )
-    if not np.all(mask == mesh.node_mask):
+    if not np.all(mask):
         mw.apply_mask(mask)
     return mw
