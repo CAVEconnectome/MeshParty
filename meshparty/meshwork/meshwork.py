@@ -702,6 +702,10 @@ class Meshwork(object):
         finally:
             self.reset_mask(to=current_mask)
 
+    @property
+    def mesh_indices(self):
+        return self.MeshIndex(np.arange(self.mesh.n_vertices))
+
     ##################
     # Anno functions #
     ##################
@@ -801,6 +805,11 @@ class Meshwork(object):
     def skeleton(self):
         """Associated skeleton"""
         return self._skeleton
+
+    @property
+    @OnlyIfSkeleton.exists
+    def skeleton_indices(self):
+        return self.SkeletonIndex(np.arange(self.skeleton.n_vertices))
 
     def skeletonize_mesh(
         self,
@@ -948,12 +957,9 @@ class Meshwork(object):
                 "Only string values allowed are 'mean', 'median', 'max', and 'min'."
             )
 
-        arr = np.vstack((self.skeleton.mesh_to_skel_map, mesh_property)).T
-        arr = arr[np.argsort(arr[:, 0])]
-        arr_grouped = np.split(
-            arr[:, 1], np.unique(arr[:, 0], return_index=True)[1][1:]
-        )
-        return np.array([aggfunc(x) for x in arr_grouped])
+        mesh_property = np.array(mesh_property)
+        arr_grouped = self.skeleton_indices.to_mesh_region
+        return np.array([aggfunc(mesh_property[x]) for x in arr_grouped])
 
     @property
     @OnlyIfSkeleton.exists
