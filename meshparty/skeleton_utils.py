@@ -32,12 +32,15 @@ def resample_path(
     path, sk, path_counter, spacing, kind, tip_length_ratio, branch_d, avoid_root
 ):
     "Resample a specific path to get a desired spacing"
+    return_direct = False
     if path[-1] != sk.root:
         # find that last edge whose start point was the first vertex in the path
         # do this so we don't get big gaps from soma->branch or branch->branch
         last_node = int(sk.parent_nodes(path[-1]))
         if last_node == sk.root:
             mod_path = path
+            if len(path) == 1 and avoid_root:
+                return_direct = True
         else:
             path_as_list = list(path)
             path_as_list.append(last_node)
@@ -46,6 +49,29 @@ def resample_path(
     else:
         mod_path = path
         add_last_edge = False
+        if len(mod_path) == 1 or (len(mod_path) == 2 and avoid_root):
+            return_direct == True
+
+    # If path only contains the root, or just one point and then the root and avoid_root is active,
+    # just return without doing anything except updating new_edges.
+    if return_direct:
+        new_verts = sk.vertices[mod_path]
+        if len(mod_path) == 1:
+            new_edges = np.zeros((0, 2), dtype=int)
+        else:
+            new_edges = (
+                np.vstack(
+                    [
+                        np.arange(len(new_verts) - 1, 0, -1, dtype=int),
+                        np.arange(len(new_verts) - 2, -1, -1, dtype=int),
+                    ]
+                ).T
+                + path_counter
+            )
+        if add_last_edge:
+            new_edges = np.vstack([new_edges, [path_counter, branch_d[last_node]]])
+        output_map_path = np.array(mod_path)
+        return new_verts, new_edges, output_map_path, branch_d
 
     # use the distance from root to parameterize the path
     input_d = sk.distance_to_root[mod_path]
