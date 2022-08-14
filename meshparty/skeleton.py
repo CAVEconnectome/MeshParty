@@ -884,7 +884,7 @@ class Skeleton:
             return_predecessors=True,
         )
         if not np.isinf(d[t_ind]):
-            return self.SkeletonIndex(utils.path_from_predecessors(Ps, t_ind))
+            return self.SkeletonIndex(utils.path_from_predecessors(Ps, t_ind)[::-1])
         else:
             return None
 

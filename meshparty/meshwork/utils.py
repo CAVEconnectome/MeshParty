@@ -172,6 +172,10 @@ def MeshworkIndexFactory(mw):
             ]
 
         @property
+        def to_mesh_index_ordered(self):
+            return JointMeshIndex(np.concatenate(self.to_mesh_region))
+
+        @property
         def to_mesh_region_point(self):
             out = mw._skind_region_first(self)
             out[self < 0] = -1

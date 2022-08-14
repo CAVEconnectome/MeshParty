@@ -1354,7 +1354,7 @@ class Meshwork(object):
         )
         if return_as_skel:
             return skpath
-        return skpath.to_mesh_index
+        return skpath.to_mesh_index_ordered
 
     def _within_distance(self, inds, graph, max_distance):
         ds = sparse.csgraph.dijkstra(graph, indices=inds, directed=False)
