@@ -107,7 +107,7 @@ def resample_path(
         output_map_path = np.concatenate((output_map_path, [tip_ind]))
 
     # find the index of the old branch points in the new path
-    is_branch = np.isin(np.array(path), sk.branch_points)
+    is_branch = np.isin(np.array(path), np.concatenate([sk.branch_points, np.array([sk.root])]))
     path_branch = path[is_branch]
     path_branch_verts = sk.vertices[path_branch, :]
     tree = KDTree(new_verts)
