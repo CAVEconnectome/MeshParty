@@ -126,8 +126,10 @@ def MeshworkIndexFactory(mw):
         def __getitem__(self, k):
             ret = super(JointSkeletonIndex, self).__getitem__(k)
             if not isinstance(ret, np.integer):
-                ret._skel_indices_base = self._skel_indices_base[k]
-            return ret
+                ret._skel_indices_base = mw.skeleton.map_indices_to_unmasked(
+                    np.array(ret)[np.array(ret) >= 0]
+                )
+            return JointSkeletonIndex(ret)
 
         def __eq__(self, other):
             return np.array(self) == other
