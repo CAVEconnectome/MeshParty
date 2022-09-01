@@ -25,8 +25,7 @@ def MeshworkIndexFactory(mw):
         def __array_finalize__(self, obj):
             if obj is None:
                 return
-            self._mesh_indices_base = getattr(
-                obj, "_mesh_indices_base", np.array([]))
+            self._mesh_indices_base = getattr(obj, "_mesh_indices_base", np.array([]))
 
         def __getitem__(self, k):
             ret = super(JointMeshIndex, self).__getitem__(k)
@@ -99,7 +98,7 @@ def MeshworkIndexFactory(mw):
         def to_skel_mask(self):
             if mw.skeleton is None:
                 return None
-            return mw._mesh_mask_to_skel_mask(self.to_mesh_mask)
+            return JointSkeletonIndex(np.unique(mw._mind_to_skind(self))).to_skel_mask
 
     if mw.skeleton is None:
         return JointMeshIndex, np.array
@@ -122,14 +121,15 @@ def MeshworkIndexFactory(mw):
         def __array_finalize__(self, obj):
             if obj is None:
                 return
-            self._skel_indices_base = getattr(
-                obj, "_skel_indices_base", np.array([]))
+            self._skel_indices_base = getattr(obj, "_skel_indices_base", np.array([]))
 
         def __getitem__(self, k):
             ret = super(JointSkeletonIndex, self).__getitem__(k)
             if not isinstance(ret, np.integer):
-                ret._skel_indices_base = self._skel_indices_base[k]
-            return ret
+                ret._skel_indices_base = mw.skeleton.map_indices_to_unmasked(
+                    np.array(ret)[np.array(ret) >= 0]
+                )
+            return JointSkeletonIndex(ret)
 
         def __eq__(self, other):
             return np.array(self) == other
@@ -174,6 +174,10 @@ def MeshworkIndexFactory(mw):
             ]
 
         @property
+        def to_mesh_index_ordered(self):
+            return JointMeshIndex(np.concatenate(self.to_mesh_region))
+
+        @property
         def to_mesh_region_point(self):
             out = mw._skind_region_first(self)
             out[self < 0] = -1
@@ -216,8 +220,7 @@ def _in1d_items(elements, mask, test_vals):
 
 
 def in1d_items(elements, test_vals):
-    """For each item in test_vals, finds all indices in elements that match it
-    """
+    """For each item in test_vals, finds all indices in elements that match it"""
     out = _in1d_items(elements, np.isin(elements, test_vals), test_vals)
     return [out[out[:, 0] == ii, 1] for ii in range(len(test_vals))]
 
@@ -228,8 +231,7 @@ def in1d_first_item(elements, test_vals):
     el_mask = np.isin(elements, test_vals)
     vals, ind_mask = np.unique(elements[el_mask], return_index=True)
     out = np.full(len(test_vals), -1)
-    _, slots = np.unique(
-        test_vals[np.isin(test_vals, vals)], return_inverse=True)
+    _, slots = np.unique(test_vals[np.isin(test_vals, vals)], return_inverse=True)
     out[slots] = np.flatnonzero(el_mask)[ind_mask]
     return out
 
@@ -242,8 +244,7 @@ def _window_matrix(
     width,
     dist_func=None,
 ):
-    """ Generate matrix such that Aij is 1 if j is within width of i.
-    """
+    """Generate matrix such that Aij is 1 if j is within width of i."""
     has_bp = np.full(len(distance_to_root), -1)
     has_bp[branch_points] = branch_points
     seen = np.full(len(distance_to_root), False)
@@ -273,8 +274,7 @@ def _window_matrix(
                 dist_to_add = init_dist + downstream_dist[downstream_window]
                 ind_list.append(inds_to_add)
                 dist_list.append(dist_to_add)
-            all_inds, indices = np.unique(
-                np.concatenate(ind_list), return_index=True)
+            all_inds, indices = np.unique(np.concatenate(ind_list), return_index=True)
             all_dist = np.concatenate(dist_list)[indices]
             for kk, d in zip(all_inds, all_dist):
                 row_ind.append(jj)
@@ -291,8 +291,7 @@ def _window_matrix(
 
 
 def window_matrix(sk, width, dist_func=None):
-    """ Generate matrix such that Aij is 1 if j is within width of i.
-    """
+    """Generate matrix such that Aij is 1 if j is within width of i."""
     bp_downstream = {bp: sk.downstream_nodes(bp) for bp in sk.branch_points}
     end_paths_to_root = [sk.path_to_root(ep) for ep in sk.end_points]
     dist, wm_inds = _window_matrix(

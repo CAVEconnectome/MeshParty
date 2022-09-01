@@ -6,10 +6,10 @@ import numpy as np
 from meshparty import trimesh_io
 import logging
 try:
-    from annotationframeworkclient import FrameworkClient
+    from caveclient import CAVEclient
 except ImportError:
     logging.warning(
-        "Need to pip install annotationframeworkclient to repair mesh with pychunkedgraph")
+        "Need to pip install caveclient to repair mesh with pychunkedgraph")
 
 
 def np_shared_rows(A, B):
@@ -414,10 +414,10 @@ def get_link_edges(mesh, seg_id, datastack_name=None, close_map_distance=300,
     close_map_distance: int or float
         the maximum distance to map (default 300 in units of mesh.vertices)
     server_address: str
-        the url to the root of the framework deployment
+        the url to the root of the CAVE deployment
     verbose: bool
         whether to print debug statements
-    client : annotationframeworkclient.ChunkedGraphClient
+    client : caveclient.ChunkedGraphClient
 
     Returns
     -------
@@ -428,7 +428,7 @@ def get_link_edges(mesh, seg_id, datastack_name=None, close_map_distance=300,
 
     # initialize a chunkedgraph client
     if client is None:
-        client = FrameworkClient(
+        client = CAVEclient(
             datastack_name, server_address=server_address).chunkedgraph
 
     # get the merge log
