@@ -779,7 +779,7 @@ class Skeleton:
         if len(paths) == 0:
             return 0
 
-        if isinstance(paths[0], Iterable):
+        if np.ndim(paths[0]) > 0:
             Ls = []
             for path in paths:
                 Ls.append(self._single_path_length(path))
@@ -866,6 +866,18 @@ class Skeleton:
         if self._segments is None:
             self._segments, self._segment_map = self._compute_segments()
         return self._segments
+
+    @property
+    def segments_plus(self):
+        """list : A list of array indices of segments, including the segment parent in the next segmetn"""
+        segs_plus = []
+        for seg in self.segments:
+            parent = self.parent_nodes(seg[-1])
+            if parent > 0:
+                segs_plus.append(self.SkeletonIndex(np.concatenate([seg, [parent]])))
+            else:
+                segs_plus.append(seg)
+        return segs_plus
 
     @property
     def segment_map(self):
