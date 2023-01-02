@@ -1195,7 +1195,7 @@ class Meshwork(object):
         segment_list = []
         for seg in seg_inds:
             if return_as_skel is False:
-                segment_list.append(self.skeleton.segments[seg].to_mesh_index)
+                segment_list.append(self.skeleton.segments[seg].to_mesh_index_ordered)
             else:
                 segment_list.append(self.skeleton.segments[seg])
         return segment_list

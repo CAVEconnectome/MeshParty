@@ -126,6 +126,7 @@ class StaticSkeleton:
 
         self._parent_node_array = None
         self._distance_to_root = None
+        self._hops_to_root = None
         self._csgraph = None
         self._csgraph_binary = None
         self._voxel_scaling = voxel_scaling
@@ -270,6 +271,7 @@ class StaticSkeleton:
         self._csgraph = None
         self._csgraph_binary = None
         self._distance_to_root = None
+        self._hops_to_root = None
 
     @property
     def csgraph(self):
@@ -320,6 +322,15 @@ class StaticSkeleton:
                 self.csgraph, directed=False, indices=self.root
             )
         return self._distance_to_root
+
+    @property
+    def hops_to_root(self):
+        """np.array : N length array with the number of hops to the root node along the skeleton."""
+        if self._hops_to_root is None:
+            self._hops_to_root = sparse.csgraph.dijkstra(
+                self.csgraph_binary, directed=False, indices=self.root
+            )
+        return self._hops_to_root
 
     def path_to_root(self, v_ind):
         """
@@ -723,6 +734,10 @@ class Skeleton:
             last_ind = len(path_filt)
         return self.SkeletonIndex(path_filt[:last_ind])
 
+    @property
+    def hops_to_root(self):
+        return self._rooted.hops_to_root[self.node_mask]
+
     #######################
     # Filtered properties #
     #######################
@@ -851,9 +866,11 @@ class Skeleton:
             _, ls = sparse.csgraph.connected_components(self.csgraph_binary)
 
         _, invs = np.unique(ls, return_inverse=True)
-        segments = [
-            self.SkeletonIndex(np.flatnonzero(invs == ii)) for ii in np.unique(invs)
-        ]
+        for ii in np.unique(invs):
+            seg = self.SkeletonIndex(np.flatnonzero(invs == ii))
+            segments.append(
+                seg[np.argsort(self.hops_to_root[seg])[::-1]]
+            )
         segment_map = invs
 
         return segments, segment_map.astype(int)
@@ -873,7 +890,7 @@ class Skeleton:
         segs_plus = []
         for seg in self.segments:
             parent = self.parent_nodes(seg[-1])
-            if parent > 0:
+            if parent >= 0:
                 segs_plus.append(self.SkeletonIndex(np.concatenate([seg, [parent]])))
             else:
                 segs_plus.append(seg)
