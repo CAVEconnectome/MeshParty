@@ -519,7 +519,7 @@ def setup_root(mesh, is_soma_pt=None, soma_d=None, is_valid=None):
     if is_valid is not None:
         valid = np.copy(is_valid)
     else:
-        valid = np.ones(len(mesh.vertices), np.bool)
+        valid = np.ones(len(mesh.vertices), bool)
     assert len(valid) == mesh.vertices.shape[0]
 
     root = None
@@ -581,7 +581,7 @@ def mesh_teasar(
     # if certain vertices haven't been pre-invalidated start with just
     # the root vertex invalidated
     if valid is None:
-        valid = np.ones(len(mesh.vertices), np.bool)
+        valid = np.ones(len(mesh.vertices), bool)
         valid[root] = False
     else:
         if len(valid) != len(mesh.vertices):

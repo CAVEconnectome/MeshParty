@@ -50,5 +50,5 @@ def test_meshwork_skeleton(basic_meshwork):
 
     nrn.apply_mask(ds_pts.to_mesh_mask)
     new_mesh = meshwork.Meshwork(nrn.mesh)
-    new_mesh.skeletonize_mesh()
+    new_mesh.skeletonize_mesh(compute_radius=False)
     assert np.isclose(new_mesh.path_length(), 106050.47)

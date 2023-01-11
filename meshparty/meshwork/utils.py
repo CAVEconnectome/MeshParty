@@ -338,10 +338,10 @@ def compress_mesh_data(mesh, cname="lz4"):
 
 
 def decompress_mesh_data(zvs, zfs, zes, znm, vxsc):
-    vs = np.frombuffer(blosc.decompress(zvs), dtype=np.float).reshape(-1, 3)
-    fs = np.frombuffer(blosc.decompress(zfs), dtype=np.int).reshape(-1, 3)
-    es = np.frombuffer(blosc.decompress(zes), dtype=np.int).reshape(-1, 2)
-    nm = np.frombuffer(blosc.decompress(znm), dtype=np.bool)
+    vs = np.frombuffer(blosc.decompress(zvs), dtype=float).reshape(-1, 3)
+    fs = np.frombuffer(blosc.decompress(zfs), dtype=int).reshape(-1, 3)
+    es = np.frombuffer(blosc.decompress(zes), dtype=int).reshape(-1, 2)
+    nm = np.frombuffer(blosc.decompress(znm), dtype=bool)
     return vs, fs, es, nm, vxsc
 
 
