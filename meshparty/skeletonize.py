@@ -9,7 +9,7 @@ except:
     KDTree = spatial.cKDTree
 from tqdm import tqdm
 from meshparty.skeleton import Skeleton
-from .ray_tracing import ray_trace_distance, shape_diameter_function
+
 import fastremap
 import logging
 from . import skeleton_utils
@@ -145,6 +145,10 @@ def skeletonize_mesh(
                 soma_pt, temp_sk.vertices, temp_sk.edges, soma_radius
             )
         elif collapse_function == "branch":
+            try:
+                from .ray_tracing import ray_trace_distance, shape_diameter_function
+            except:
+                raise ImportError('Could not import pyembree for ray tracing')
 
             if shape_function == "single":
                 rs = ray_trace_distance(
@@ -217,6 +221,11 @@ def skeletonize_mesh(
 
     if compute_radius is True:
         if rs is None:
+            try:
+                from .ray_tracing import ray_trace_distance, shape_diameter_function
+            except:
+                raise ImportError('Could not import pyembree for ray tracing')
+
             if shape_function == "single":
                 rs = ray_trace_distance(orig_skel_index[vert_filter], mesh)
             elif shape_function == "cone":
