@@ -1,6 +1,5 @@
 import trimesh.ray
 from trimesh.ray import ray_pyembree
-from trimesh.ray import ray_pyembree
 from scipy.linalg import block_diag
 import numpy as np
 import multiwrapper.multiprocessing_utils as mu
