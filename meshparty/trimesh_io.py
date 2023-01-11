@@ -1017,7 +1017,7 @@ class Mesh(trimesh.Trimesh):
             center_node_ids = np.array([np.random.randint(len(self.vertices))])
 
         if center_coords is None:
-            center_node_ids = np.array(center_node_ids, dtype=np.int)
+            center_node_ids = np.array(center_node_ids, dtype=int)
             center_coords = self.vertices[center_node_ids]
 
         if sample_n_points is None:

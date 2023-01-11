@@ -3,7 +3,7 @@ import contextlib
 import numpy as np
 import pytest
 import os
-import imageio
+import imageio.v2 as imageio
 import json
 import matplotlib.cm as cm
 
