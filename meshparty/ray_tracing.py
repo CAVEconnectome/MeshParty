@@ -1,6 +1,8 @@
 import trimesh.ray
-from trimesh.ray import ray_pyembree
-from trimesh.ray import ray_pyembree
+try:
+    from trimesh.ray import ray_pyembree
+except ImportError:
+    print('You must install pyembree in order to utilize SDF functionality')
 from scipy.linalg import block_diag
 import numpy as np
 import multiwrapper.multiprocessing_utils as mu
