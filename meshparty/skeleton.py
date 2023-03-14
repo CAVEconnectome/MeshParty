@@ -983,10 +983,10 @@ class Skeleton:
         dns = []
         for vind in vinds:
             g = self.cut_graph(vind)
-            d = sparse.csgraph.dijkstra(g.T, indices=[vind])
+            d = sparse.csgraph.dijkstra(g.T, indices=[vind]).squeeze()
             if inclusive is False:
                 d[vind] = np.inf
-            dns.append(self.SkeletonIndex(np.flatnonzero(~np.isinf(d[0]))))
+            dns.append(self.SkeletonIndex(np.flatnonzero(~np.isinf(d))))
 
         if return_single:
             dns = dns[0]

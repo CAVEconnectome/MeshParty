@@ -612,7 +612,7 @@ def mesh_teasar(
     start = time.time()
     time_arrays = [[], [], [], [], []]
 
-    with tqdm(total=total_to_visit) as pbar:
+    with tqdm(total=total_to_visit, disable=True) as pbar:
         # keep looping till all vertices have been invalidated
         while np.sum(valid) > 0:
             k += 1

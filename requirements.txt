@@ -15,6 +15,5 @@ imageio
 pandas
 orjson
 blosc
-numba
 tables
 dataclasses
