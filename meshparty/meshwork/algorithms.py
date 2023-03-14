@@ -1,6 +1,5 @@
 import numpy as np
 from .utils import window_matrix
-# import numba
 
 #####################
 # Split by synapses #
@@ -288,7 +287,6 @@ def branch_order(nrn, return_as_skel=False):
         return nrn.skeleton_property_to_mesh(branch_order, no_map_value=-1)
 
 
-# @numba.njit
 def _strahler_path(baseline):
     out = np.full(len(baseline), -1, dtype=np.int64)
     last_val = 1
