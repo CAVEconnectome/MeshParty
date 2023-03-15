@@ -1,4 +1,4 @@
-from meshparty import trimesh_io, trimesh_vtk, skeleton_io
+from ..meshparty import trimesh_io, trimesh_vtk, skeleton_io
 import contextlib
 import numpy as np
 import pytest

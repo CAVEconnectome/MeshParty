@@ -1,4 +1,4 @@
-from meshparty import trimesh_io, mesh_filters, trimesh_vtk
+from ..meshparty import trimesh_io, mesh_filters, trimesh_vtk
 import numpy as np
 import os 
 import imageio.v2 as imageio

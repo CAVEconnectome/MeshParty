@@ -5,7 +5,7 @@ import pytest
 import itertools
 import contextlib
 import os
-from meshparty import skeleton_io, skeleton
+from ..meshparty import skeleton_io, skeleton
 
 overwrite_flags = [True, False]
 io_file_exists = [True, False]
