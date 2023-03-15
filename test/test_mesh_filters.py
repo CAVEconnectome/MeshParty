@@ -1,7 +1,7 @@
 from meshparty import trimesh_io, mesh_filters, trimesh_vtk
 import numpy as np
 import os 
-import imageio
+import imageio.v2 as imageio
 import pytest
 
 def compare_img_to_test_file(fname, back_val = 255, close=15):

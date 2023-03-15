@@ -89,7 +89,7 @@ def read_mesh_h5(filename):
         link_edges, a Kx2 a,b list of extra link edges to add to the mesh graph np.int32
         None if this doesn't exist
     :obj:`np.array`
-        node_mask, a N length np.bool area of whether to mask this index (None if doesn't exist)
+        node_mask, a N length bool area of whether to mask this index (None if doesn't exist)
         None if this doesn't exist
 
     Raises
@@ -152,7 +152,7 @@ def write_mesh_h5(filename, vertices, faces,
         a Kx2 a,b list of extra link edges to add to the mesh graph np.int32
         None if this doesn't exist (default None)
     node_mask: np.array
-        a N length np.bool area of whether to mask this index (None if doesn't exist)
+        a N length bool area of whether to mask this index (None if doesn't exist)
         None if this doesn't exist (default None)
     overwrite: False
         whether to overwrite the file, will return silently if mesh file exists already
@@ -206,7 +206,7 @@ def read_mesh(filename):
         link_edges, a Kx2 a,b list of extra link edges to add to the mesh graph np.int32
         None if this doesn't exist or is an obj file
     :obj:`numpy.array`
-        node_mask, a N length np.bool area of whether to mask this index (None if doesn't exist)
+        node_mask, a N length bool area of whether to mask this index (None if doesn't exist)
         None if this doesn't exist or is an obj file
 
     """
@@ -1017,7 +1017,7 @@ class Mesh(trimesh.Trimesh):
             center_node_ids = np.array([np.random.randint(len(self.vertices))])
 
         if center_coords is None:
-            center_node_ids = np.array(center_node_ids, dtype=np.int)
+            center_node_ids = np.array(center_node_ids, dtype=int)
             center_coords = self.vertices[center_node_ids]
 
         if sample_n_points is None:
@@ -1046,7 +1046,7 @@ class Mesh(trimesh.Trimesh):
 
                     new_dists = []
                     new_node_ids = []
-                    ids = np.arange(0, sample_n_points, dtype=np.int)
+                    ids = np.arange(0, sample_n_points, dtype=int)
                     for i_sample in range(len(center_coords)):
                         sample_ids = np.random.choice(ids, n_points,
                                                       replace=False,
@@ -1055,9 +1055,9 @@ class Mesh(trimesh.Trimesh):
                         new_node_ids.append(node_ids[i_sample, sample_ids])
 
                     dists = np.array(new_dists, dtype=np.float32)
-                    node_ids = np.array(new_node_ids, dtype=np.int)
+                    node_ids = np.array(new_node_ids, dtype=int)
                 else:
-                    ids = np.arange(0, sample_n_points, dtype=np.int)
+                    ids = np.arange(0, sample_n_points, dtype=int)
                     sample_ids = np.random.choice(ids, n_points, replace=False)
 
                     dists = dists[:, sample_ids]

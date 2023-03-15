@@ -3,7 +3,7 @@ import contextlib
 import numpy as np
 import pytest
 import os
-import imageio
+import imageio.v2 as imageio
 import json
 import matplotlib.cm as cm
 
@@ -63,7 +63,7 @@ def eval_actor_360(actors, dir_name, tmp_path, camera=None, scale=2, nframes=30,
     if make_image:
         return True
     else:
-        is_good = np.zeros(nframes, np.bool)
+        is_good = np.zeros(nframes, bool)
         for i in range(nframes):
             img_file = os.path.join(fpath, f'%04d.png' % i)
             is_good[i] = compare_img_to_test_file(

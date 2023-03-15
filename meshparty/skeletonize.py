@@ -9,7 +9,7 @@ except:
     KDTree = spatial.cKDTree
 from tqdm import tqdm
 from meshparty.skeleton import Skeleton
-from .ray_tracing import ray_trace_distance, shape_diameter_function
+
 import fastremap
 import logging
 from . import skeleton_utils
@@ -145,6 +145,10 @@ def skeletonize_mesh(
                 soma_pt, temp_sk.vertices, temp_sk.edges, soma_radius
             )
         elif collapse_function == "branch":
+            try:
+                from .ray_tracing import ray_trace_distance, shape_diameter_function
+            except:
+                raise ImportError('Could not import pyembree for ray tracing')
 
             if shape_function == "single":
                 rs = ray_trace_distance(
@@ -217,6 +221,11 @@ def skeletonize_mesh(
 
     if compute_radius is True:
         if rs is None:
+            try:
+                from .ray_tracing import ray_trace_distance, shape_diameter_function
+            except:
+                raise ImportError('Could not import pyembree for ray tracing')
+
             if shape_function == "single":
                 rs = ray_trace_distance(orig_skel_index[vert_filter], mesh)
             elif shape_function == "cone":
@@ -510,7 +519,7 @@ def setup_root(mesh, is_soma_pt=None, soma_d=None, is_valid=None):
     if is_valid is not None:
         valid = np.copy(is_valid)
     else:
-        valid = np.ones(len(mesh.vertices), np.bool)
+        valid = np.ones(len(mesh.vertices), bool)
     assert len(valid) == mesh.vertices.shape[0]
 
     root = None
@@ -572,7 +581,7 @@ def mesh_teasar(
     # if certain vertices haven't been pre-invalidated start with just
     # the root vertex invalidated
     if valid is None:
-        valid = np.ones(len(mesh.vertices), np.bool)
+        valid = np.ones(len(mesh.vertices), bool)
         valid[root] = False
     else:
         if len(valid) != len(mesh.vertices):
@@ -603,7 +612,7 @@ def mesh_teasar(
     start = time.time()
     time_arrays = [[], [], [], [], []]
 
-    with tqdm(total=total_to_visit) as pbar:
+    with tqdm(total=total_to_visit, disable=True) as pbar:
         # keep looping till all vertices have been invalidated
         while np.sum(valid) > 0:
             k += 1
