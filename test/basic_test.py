@@ -1,4 +1,4 @@
-from ..meshparty import trimesh_io, skeletonize, mesh_filters, skeleton
+from meshparty import trimesh_io, skeletonize, mesh_filters, skeleton
 import numpy as np
 import pytest
 import cloudvolume

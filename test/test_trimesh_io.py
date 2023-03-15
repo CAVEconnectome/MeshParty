@@ -4,7 +4,7 @@ import tempfile
 import numpy
 import pytest
 
-from ..meshparty import trimesh_io
+from meshparty import trimesh_io
 
 from basic_test import build_basic_cube_mesh
 
