@@ -13,6 +13,7 @@ from .ray_tracing import ray_trace_distance, shape_diameter_function
 import fastremap
 import logging
 from . import skeleton_utils
+from graphteasar.skeletonize_mesh import skeletonize_neuron
 
 
 def skeletonize_mesh(
@@ -293,10 +294,7 @@ def calculate_skeleton_paths_on_mesh(
     soma_pt=None,
     soma_thresh=7500,
     invalidation_d=10000,
-    smooth_neighborhood=2,
-    smooth_iterations=12,
     cc_vertex_thresh=100,
-    large_skel_path_threshold=5000,
     return_map=False,
     root_index=None,
 ):
@@ -324,14 +322,6 @@ def calculate_skeleton_paths_on_mesh(
         the distance along the mesh to invalidate when applying TEASAR
         like algorithm.  Controls how detailed a structure the skeleton
         algorithm reaches. default (10000 (nm))
-    smooth_neighborhood: int
-        the neighborhood in edge hopes over which to smooth skeleton locations.
-        This controls the smoothing of the skeleton
-        (default 5)
-    large_skel_path_threshold: int
-        the threshold in terms of skeleton vertices that skeletons will be
-        nominated for tip merging.  Smaller skeleton fragments
-        will not be merged at their tips (default 5000)
     cc_vertex_thresh: int
         the threshold in terms of vertex numbers that connected components
         of the mesh will be considered for skeletonization. mesh connected
@@ -358,8 +348,9 @@ def calculate_skeleton_paths_on_mesh(
 
     """
 
-    skeletonize_output = skeletonize_components(
-        mesh,
+    skeletonize_output = skeletonize_neuron(
+        mesh.vertices,
+        csgraph=mesh.csgraph,
         soma_pt=soma_pt,
         soma_thresh=soma_thresh,
         invalidation_d=invalidation_d,
@@ -425,288 +416,6 @@ def reduce_verts(verts, faces):
     for i in range(faces.shape[1]):
         new_face[:, i] = np.searchsorted(used_verts, faces[:, i])
     return new_verts, new_face, used_verts
-
-
-def skeletonize_components(
-    mesh,
-    soma_pt=None,
-    soma_thresh=10000,
-    invalidation_d=10000,
-    cc_vertex_thresh=100,
-    return_map=False,
-    root_index=None,
-):
-    """core skeletonization routine, used by :func:`meshparty.skeletonize.calculate_skeleton_paths_on_mesh`
-    to calculate skeleton on all components of mesh, with no post processing"""
-    # find all the connected components in the mesh
-    n_components, labels = sparse.csgraph.connected_components(
-        mesh.csgraph, directed=False, return_labels=True
-    )
-    comp_labels, comp_counts = np.unique(labels, return_counts=True)
-
-    if return_map:
-        mesh_to_skeleton_map = np.full(len(mesh.vertices), np.nan)
-
-    # variables to collect the paths, roots and path lengths
-    all_paths = []
-    roots = []
-    tot_path_lengths = []
-
-    if root_index is not None:
-        soma_d = np.linalg.norm(mesh.vertices - mesh.vertices[root_index], axis=1)
-        is_soma_pt = np.arange(len(mesh.vertices)) == root_index
-    elif soma_pt is not None:
-        soma_d = mesh.vertices - soma_pt.reshape(1, 3)
-        soma_d = np.linalg.norm(soma_d, axis=1)
-        is_soma_pt = soma_d < soma_thresh
-    else:
-        is_soma_pt = None
-        soma_d = None
-    # is_soma_pt = None
-    # soma_d = None
-
-    # loop over the components
-    for k in range(n_components):
-        if comp_counts[k] > cc_vertex_thresh:
-
-            # find the root using a soma position if you have it
-            # it will fall back to a heuristic if the soma
-            # is too far away for this component
-            root, root_ds, pred, valid = setup_root(
-                mesh, is_soma_pt, soma_d, labels == k
-            )
-            # run teasar on this component
-            teasar_output = mesh_teasar(
-                mesh,
-                root=root,
-                root_ds=root_ds,
-                root_pred=pred,
-                valid=valid,
-                invalidation_d=invalidation_d,
-                return_map=return_map,
-            )
-            if return_map is False:
-                paths, path_lengths = teasar_output
-            else:
-                paths, path_lengths, mesh_to_skeleton_map_single = teasar_output
-                mesh_to_skeleton_map[
-                    ~np.isnan(mesh_to_skeleton_map_single)
-                ] = mesh_to_skeleton_map_single[~np.isnan(mesh_to_skeleton_map_single)]
-
-            if len(path_lengths) > 0:
-                # collect the results in lists
-                tot_path_lengths.append(path_lengths)
-                all_paths.append(paths)
-                roots.append(root)
-
-    if return_map:
-        return all_paths, roots, tot_path_lengths, mesh_to_skeleton_map
-    else:
-        return all_paths, roots, tot_path_lengths
-
-
-def setup_root(mesh, is_soma_pt=None, soma_d=None, is_valid=None):
-    """ function to find the root index to use for this mesh """
-    if is_valid is not None:
-        valid = np.copy(is_valid)
-    else:
-        valid = np.ones(len(mesh.vertices), np.bool)
-    assert len(valid) == mesh.vertices.shape[0]
-
-    root = None
-    # soma mode
-    if is_soma_pt is not None:
-        # pick the first soma as root
-        assert len(soma_d) == mesh.vertices.shape[0]
-        assert len(is_soma_pt) == mesh.vertices.shape[0]
-        is_valid_root = is_soma_pt & valid
-        valid_root_inds = np.where(is_valid_root)[0]
-        if len(valid_root_inds) > 0:
-            min_valid_root = np.nanargmin(soma_d[valid_root_inds])
-            root = valid_root_inds[min_valid_root]
-            root_ds, pred = sparse.csgraph.dijkstra(
-                mesh.csgraph, directed=False, indices=root, return_predecessors=True
-            )
-        else:
-            start_ind = np.where(valid)[0][0]
-            root, target, pred, dm, root_ds = utils.find_far_points(
-                mesh, start_ind=start_ind
-            )
-        valid[is_soma_pt] = False
-
-    if root is None:
-        # there is no soma close, so use far point heuristic
-        start_ind = np.where(valid)[0][0]
-        root, target, pred, dm, root_ds = utils.find_far_points(
-            mesh, start_ind=start_ind
-        )
-    valid[root] = False
-    assert np.all(~np.isinf(root_ds[valid]))
-    return root, root_ds, pred, valid
-
-
-def mesh_teasar(
-    mesh,
-    root=None,
-    valid=None,
-    root_ds=None,
-    root_pred=None,
-    soma_pt=None,
-    soma_thresh=7500,
-    invalidation_d=10000,
-    return_timing=False,
-    return_map=False,
-    exclude_edges_sigma=None,
-):
-    """core skeletonization function used to skeletonize a single component of a mesh"""
-    # if no root passed, then calculation one
-    if root is None:
-        root, root_ds, root_pred, valid = setup_root(
-            mesh, soma_pt=soma_pt, soma_thresh=soma_thresh
-        )
-    # if root_ds have not be precalculated do so
-    if root_ds is None:
-        root_ds, root_pred = sparse.csgraph.dijkstra(
-            mesh.csgraph, False, root, return_predecessors=True
-        )
-    # if certain vertices haven't been pre-invalidated start with just
-    # the root vertex invalidated
-    if valid is None:
-        valid = np.ones(len(mesh.vertices), np.bool)
-        valid[root] = False
-    else:
-        if len(valid) != len(mesh.vertices):
-            raise Exception("valid must be length of vertices")
-
-    if return_map == True:
-        mesh_to_skeleton_dist = np.full(len(mesh.vertices), np.inf)
-        mesh_to_skeleton_map = np.full(len(mesh.vertices), np.nan)
-
-    total_to_visit = np.sum(valid)
-    if np.sum(np.isinf(root_ds) & valid) != 0:
-        print(np.where(np.isinf(root_ds) & valid))
-        raise Exception("all valid vertices should be reachable from root")
-
-    # vector to store each branch result
-    paths = []
-
-    # vector to store each path's total length
-    path_lengths = []
-
-    # keep track of the nodes that have been visited
-    visited_nodes = [root]
-
-    # counter to track how many branches have been counted
-    k = 0
-
-    # arrays to track timing
-    start = time.time()
-    time_arrays = [[], [], [], [], []]
-
-    with tqdm(total=total_to_visit) as pbar:
-        # keep looping till all vertices have been invalidated
-        while np.sum(valid) > 0:
-            k += 1
-            t = time.time()
-            # find the next target, farthest vertex from root
-            # that has not been invalidated
-            target = np.nanargmax(root_ds * valid)
-            if np.isinf(root_ds[target]):
-                raise Exception("target cannot be reached")
-            time_arrays[0].append(time.time() - t)
-
-            t = time.time()
-            # figure out the longest this branch could be
-            # by following the route from target to the root
-            # and finding the first already visited node (max_branch)
-            # The dist(root->target) - dist(root->max_branch)
-            # is the maximum distance the shortest route to a branch
-            # point from the target could possibly be,
-            # use this bound to reduce the djisktra search radius for this target
-            max_branch = target
-            while max_branch not in visited_nodes:
-                max_branch = root_pred[max_branch]
-            max_path_length = root_ds[target] - root_ds[max_branch]
-
-            # calculate the shortest path to that vertex
-            # from all other vertices
-            # up till the distance to the root
-            ds, pred_t = sparse.csgraph.dijkstra(
-                mesh.csgraph,
-                False,
-                target,
-                limit=max_path_length,
-                return_predecessors=True,
-            )
-
-            # pick out the vertex that has already been visited
-            # which has the shortest path to target
-            min_node = np.argmin(ds[visited_nodes])
-            # reindex to get its absolute index
-            branch = visited_nodes[min_node]
-            # this is in the index of the point on the skeleton
-            # we want this branch to connect to
-            time_arrays[1].append(time.time() - t)
-
-            t = time.time()
-            # get the path from the target to branch point
-            path = utils.get_path(target, branch, pred_t)
-            visited_nodes += path[0:-1]
-            # record its length
-            assert ~np.isinf(ds[branch])
-            path_lengths.append(ds[branch])
-            # record the path
-            paths.append(path)
-            time_arrays[2].append(time.time() - t)
-
-            t = time.time()
-            # get the distance to all points along the new path
-            # within the invalidation distance
-            dm, _, sources = sparse.csgraph.dijkstra(
-                mesh.csgraph,
-                False,
-                path,
-                limit=invalidation_d,
-                min_only=True,
-                return_predecessors=True,
-            )
-            time_arrays[3].append(time.time() - t)
-
-            t = time.time()
-            # all such non infinite distances are within the invalidation
-            # zone and should be marked invalid
-            nodes_to_update = ~np.isinf(dm)
-            marked = np.sum(valid & ~np.isinf(dm))
-            if return_map == True:
-                new_sources_closer = (
-                    dm[nodes_to_update] < mesh_to_skeleton_dist[nodes_to_update]
-                )
-                mesh_to_skeleton_map[nodes_to_update] = np.where(
-                    new_sources_closer,
-                    sources[nodes_to_update],
-                    mesh_to_skeleton_map[nodes_to_update],
-                )
-                mesh_to_skeleton_dist[nodes_to_update] = np.where(
-                    new_sources_closer,
-                    dm[nodes_to_update],
-                    mesh_to_skeleton_dist[nodes_to_update],
-                )
-
-            valid[~np.isinf(dm)] = False
-
-            # print out how many vertices are still valid
-            pbar.update(marked)
-            time_arrays[4].append(time.time() - t)
-    # record the total time
-    dt = time.time() - start
-
-    out_tuple = (paths, path_lengths)
-    if return_map:
-        out_tuple = out_tuple + (mesh_to_skeleton_map,)
-    if return_timing:
-        out_tuple = out_tuple + (time_arrays, dt)
-
-    return out_tuple
 
 
 def smooth_graph(values, edges, mask=None, neighborhood=2, iterations=100, r=0.1):

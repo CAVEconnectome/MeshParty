@@ -7,6 +7,8 @@ The :mod:`meshparty.skeletonize` module provides facilities to turn a mesh into 
 that is implemented on the mesh graph, meaning the graph of mesh vertices, where edges between vertices have weights according
 to their euclidean distance. 
 
+Note, we have now moved the underlying library for running this algorithm to a seperate repository, which makes no assumptions about where your data comes from (https://github.com/AllenInstitute/PyGraphTEASAR).
+
 .. [1] Sato, M., Bitter, I., Bender, M. A., Kaufman, A. E., & Nakajima, M. (n.d.). TEASAR: tree-structure extraction algorithm for accurate and robust skeletons. In Proceedings the Eighth Pacific Conference on Computer Graphics and Applications. IEEE Comput. Soc. https://doi.org/10.1109/pccga.2000.883951
 
 Example
