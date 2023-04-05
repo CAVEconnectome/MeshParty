@@ -1,6 +1,5 @@
 import trimesh.ray
 from trimesh.ray import ray_pyembree
-from trimesh.ray import ray_pyembree
 from scipy.linalg import block_diag
 import numpy as np
 import multiwrapper.multiprocessing_utils as mu
@@ -121,7 +120,7 @@ def oriented_vector_cones(center_vectors, num_points, widest_angle=np.pi/3, norm
     """
     if normalize:
         cv_norm = center_vectors / \
-            np.linalg.norm(center_vector, axis=1)[:, np.newaxis]
+            np.linalg.norm(center_vectors, axis=1)[:, np.newaxis]
     else:
         cv_norm = center_vectors
 

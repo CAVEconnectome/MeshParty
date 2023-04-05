@@ -164,7 +164,7 @@ def find_edges_to_link(mesh, vert_ind_a, vert_ind_b, distance_upper_bound=2500, 
     # merge edge and within 2x the euclidean length of the edge
     inds = mesh.kdtree.query_ball_point(c, d*2)
     # convert this to a mask
-    mask = np.zeros(len(mesh.vertices), dtype=np.bool)
+    mask = np.zeros(len(mesh.vertices), dtype=bool)
     mask[inds] = True
 
     timings['create_mask'] = time.time()-start_time

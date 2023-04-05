@@ -1,6 +1,5 @@
 import numpy as np
 from .utils import window_matrix
-import numba
 
 #####################
 # Split by synapses #
@@ -62,8 +61,22 @@ def split_axon_by_synapses(
         axon_split_ind, split_quality = axon_split
     else:
         axon_split_ind = axon_split
-    is_axon_sk = np.full(len(nrn.skeleton.vertices), False)
-    is_axon_sk[nrn.skeleton.downstream_nodes(axon_split_ind)] = True
+    downstream_inds = nrn.skeleton.downstream_nodes(axon_split_ind)
+    n_pre_ds = np.sum(np.isin(pre_inds.to_skel_index_padded, downstream_inds))
+    n_post_ds = np.sum(np.isin(post_inds.to_skel_index_padded, downstream_inds))
+    n_pre_us = len(pre_inds) - n_pre_ds
+    n_post_us = len(post_inds) - n_post_ds
+    import pdb
+    pdb.set_trace()
+
+    # Axon has the higher of the two fractions of pre:
+    if (n_pre_ds / (n_post_ds+n_pre_ds+1)) >= (n_pre_us / (n_post_us+n_pre_us+1)):
+        is_axon_sk = np.full(len(nrn.skeleton.vertices), False)
+        is_axon_sk[downstream_inds] = True
+    else:
+        is_axon_sk = np.full(len(nrn.skeleton.vertices), True)
+        is_axon_sk[nrn.skeleton.downstream_nodes(axon_split_ind)] = False
+
     is_axon = nrn.SkeletonIndex(np.flatnonzero(is_axon_sk)).to_mesh_index
 
     if return_quality:
@@ -145,8 +158,27 @@ def _precompute_synapse_inds(sk, syn_inds):
     return Nsyn, n_syn
 
 
-def _synapse_betweenness(sk, pre_inds, post_inds, use_entropy=False):
+def synapse_betweenness(sk, pre_inds, post_inds, use_entropy=False):
+    """ Compute synapse betweenness, the number of paths from all post indices to all pre indices along the graph. Vertices can be included multiple times, indicating multiple paths
 
+    Parameters
+    ----------
+    sk : Skeleton   
+        Skeleton to measure
+    pre_inds : list or array
+        Collection of skeleton vertex indices, each representing one output synapse (i.e. target of a path).
+    post_inds : list or array
+        Collection of skeleton certex indices, each representing one input synapse (i.e. source of a path).
+    use_entropy : bool, optional
+        If True, also returns the entropic segregatation index if one were to cut at a given vertex, by default False
+
+    Returns
+    -------
+    synapse_betweenness : np.array
+        Array with a value for each skeleton vertex, with the number of all paths from source to target vertices passing through that vertex.
+    segregation_index : np.array (optional)
+        Array with a value for each skeleton vertex, with the segregatio index if the cut were to happen at that vertex. Only returned if `use_entropy=True`.
+    """
     Npre, n_pre = _precompute_synapse_inds(sk, pre_inds)
     Npost, n_post = _precompute_synapse_inds(sk, post_inds)
 
@@ -191,7 +223,7 @@ def _synapse_betweenness(sk, pre_inds, post_inds, use_entropy=False):
 def _find_axon_split(
     sk, pre_inds, post_inds, return_quality=True, extend_to_segment=True
 ):
-    syn_btwn = _synapse_betweenness(sk, pre_inds, post_inds)
+    syn_btwn = synapse_betweenness(sk, pre_inds, post_inds)
     high_vinds = np.flatnonzero(syn_btwn == max(syn_btwn))
     close_vind = high_vinds[np.argmin(sk.distance_to_root[high_vinds])]
 
@@ -255,7 +287,6 @@ def branch_order(nrn, return_as_skel=False):
         return nrn.skeleton_property_to_mesh(branch_order, no_map_value=-1)
 
 
-@numba.njit
 def _strahler_path(baseline):
     out = np.full(len(baseline), -1, dtype=np.int64)
     last_val = 1

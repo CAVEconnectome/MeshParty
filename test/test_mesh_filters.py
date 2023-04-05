@@ -6,7 +6,7 @@ except ImportError:
     use_vtk = False
 import numpy as np
 import os 
-import imageio
+import imageio.v2 as imageio
 import pytest
 
 def compare_img_to_test_file(fname, back_val = 255, close=15):

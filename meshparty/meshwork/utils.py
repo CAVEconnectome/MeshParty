@@ -1,6 +1,5 @@
 import blosc
 import numpy as np
-import numba
 from scipy import sparse
 from ..trimesh_io import Mesh
 from ..skeleton import Skeleton
@@ -208,11 +207,10 @@ def MeshworkIndexFactory(mw):
     return JointMeshIndex, JointSkeletonIndex
 
 
-@numba.njit(parallel=True)
 def _in1d_items(elements, mask, test_vals):
     maskinds = np.flatnonzero(mask)
     out = np.zeros((mask.sum(), 2), dtype=np.int64)
-    for ii in numba.prange(len(maskinds)):
+    for ii in range(len(maskinds)):
         val_ind = np.flatnonzero(elements[maskinds[ii]] == test_vals)[0]
         out[ii, 0] = np.int64(val_ind)
         out[ii, 1] = np.int64(maskinds[ii])
@@ -338,10 +336,10 @@ def compress_mesh_data(mesh, cname="lz4"):
 
 
 def decompress_mesh_data(zvs, zfs, zes, znm, vxsc):
-    vs = np.frombuffer(blosc.decompress(zvs), dtype=np.float).reshape(-1, 3)
-    fs = np.frombuffer(blosc.decompress(zfs), dtype=np.int).reshape(-1, 3)
-    es = np.frombuffer(blosc.decompress(zes), dtype=np.int).reshape(-1, 2)
-    nm = np.frombuffer(blosc.decompress(znm), dtype=np.bool)
+    vs = np.frombuffer(blosc.decompress(zvs), dtype=float).reshape(-1, 3)
+    fs = np.frombuffer(blosc.decompress(zfs), dtype=int).reshape(-1, 3)
+    es = np.frombuffer(blosc.decompress(zes), dtype=int).reshape(-1, 2)
+    nm = np.frombuffer(blosc.decompress(znm), dtype=bool)
     return vs, fs, es, nm, vxsc
 
 
