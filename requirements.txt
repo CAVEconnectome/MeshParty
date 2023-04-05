@@ -9,7 +9,6 @@ cloud-volume>=1.16.0
 trimesh>=3.0.14
 rtree
 pymeshfix>=0.12.3
-vtk
 shapely
 imageio
 pandas

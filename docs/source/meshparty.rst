@@ -109,14 +109,6 @@ meshparty.trimesh\_repair module
    :undoc-members:
    :show-inheritance:
 
-meshparty.trimesh\_vtk module
------------------------------
-
-.. automodule:: meshparty.trimesh_vtk
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 meshparty.utils module
 ----------------------
 
