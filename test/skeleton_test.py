@@ -1,8 +1,8 @@
 import numpy as np
 from meshparty import skeleton, skeleton_quality
 import pytest
-from skeleton_io_test import full_cell_skeleton, simple_skeleton, simple_skeleton_with_properties, simple_verts, simple_edges
-from basic_test import full_cell_mesh, mesh_link_edges
+from .skeleton_io_test import full_cell_skeleton, simple_skeleton, simple_skeleton_with_properties, simple_verts, simple_edges
+from .basic_test import full_cell_mesh, mesh_link_edges
 from scipy.sparse import csgraph
 from copy import deepcopy
 
