@@ -56,7 +56,7 @@ setup(
     packages=["meshparty"],
     include_package_data=True,
     install_requires=required,
-    extras_require={"SDF": ["pyembree"], "REPAIR": ["caveclient>=4.0.0"]},
+    extras_require={"SDF": ["pyembree"], "REPAIR": ["caveclient>=4.0.0"], "vtk": ["trimesh-vtk"]},
     setup_requires=["pytest-runner", "setuptools_scm"],
     dependency_links=dependency_links,
     tests_require=test_required,

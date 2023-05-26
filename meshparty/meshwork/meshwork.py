@@ -1,5 +1,5 @@
 try:
-    from .. import trimesh_vtk
+    import trimesh_vtk
 
     _vtk_loaded = True
 except:

@@ -1,4 +1,9 @@
-from meshparty import trimesh_io, mesh_filters, trimesh_vtk
+from meshparty import trimesh_io, mesh_filters
+try:
+    import trimesh_vtk
+    use_vtk = True
+except ImportError:
+    use_vtk = False
 import numpy as np
 import os 
 import imageio.v2 as imageio
@@ -49,17 +54,19 @@ def test_filter_two_points(full_cell_mesh, full_cell_soma_pt, tmp_path):
                                                      2000)
     
     ais_mesh = full_cell_mesh.apply_mask(on_ais)
-    ais_actor = trimesh_vtk.mesh_actor(ais_mesh)
 
-    fname = 'full_cell_ais.png'
-    filepath = os.path.join(tmp_path, fname)
+    if use_vtk:
+        ais_actor = trimesh_vtk.mesh_actor(ais_mesh)
 
-    trimesh_vtk.render_actors([ais_actor],
-                                back_color=(1,1,1),
-                                do_save=True,
-                                filename=filepath,
-                                scale=1)
-    compare_img_to_test_file(filepath)
+        fname = 'full_cell_ais.png'
+        filepath = os.path.join(tmp_path, fname)
+
+        trimesh_vtk.render_actors([ais_actor],
+                                    back_color=(1,1,1),
+                                    do_save=True,
+                                    filename=filepath,
+                                    scale=1)
+        compare_img_to_test_file(filepath)
 
     pts_end = np.array([full_cell_soma_pt,pt_down])
     ais_sloppy = mesh_filters.filter_close_to_line(full_cell_mesh,
