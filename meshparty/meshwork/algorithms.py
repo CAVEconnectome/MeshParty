@@ -66,8 +66,6 @@ def split_axon_by_synapses(
     n_post_ds = np.sum(np.isin(post_inds.to_skel_index_padded, downstream_inds))
     n_pre_us = len(pre_inds) - n_pre_ds
     n_post_us = len(post_inds) - n_post_ds
-    import pdb
-    pdb.set_trace()
 
     # Axon has the higher of the two fractions of pre:
     if (n_pre_ds / (n_post_ds+n_pre_ds+1)) >= (n_pre_us / (n_post_us+n_pre_us+1)):

@@ -6,7 +6,7 @@ import pytest
 
 from meshparty import trimesh_io
 
-from basic_test import build_basic_cube_mesh
+from .basic_test import build_basic_cube_mesh
 
 
 io_file_exts = ['.h5', '.obj']
