@@ -276,22 +276,18 @@ def render_actors(actors, camera=None, do_save=False, filename=None,
     if VIDEO_WIDTH is not None:
         logging.warning('VIDEO_WIDTH is deprecated, please use VIDEO_WIDTH')
         video_width=VIDEO_WIDTH
-    print('setting up renderer')
     # create a rendering window and renderer
     ren, renWin, iren = _setup_renderer(
         video_width, video_height, back_color, camera=camera)
-    print('done setting up')
     for a in actors:
         # assign actor to the renderer
         ren.AddActor(a)
-    print('actors added')
     # render
     if camera is None:
         ren.ResetCamera()
     else:
         ren.ResetCameraClippingRange()
         camera.ViewingRaysModified()
-    print('camera set')
     if return_keyframes:
         key_frame_cameras = []
 
@@ -304,7 +300,6 @@ def render_actors(actors, camera=None, do_save=False, filename=None,
             return
         iren.AddObserver("KeyPressEvent", vtkKeyPress)
     renWin.Render()
-    print('render done')
     if do_save is False:
         trackCamera = vtk.vtkInteractorStyleTrackballCamera()
         iren.SetInteractorStyle(trackCamera)
@@ -324,7 +319,6 @@ def render_actors(actors, camera=None, do_save=False, filename=None,
         writer.SetFileName(filename)
         writer.SetInputData(w2if.GetOutput())
         writer.Write()
-    print('finalizing..')
     renWin.Finalize()
 
     if return_keyframes:
@@ -609,15 +603,17 @@ def skeleton_actor(sk,
         data = vertex_data
 
     if data is not None:
-        if normalize_property:
-            data = data / np.nanmax(data)
-        sk_mesh.GetPointData().SetScalars(numpy_to_vtk(data))
-        lut = vtk.vtkLookupTable()
-        if lut_map is not None:
-            lut_map(lut)
-        lut.Build()
+        colors, map_colors = process_colors(data, sk.vertices)
+        vtk_colors = numpy_to_vtk(colors)
+        vtk_colors.SetName('colors')   
+        sk_mesh.GetPointData().SetScalars(vtk_colors)
+        if map_colors:
+            lut = vtk.vtkLookupTable()
+            if lut_map is not None:
+                lut_map(lut)
+            lut.Build()
+            mapper.SetLookupTable(lut)
         mapper.ScalarVisibilityOn()
-        mapper.SetLookupTable(lut)
 
     actor = vtk.vtkActor()
     actor.SetMapper(mapper)
