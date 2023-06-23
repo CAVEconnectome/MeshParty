@@ -15,7 +15,7 @@ Again assuming you have a mesh object loaded, the key function is :func:`meshpar
 
 ::
 
-    from trimesh_io import skeletonize
+    from meshparty.trimesh_io import skeletonize
 
     # skeletonize the mesh using a 12 um invalidation radius
     # assuming units of mesh.vertices is in nm
