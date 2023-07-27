@@ -1070,7 +1070,7 @@ class Meshwork(object):
             return child_index
         if return_scalar:
             return child_index[0].to_mesh_region_point
-        return [n.to_mesh_region_point for n in child_index]
+        return self.MeshIndex([n.to_mesh_region_point for n in child_index])
 
     @OnlyIfSkeleton.exists
     def jump_proximal(self, ind, include_initial=False, hops=1):
