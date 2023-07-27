@@ -128,7 +128,7 @@ def MeshworkIndexFactory(mw):
                 ret._skel_indices_base = mw.skeleton.map_indices_to_unmasked(
                     np.array(ret)[np.array(ret) >= 0]
                 )
-            return JointSkeletonIndex(ret)
+            return ret
 
         def __eq__(self, other):
             return np.array(self) == other
