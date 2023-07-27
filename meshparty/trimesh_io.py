@@ -361,13 +361,15 @@ def _download_meshes_thread_precomputed(args):
 
     while len(download_segids):
         download_now = download_segids[:100]
-        download_segids = download_segids[len(download_now):]
-
-        cv_meshes = cv.mesh.get(
-            download_now,
-            remove_duplicate_vertices=remove_duplicate_vertices,
-            fuse=False
-        )
+        download_segids = download_segids[len(download_now):]    
+        if isinstance(cv.mesh, ShardedMultiLevelPrecomputedMeshSource):
+            cv_meshes = cv.mesh.get(download_now)
+        else:     
+            cv_meshes = cv.mesh.get(
+                download_now,
+                remove_duplicate_vertices=remove_duplicate_vertices,
+                fuse=False
+            )
 
         for segid, cv_mesh in cv_meshes.items():
             mesh = Mesh(
