@@ -44,7 +44,7 @@ def split_axon_by_synapses(
     if nrn.skeleton is None:
         raise ValueError("Meshwork must have skeleton")
     if len(pre_inds) == 0 or len(post_inds) == 0:
-        is_axon_sk = []
+        is_axon_sk = np.full(len(nrn.skeleton.vertices), False)
         split_quality = 0
     else:
         pre_inds = nrn._convert_to_meshindex(pre_inds)
