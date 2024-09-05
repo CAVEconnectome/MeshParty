@@ -43,37 +43,42 @@ def split_axon_by_synapses(
     """
     if nrn.skeleton is None:
         raise ValueError("Meshwork must have skeleton")
-
-    pre_inds = nrn._convert_to_meshindex(pre_inds)
-    post_inds = nrn._convert_to_meshindex(post_inds)
-    pre_inds = pre_inds[pre_inds.to_skel_index_padded >= 0]
-    post_inds = post_inds[post_inds.to_skel_index_padded >= 0]
-
-    axon_split = _find_axon_split(
-        nrn.skeleton,
-        pre_inds.to_skel_index_padded,
-        post_inds.to_skel_index_padded,
-        return_quality=return_quality,
-        extend_to_segment=extend_to_segment,
-    )
-
-    if return_quality:
-        axon_split_ind, split_quality = axon_split
+    if len(pre_inds) == 0 or len(post_inds) == 0:
+        is_axon_sk = []
+        split_quality = 0
     else:
-        axon_split_ind = axon_split
-    downstream_inds = nrn.skeleton.downstream_nodes(axon_split_ind)
-    n_pre_ds = np.sum(np.isin(pre_inds.to_skel_index_padded, downstream_inds))
-    n_post_ds = np.sum(np.isin(post_inds.to_skel_index_padded, downstream_inds))
-    n_pre_us = len(pre_inds) - n_pre_ds
-    n_post_us = len(post_inds) - n_post_ds
+        pre_inds = nrn._convert_to_meshindex(pre_inds)
+        post_inds = nrn._convert_to_meshindex(post_inds)
+        pre_inds = pre_inds[pre_inds.to_skel_index_padded >= 0]
+        post_inds = post_inds[post_inds.to_skel_index_padded >= 0]
 
-    # Axon has the higher of the two fractions of pre:
-    if (n_pre_ds / (n_post_ds+n_pre_ds+1)) >= (n_pre_us / (n_post_us+n_pre_us+1)):
-        is_axon_sk = np.full(len(nrn.skeleton.vertices), False)
-        is_axon_sk[downstream_inds] = True
-    else:
-        is_axon_sk = np.full(len(nrn.skeleton.vertices), True)
-        is_axon_sk[nrn.skeleton.downstream_nodes(axon_split_ind)] = False
+        axon_split = _find_axon_split(
+            nrn.skeleton,
+            pre_inds.to_skel_index_padded,
+            post_inds.to_skel_index_padded,
+            return_quality=return_quality,
+            extend_to_segment=extend_to_segment,
+        )
+
+        if return_quality:
+            axon_split_ind, split_quality = axon_split
+        else:
+            axon_split_ind = axon_split
+        downstream_inds = nrn.skeleton.downstream_nodes(axon_split_ind)
+        n_pre_ds = np.sum(np.isin(pre_inds.to_skel_index_padded, downstream_inds))
+        n_post_ds = np.sum(np.isin(post_inds.to_skel_index_padded, downstream_inds))
+        n_pre_us = len(pre_inds) - n_pre_ds
+        n_post_us = len(post_inds) - n_post_ds
+
+        # Axon has the higher of the two fractions of pre:
+        if (n_pre_ds / (n_post_ds + n_pre_ds + 1)) >= (
+            n_pre_us / (n_post_us + n_pre_us + 1)
+        ):
+            is_axon_sk = np.full(len(nrn.skeleton.vertices), False)
+            is_axon_sk[downstream_inds] = True
+        else:
+            is_axon_sk = np.full(len(nrn.skeleton.vertices), True)
+            is_axon_sk[nrn.skeleton.downstream_nodes(axon_split_ind)] = False
 
     is_axon = nrn.SkeletonIndex(np.flatnonzero(is_axon_sk)).to_mesh_index
 
@@ -121,6 +126,8 @@ def split_axon_by_annotation(
 
 
 def axon_split_quality(is_axon, pre_inds, post_inds):
+    if len(pre_inds) == 0 or len(post_inds) == 0:
+        return 0
     axon_pre = sum(is_axon[pre_inds])
     axon_post = sum(is_axon[post_inds])
     dend_pre = sum(~is_axon[pre_inds])
@@ -157,11 +164,11 @@ def _precompute_synapse_inds(sk, syn_inds):
 
 
 def synapse_betweenness(sk, pre_inds, post_inds, use_entropy=False):
-    """ Compute synapse betweenness, the number of paths from all post indices to all pre indices along the graph. Vertices can be included multiple times, indicating multiple paths
+    """Compute synapse betweenness, the number of paths from all post indices to all pre indices along the graph. Vertices can be included multiple times, indicating multiple paths
 
     Parameters
     ----------
-    sk : Skeleton   
+    sk : Skeleton
         Skeleton to measure
     pre_inds : list or array
         Collection of skeleton vertex indices, each representing one output synapse (i.e. target of a path).
