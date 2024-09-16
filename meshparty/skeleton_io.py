@@ -56,8 +56,8 @@ def write_skeleton_h5_by_part(
 
     Parameters
     ----------
-    filename : str
-        path to write
+    filename : str, Path, or BytesIO
+        path or file like object to write to
     vertices : np.array
         Nx3 numpy array of vertex locations
     edges : np.array
@@ -120,8 +120,8 @@ def read_skeleton_h5_by_part(filename):
 
     Parameters
     ----------
-    filename : str
-        path to a h5 file with skeletons
+    filename : str, Path, or BytesIO
+        path or filelike object to a h5 file with skeletons
 
     Returns
     -------
