@@ -81,8 +81,8 @@ def read_mesh_h5(filename):
 
     Parameters
     ----------
-    filename: str
-        a path to a h5 file
+    filename: str, path or BytesIO
+        a path or file like object of an h5 file
 
     Returns
     -------
@@ -155,8 +155,8 @@ def write_mesh_h5(
 
     Parameters
     ----------
-    filename: str
-        a path to a h5 file to write a mesh
+    filename: str, Path, or BytesIO
+        h5 file to write a mesh
     vertices : np.array
         a Nx3 x,y,z coordinates (float)
     faces: np.array
