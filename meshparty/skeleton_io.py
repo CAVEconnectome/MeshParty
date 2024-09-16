@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import h5py
 import orjson
 import json
@@ -55,8 +56,8 @@ def write_skeleton_h5_by_part(
 
     Parameters
     ----------
-    filename : str
-        path to write
+    filename : str, Path, or BytesIO
+        path or file like object to write to
     vertices : np.array
         Nx3 numpy array of vertex locations
     edges : np.array
@@ -77,11 +78,15 @@ def write_skeleton_h5_by_part(
 
     """
 
-    if os.path.isfile(filename):
-        if overwrite:
-            os.remove(filename)
-        else:
-            return
+    if isinstance(filename, (str, Path)):
+        if os.path.isfile(filename):
+            if overwrite:
+                os.remove(filename)
+            else:
+                raise FileExistsError(
+                    f"File {filename} already exists, use overwrite=True to overwrite"
+                )
+
     with h5py.File(filename, "w") as f:
         f.attrs["file_version"] = FILE_VERSION
 
@@ -115,8 +120,8 @@ def read_skeleton_h5_by_part(filename):
 
     Parameters
     ----------
-    filename : str
-        path to a h5 file with skeletons
+    filename : str, Path, or BytesIO
+        path or filelike object to a h5 file with skeletons
 
     Returns
     -------
@@ -141,7 +146,10 @@ def read_skeleton_h5_by_part(filename):
         overwrite, whether to overwrite file
 
     """
-    assert os.path.isfile(filename)
+    # if filename is a string test that it is a file
+    if isinstance(filename, (str, Path)):
+        if not os.path.isfile(filename):
+            raise FileNotFoundError(f"File {filename} not found")
 
     with h5py.File(filename, "r") as f:
         vertices = f["vertices"][()]
