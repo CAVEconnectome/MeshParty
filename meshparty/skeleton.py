@@ -1150,6 +1150,29 @@ class Skeleton:
             avoid_root=avoid_root,
         )
 
+    @classmethod    
+    def from_dict(cls, sk: dict):
+        """Generate a skeleton from a dictionary. Expected format follows the caveclient `client.skeleton.get_skeleton` method defaults.
+
+        Parameters
+        ----------
+        sk : dict
+            Dictionary with keys for vertices, edges, root, and optionally radius and compartment.
+        """
+        vprop = dict()
+        if 'radius' in sk:
+            vprop['radius'] = np.array(sk['radius'])
+        if 'compartment' in sk:
+            vprop['compartment'] = np.array(sk['compartment'])
+
+        return cls(
+            vertices=np.array(sk['vertices']),
+            edges=np.array(sk['edges']),
+            root=sk.get('root'),
+            radius=np.array(sk.get('radius')),
+            vertex_properties = vprop,
+        )
+
 
 def resample(sk, spacing, kind="linear", tip_length_ratio=0.5, avoid_root=True):
     """Resample a skeleton's vertices
