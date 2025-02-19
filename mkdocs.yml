@@ -1,0 +1,82 @@
+site_name: meshparty Documentation
+site_url: https://ceesem.github.io/meshparty/
+repo_url: https://github.com/ceesem/meshparty
+repo_name: ceesem/meshparty
+
+nav:
+- About: index.md
+- Function Reference:
+    - reference/api.md
+- Changelog: changelog.md
+
+  
+theme:
+  name: material
+  language: en
+  palette:
+    primary: blue grey
+    accent: deep orange
+  font:
+    text: Bitter
+    code: Inconsolata
+  icon:
+    repo: fontawesome/brands/github
+  features:
+    - navigation.indexes
+    - navigation.instant
+    # - navigation.footer
+    # - navigation.path
+    - navigation.prune
+    # - navigation.sections # toggle to have sections in side nav
+    - navigation.tabs # toggle to mainly use top nav
+    - navigation.tabs.sticky
+    - toc.follow
+    - toc.integrate # whether to include the toc in the main nav bar to the left
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - header.autohide
+    
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+
+plugins:
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          import:
+            - https://docs.python.org/3/objects.inv
+            - https://numpy.org/doc/stable/objects.inv
+            - https://pandas.pydata.org/pandas-docs/stable/objects.inv
+          paths: [.]
+          options:
+            show_source: false
+            docstring_style: numpy
+            docstring_section_style: list # list, table, spacy
+            docstring_options:
+              ignore_init_summary: false
+            merge_init_into_class: true
+            allow_section_blank_line: false
+            show_root_heading: false
+            show_root_toc_entry: false
+            show_object_full_path: false
+            show_symbol_type_heading: false # whether to show "meth/func/etc" in the page
+            show_symbol_type_toc: false # whether to show "meth/func/etc" in the toc
+            signature_crossrefs: true # https://mkdocstrings.github.io/python/usage/configuration/signatures/#signature_crossrefs
+            members_order: alphabetical # can be source
+            group_by_category: true  # order is attributes, classes, functions, modules
+            summary: true
+            show_if_no_docstring: false
+            show_docstring_attributes: false
+            annotations_path: brief # https://mkdocstrings.github.io/python/usage/configuration/signatures/#annotations_path
+            show_signature: true
+            separate_signature: false
+            show_signature_annotations: false
+            unwrap_annotated: false # https://mkdocstrings.github.io/python/usage/configuration/signatures/#unwrap_annotated
+            heading_level: 2
+            inherited_members: true

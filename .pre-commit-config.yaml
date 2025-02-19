@@ -1,0 +1,12 @@
+files: src|tests
+
+repos:
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  hooks:
+    # Run the linter.
+    - id: ruff 
+      types_or: [ python, pyi]
+    - id: ruff
+      args: ["--select", "I", "--fix"]
+    - id: ruff-format
+      types_or: [ python, pyi]
