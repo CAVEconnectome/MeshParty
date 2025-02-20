@@ -2,13 +2,21 @@
 requires = ["hatchling>=1.26.1"]
 build-backend = "hatchling.build"
 
+[tool.hatch.metadata]
+allow-direct-references = true
 [project]
 name = "meshparty"
 version = "2.0.0"
 description = "Mesh and skeleton analysis"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
+    "caveclient>=7.6.0",
+    "cloud-volume>=11.1.5",
+    "numpy>=2.0.2",
+    "scipy>=1.13.1",
+    "trimesh[easy]>=4.6.2",
+    "morphsync @ /Users/caseysm/Work/Code/morphsync"
 ]
 authors = [
     { name = "Casey Schneider-Mizell", email = "caseysm@gmail.com" },
@@ -95,3 +103,4 @@ help = "Profile cpu and memory of task with scalene"
 [tool.poe.tasks.profile]
 cmd = "uv run pyinstrument -r html"
 help = "Profile cpu of task with pyinstrument"
+
