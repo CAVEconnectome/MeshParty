@@ -17,3 +17,4 @@ orjson
 blosc
 tables
 dataclasses
+setuptools>=61.0.0
