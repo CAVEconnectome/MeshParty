@@ -28,7 +28,7 @@ dependencies = [
     "networkx<3",
     "multiwrapper",
     "cloud-volume>=1.16.0",
-    "trimesh>=3.0.14",
+    "trimesh>=4.0.0",
     "rtree",
     "pymeshfix>=0.12.3",
     "vtk",

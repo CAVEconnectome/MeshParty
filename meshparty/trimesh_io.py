@@ -231,7 +231,7 @@ def read_mesh(filename):
 
     if filename.endswith(".obj"):
         with open(filename, "r") as fp:
-            mesh_d = exchange.obj.load_obj(fp)
+            mesh_d = exchange.obj.load_obj(fp)["geometry"][filename]
         vertices = mesh_d["vertices"]
         faces = mesh_d["faces"]
         normals = mesh_d.get("normals", None)
