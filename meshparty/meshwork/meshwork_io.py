@@ -93,7 +93,7 @@ def save_meshwork_skeleton(filename, mw, version=LATEST_VERSION):
         f.create_dataset("skeleton/root", data=sk.root)
         f.create_dataset(
             "skeleton/meta",
-            data=np.string_(
+            data=np.bytes_(
                 orjson.dumps(asdict(sk.meta), option=orjson.OPT_SERIALIZE_NUMPY)
             ),
         )
@@ -153,7 +153,7 @@ def _save_dataframe_generic(df, table_name, filename):
         df.to_dict(), option=orjson.OPT_NON_STR_KEYS | orjson.OPT_SERIALIZE_NUMPY
     )
     with h5py.File(filename, "a") as f:
-        f.create_dataset(key, data=np.string_(dat))
+        f.create_dataset(key, data=np.bytes_(dat))
     pass
 
 
@@ -207,7 +207,6 @@ def save_meshwork_annotations(filename, mw, version=LATEST_VERSION):
 
 
 def load_meshwork_annotations(filename, version=NULL_VERSION):
-
     with h5py.File(filename, "r") as f:
         if "annotations" not in f:
             return {}
