@@ -94,7 +94,7 @@ def write_skeleton_h5_by_part(
         f.create_dataset("edges", data=edges, compression="gzip")
         f.create_dataset(
             "meta",
-            data=np.string_(
+            data=np.bytes_(
                 orjson.dumps(asdict(meta), option=orjson.OPT_SERIALIZE_NUMPY)
             ),
         )
