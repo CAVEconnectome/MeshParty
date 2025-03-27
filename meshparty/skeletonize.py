@@ -3,15 +3,10 @@ import numpy as np
 import time
 from meshparty import utils
 
-try:
-    from pykdtree.kdtree import KDTree
-except:
-    KDTree = spatial.cKDTree
 from tqdm import tqdm
 from meshparty.skeleton import Skeleton
 
 import fastremap
-import logging
 from . import skeleton_utils
 
 
@@ -23,10 +18,8 @@ def skeletonize_mesh(
     collapse_function="sphere",
     invalidation_d=12000,
     smooth_vertices=False,
-    compute_radius=True,
     shape_function="single",
     compute_original_index=True,
-    verbose=True,
     smooth_iterations=12,
     smooth_neighborhood=2,
     smooth_r=0.1,
@@ -67,11 +60,8 @@ def skeletonize_mesh(
         algorithm reaches. default (12000 (nm))
     smooth_vertices: bool
         whether to smooth the vertices of the skeleton
-    compute_radius: bool
-        whether to calculate the radius of the skeleton at each point on the skeleton
-        (default True)
-    shape_function: 'single' or 'cone'
-        Selects how to compute the radius, either with a single ray or a cone of rays. Default is 'single'.
+    shape_function: 'single'
+        Determines how to collapse the skeleton around the soma. 'single' collapses the entire skeleton to the soma point.
     compute_original_index: bool
         whether to calculate how each of the mesh nodes maps onto the skeleton
         (default True)
@@ -144,36 +134,6 @@ def skeletonize_mesh(
             soma_verts, soma_r = soma_via_sphere(
                 soma_pt, temp_sk.vertices, temp_sk.edges, soma_radius
             )
-        elif collapse_function == "branch":
-            try:
-                from .ray_tracing import ray_trace_distance, shape_diameter_function
-            except:
-                raise ImportError('Could not import pyembree for ray tracing')
-
-            if shape_function == "single":
-                rs = ray_trace_distance(
-                    mesh.filter_unmasked_indices_padded(temp_sk.mesh_index), mesh
-                )
-            elif shape_function == "cone":
-                rs = shape_diameter_function(
-                    mesh.filter_unmasked_indices_padded(temp_sk.mesh_index),
-                    mesh,
-                    num_points=30,
-                    cone_angle=np.pi / 3,
-                )
-
-            soma_verts, soma_r = soma_via_branch_starts(
-                temp_sk,
-                mesh,
-                soma_pt,
-                rs,
-                search_radius=collapse_params.get("search_radius", 25000),
-                fallback_radius=collapse_params.get("fallback_radius", soma_radius),
-                cutoff_threshold=collapse_params.get("cutoff_threshold", 0.4),
-                min_cutoff=collapse_params.get("min_cutoff", 0.1),
-                dynamic_range=collapse_params.get("dynamic_range", 1),
-                dynamic_threshold=collapse_params.get("dynamic_threshold", False),
-            )
         if root_index is not None:
             collapse_index = np.flatnonzero(orig_skel_index == root_index)[0]
         else:
@@ -198,7 +158,7 @@ def skeletonize_mesh(
             root_ind = utils.find_far_points_graph(sk_graph)[0]
         else:
             # Still try to root close to the soma
-            _, qry_inds = spatial.cKDTree(new_v, balanced_tree=False).query(
+            _, qry_inds = spatial.KDTree(new_v, balanced_tree=False).query(
                 soma_pt[np.newaxis, :]
             )
             root_ind = qry_inds[0]
@@ -219,26 +179,6 @@ def skeletonize_mesh(
             mesh_index = orig_skel_index[vert_filter]
         props["mesh_index"] = mesh_index
 
-    if compute_radius is True:
-        if rs is None:
-            try:
-                from .ray_tracing import ray_trace_distance, shape_diameter_function
-            except:
-                raise ImportError('Could not import pyembree for ray tracing')
-
-            if shape_function == "single":
-                rs = ray_trace_distance(orig_skel_index[vert_filter], mesh)
-            elif shape_function == "cone":
-                rs = shape_diameter_function(orig_skel_index[vert_filter], mesh)
-        else:
-            rs = rs[vert_filter]
-        if collapse_soma is True and soma_pt is not None:
-            if root_index is None:
-                rs = np.append(rs, soma_r)
-            else:
-                rs[root_ind] = soma_r
-        props["rs"] = rs
-
     sk_params = {
         "soma_pt_x": soma_pt[0, 0] if soma_pt is not None else None,
         "soma_pt_y": soma_pt[0, 1] if soma_pt is not None else None,
@@ -248,7 +188,6 @@ def skeletonize_mesh(
         "collapse_function": collapse_function,
         "invalidation_d": invalidation_d,
         "smooth_vertices": smooth_vertices,
-        "compute_radius": compute_radius,
         "shape_function": shape_function,
         "smooth_iterations": smooth_iterations,
         "smooth_neighborhood": smooth_neighborhood,
@@ -265,36 +204,12 @@ def skeletonize_mesh(
         new_e,
         mesh_to_skel_map=skel_map_full_mesh,
         mesh_index=props.get("mesh_index", None),
-        radius=props.get("rs", None),
         root=root_ind,
         remove_zero_length_edges=remove_zero_length_edges,
         meta=sk_params,
     )
 
-    if compute_radius is True:
-        _remove_nan_radius(sk)
-
     return sk
-
-
-def _remove_nan_radius(sk, set_unfixed_to_lowest=True):
-
-    last_numnans = np.inf
-    nanlocs = np.flatnonzero(np.isnan(sk.radius))
-    numnans = len(nanlocs)
-    while numnans > 0 and last_numnans > numnans:
-        for nanloc in nanlocs:
-            sparse_row = sk.csgraph_binary_undirected[nanloc].toarray().ravel()
-            prod = sparse_row * sk.radius
-            with np.errstate(divide="ignore", invalid="ignore"):
-                new_rad = np.nansum(prod) / np.nansum(prod > 0)
-            sk._rooted.radius[nanloc] = new_rad
-        last_numnans = numnans
-        nanlocs = np.flatnonzero(np.isnan(sk.radius))
-        numnans = len(nanlocs)
-
-    if numnans > 0 and set_unfixed_to_lowest:
-        sk._rooted.radius[nanlocs] = np.nanmin(sk.radius)
 
 
 def calculate_skeleton_paths_on_mesh(
@@ -477,7 +392,6 @@ def skeletonize_components(
     # loop over the components
     for k in range(n_components):
         if comp_counts[k] > cc_vertex_thresh:
-
             # find the root using a soma position if you have it
             # it will fall back to a heuristic if the soma
             # is too far away for this component
@@ -498,9 +412,9 @@ def skeletonize_components(
                 paths, path_lengths = teasar_output
             else:
                 paths, path_lengths, mesh_to_skeleton_map_single = teasar_output
-                mesh_to_skeleton_map[
-                    ~np.isnan(mesh_to_skeleton_map_single)
-                ] = mesh_to_skeleton_map_single[~np.isnan(mesh_to_skeleton_map_single)]
+                mesh_to_skeleton_map[~np.isnan(mesh_to_skeleton_map_single)] = (
+                    mesh_to_skeleton_map_single[~np.isnan(mesh_to_skeleton_map_single)]
+                )
 
             if len(path_lengths) > 0:
                 # collect the results in lists
@@ -515,7 +429,7 @@ def skeletonize_components(
 
 
 def setup_root(mesh, is_soma_pt=None, soma_d=None, is_valid=None):
-    """ function to find the root index to use for this mesh """
+    """function to find the root index to use for this mesh"""
     if is_valid is not None:
         valid = np.copy(is_valid)
     else:

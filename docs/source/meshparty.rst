@@ -37,14 +37,6 @@ meshparty.mesh\_skel\_utils module
    :undoc-members:
    :show-inheritance:
 
-meshparty.meshlabserver module
-------------------------------
-
-.. automodule:: meshparty.meshlabserver
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 meshparty.ray\_tracing module
 -----------------------------
 

@@ -1,7 +1,13 @@
 import numpy as np
 from meshparty import skeleton, skeleton_quality
 import pytest
-from .skeleton_io_test import full_cell_skeleton, simple_skeleton, simple_skeleton_with_properties, simple_verts, simple_edges
+from .skeleton_io_test import (
+    full_cell_skeleton,
+    simple_skeleton,
+    simple_skeleton_with_properties,
+    simple_verts,
+    simple_edges,
+)
 from .basic_test import full_cell_mesh, mesh_link_edges
 from scipy.sparse import csgraph
 from copy import deepcopy
@@ -14,39 +20,29 @@ def test_basic_components(simple_skeleton, simple_skeleton_with_properties):
     assert sk.n_vertices == len(simple_verts)
     for sk_edge, base_edge in zip(sk.edges, simple_edges):
         assert np.all(np.sort(sk_edge) == np.sort(base_edge))
-        assert sk.distance_to_root[sk_edge[0]
-                                   ] > sk.distance_to_root[sk_edge[1]]
+        assert sk.distance_to_root[sk_edge[0]] > sk.distance_to_root[sk_edge[1]]
 
     d, _ = sk.kdtree.query([0.3, 0.4, 0.1])
     assert np.isclose(d, 4.2261093, atol=0.0001)
 
-    d, _ = sk.pykdtree.query(np.array([[0.3, 0.4, 0.1]]))
-    assert np.isclose(d, 4.2261093, atol=0.0001)
-
     skp = simple_skeleton_with_properties
-    assert np.all(skp.vertex_properties['test'] == skp.mesh_index)
+    assert np.all(skp.vertex_properties["test"] == skp.mesh_index)
 
 
 def test_skeleton_creation(simple_skeleton):
     sk = simple_skeleton
-    new_sk = skeleton.Skeleton(sk.vertices,
-                               sk.edges, root=None)
+    new_sk = skeleton.Skeleton(sk.vertices, sk.edges, root=None)
     assert new_sk.root is not None
 
-    new_sk = skeleton.Skeleton(sk.vertices,
-                               sk.edges,
-                               root=3)
+    new_sk = skeleton.Skeleton(sk.vertices, sk.edges, root=3)
     assert new_sk.root == 3
 
     with pytest.raises(ValueError):
-        skeleton.Skeleton(sk.vertices,
-                          sk.edges,
-                          root=len(sk.vertices)+1)
+        skeleton.Skeleton(sk.vertices, sk.edges, root=len(sk.vertices) + 1)
 
 
 def test_segments(simple_skeleton):
-    sk = skeleton.Skeleton(simple_skeleton.vertices,
-                           simple_skeleton.edges, root=0)
+    sk = skeleton.Skeleton(simple_skeleton.vertices, simple_skeleton.edges, root=0)
     assert len(sk.segments) == 3
     assert len(np.unique(np.concatenate(sk.segments))) == len(sk.vertices)
     assert np.all(sk.segment_map == np.array([0, 0, 0, 1, 1, 2, 2]))
@@ -57,19 +53,17 @@ def test_reroot(simple_skeleton):
     sk.reroot(6)
     assert sk.root == 6
     for sk_edge in sk.edges:
-        assert sk.distance_to_root[sk_edge[0]
-                                   ] > sk.distance_to_root[sk_edge[1]]
+        assert sk.distance_to_root[sk_edge[0]] > sk.distance_to_root[sk_edge[1]]
 
 
 def test_sk_csgraph(simple_skeleton):
     sk = simple_skeleton
     graph = sk.csgraph
     gdist = csgraph.dijkstra(graph, indices=[6])
-    assert np.all(gdist[0] == np.array(
-        [4.,  3.,  2., np.inf, np.inf,  1.,  0.]))
+    assert np.all(gdist[0] == np.array([4.0, 3.0, 2.0, np.inf, np.inf, 1.0, 0.0]))
 
     ugdist = csgraph.dijkstra(sk.csgraph_undirected, indices=[6])
-    assert np.all(ugdist[0] == np.array([4., 3., 2., 3., 4., 1., 0.]))
+    assert np.all(ugdist[0] == np.array([4.0, 3.0, 2.0, 3.0, 4.0, 1.0, 0.0]))
 
     bg = sk.csgraph_binary.toarray()
     assert np.all(np.unique(bg) == [0, 1])
@@ -128,7 +122,8 @@ def test_skeleton_quality(full_cell_skeleton, full_cell_mesh, mesh_link_edges):
     sk = full_cell_skeleton
     mesh = full_cell_mesh
     mesh.link_edges = mesh_link_edges
-    pscore, sk_paths, ms_paths, sk_inds_list, mesh_inds_list, path_distances = \
+    pscore, sk_paths, ms_paths, sk_inds_list, mesh_inds_list, path_distances = (
         skeleton_quality.skeleton_path_quality(sk, mesh, return_path_info=True)
+    )
     assert len(pscore) == len(sk.cover_paths)
     assert np.isclose(pscore.sum(), -151.377, 0.001)

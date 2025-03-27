@@ -94,16 +94,3 @@ def test_lazy_mesh_props(basic_mesh, indicator_fstring, propstring, mocker):
 def basic_cube_mesh_fscope():
     with build_basic_cube_mesh() as r:
         yield r
-
-
-@pytest.mark.parametrize("wiggle", [True, False])
-def test_fix_mesh(basic_cube_mesh_fscope, basic_cube_mesh, wiggle):
-    basic_cube_mesh_fscope.fix_mesh(wiggle_vertices=wiggle)
-    if wiggle:
-        assert not numpy.array_equal(
-            basic_cube_mesh.vertices, basic_cube_mesh_fscope.vertices
-        )
-    else:
-        assert numpy.array_equal(
-            basic_cube_mesh.vertices, basic_cube_mesh_fscope.vertices
-        )

@@ -1,6 +1,0 @@
-include requirements.txt
-include test_requirements.txt
-include optional_requirements.txt
-include LICENCE
-include README.md
-prune test*

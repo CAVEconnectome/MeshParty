@@ -35,7 +35,6 @@ to make optional features of ray tracing and interaction with the PyChunkedGraph
 
 ::
 
-    conda install pyembree
     pip install caveclient
     
 
@@ -82,11 +81,6 @@ test whether a mesh is watertight, run
 
     mesh.is_watertight
 
-
-To make a mesh watertight do
-::
-
-    mesh.fix_mesh()
 
 
 Since trimesh_io.Mesh() inherits from trimesh.Trimesh all trimesh functionality 

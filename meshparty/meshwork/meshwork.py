@@ -416,9 +416,9 @@ class AnchoredAnnotation(object):
         """Get the subset of data points that are associated with the mesh"""
         if self._anchored:
             self._data[self._mask_column] = filter_mesh.node_mask[self._mesh_index_base]
-            self._data[
-                self._index_column_filt
-            ] = filter_mesh.filter_unmasked_indices_padded(self._mesh_index_base)
+            self._data[self._index_column_filt] = (
+                filter_mesh.filter_unmasked_indices_padded(self._mesh_index_base)
+            )
             self._filter_mesh = MaskedMeshMemory(filter_mesh)
 
     def _filter_query_response(self, row_filter):
@@ -472,9 +472,9 @@ class AnchoredAnnotation(object):
     def _reset_filter(self):
         if self._anchored:
             self._data[self._mask_column] = True
-            self._data[
-                self._index_column_filt
-            ] = self._anchor_mesh.filter_unmasked_indices(self._mesh_index_base)
+            self._data[self._index_column_filt] = (
+                self._anchor_mesh.filter_unmasked_indices(self._mesh_index_base)
+            )
             self._filter_mesh = self._anchor_mesh
 
     def _anchor_to_mesh(self, anchor_mesh):
@@ -817,8 +817,6 @@ class Meshwork(object):
         collapse_soma=True,
         soma_thresh_distance=7500,
         invalidation_distance=12000,
-        compute_radius=True,
-        shape_function="single",
         overwrite=False,
         collapse_function="sphere",
         collapse_params={},
@@ -856,8 +854,6 @@ class Meshwork(object):
                 collapse_soma=collapse_soma,
                 invalidation_d=invalidation_distance,
                 compute_original_index=True,
-                compute_radius=compute_radius,
-                shape_function=shape_function,
                 collapse_function=collapse_function,
                 collapse_params=collapse_params,
                 meta={"root_id": self.seg_id},
@@ -1501,43 +1497,6 @@ class Meshwork(object):
     ###k########################
     # Visualization functions #
     ###########################
-
-    def requires_vtk(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            if _vtk_loaded:
-                return func(*args, **kwargs)
-            else:
-                return None
-
-        return wrapper
-
-    @requires_vtk
-    def mesh_actor(self, **kwargs):
-        if self.mesh is not None:
-            return trimesh_vtk.mesh_actor(self.mesh, **kwargs)
-        else:
-            return None
-
-    @requires_vtk
-    def anno_point_actor(self, anno_name, query=None, filter_query=None, **kwargs):
-        row_filter = np.full(len(self.anno[anno_name].df), True)
-        if query is not None:
-            qry = self.anno[anno_name].query(query)
-            row_filter = np.logical_and(row_filter, qry.row_filter)
-        if filter_query is not None:
-            qry = self.anno[anno_name].filter_query(filter_query)
-            row_filter = np.logical_and(row_filter, qry.row_filter)
-        if anno_name in self.anno.table_names:
-            return trimesh_vtk.point_cloud_actor(
-                self.anno[anno_name].points[row_filter], **kwargs
-            )
-
-    @OnlyIfSkeleton.exists
-    @requires_vtk
-    def skeleton_actor(self, **kwargs):
-        if self.skeleton is not None:
-            return trimesh_vtk.skeleton_actor(self.skeleton, **kwargs)
 
     @property
     @OnlyIfSkeleton.exists
