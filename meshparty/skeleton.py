@@ -3,12 +3,7 @@ from meshparty import utils
 from scipy import spatial, sparse
 from dataclasses import dataclass, fields, asdict, make_dataclass
 
-try:
-    from pykdtree.kdtree import KDTree as pyKDTree
-except:
-    pyKDTree = spatial.cKDTree
 from meshparty import skeleton_io
-from collections.abc import Iterable
 from .skeleton_utils import resample_path
 
 
@@ -175,12 +170,12 @@ class StaticSkeleton:
 
     @property
     def n_vertices(self):
-        """ int : Number of vertices in the skeleton """
+        """int : Number of vertices in the skeleton"""
         return len(self.vertices)
 
     @property
     def root(self):
-        """ int : Index of the skeleton root """
+        """int : Index of the skeleton root"""
         if self._root is None:
             self._create_default_root()
         return self._root
@@ -370,7 +365,6 @@ class Skeleton:
         skeleton_index=None,
         meta={},
     ):
-
         if remove_zero_length_edges:
             zlsk = utils.collapse_zero_length_edges(
                 vertices,
@@ -414,7 +408,6 @@ class Skeleton:
         self._segments = None
         self._segment_map = None
         self._kdtree = None
-        self._pykdtree = None
         self._reset_derived_properties_filtered()
         self.vertex_properties = vertex_properties
 
@@ -626,7 +619,7 @@ class Skeleton:
 
     @property
     def n_vertices(self):
-        """ int : Number of vertices in the skeleton """
+        """int : Number of vertices in the skeleton"""
         return len(self.vertices)
 
     @property
@@ -746,7 +739,6 @@ class Skeleton:
         self._vertices = None
         self._edges = None
         self._kdtree = None
-        self._pykdtree = None
 
         if index_changed:
             self._branch_points = None
@@ -762,16 +754,10 @@ class Skeleton:
 
     @property
     def kdtree(self):
-        """ scipy.spatial.kdtree : k-D tree from scipy.spatial. """
+        """scipy.spatial.kdtree : k-D tree from scipy.spatial."""
         if self._kdtree is None:
-            self._kdtree = spatial.cKDTree(self.vertices)
+            self._kdtree = spatial.KDTree(self.vertices)
         return self._kdtree
-
-    @property
-    def pykdtree(self):
-        if self._pykdtree is None:
-            self._pykdtree = pyKDTree(self.vertices)
-        return self._pykdtree
 
     def _single_path_length(self, path):
         """Compute the length of a single path (assumed to be correct)"""
@@ -814,14 +800,14 @@ class Skeleton:
 
     @property
     def branch_points(self):
-        """ numpy.array : Indices of branch points on the skeleton (pottentially including root)"""
+        """numpy.array : Indices of branch points on the skeleton (pottentially including root)"""
         if self._branch_points is None:
             self._create_branch_and_end_points()
         return self.SkeletonIndex(self._branch_points)
 
     @property
     def end_points(self):
-        """ numpy.array : Indices of end points on the skeleton (pottentially including root)"""
+        """numpy.array : Indices of end points on the skeleton (pottentially including root)"""
         if self._end_points is None:
             self._create_branch_and_end_points()
         return self.SkeletonIndex(self._end_points)
@@ -868,9 +854,7 @@ class Skeleton:
         _, invs = np.unique(ls, return_inverse=True)
         for ii in np.unique(invs):
             seg = self.SkeletonIndex(np.flatnonzero(invs == ii))
-            segments.append(
-                seg[np.argsort(self.hops_to_root[seg])[::-1]]
-            )
+            segments.append(seg[np.argsort(self.hops_to_root[seg])[::-1]])
         segment_map = invs
 
         return segments, segment_map.astype(int)
@@ -1150,7 +1134,7 @@ class Skeleton:
             avoid_root=avoid_root,
         )
 
-    @classmethod    
+    @classmethod
     def from_dict(cls, sk: dict):
         """Generate a skeleton from a dictionary. Expected format follows the caveclient `client.skeleton.get_skeleton` method defaults.
 
@@ -1160,17 +1144,17 @@ class Skeleton:
             Dictionary with keys for vertices, edges, root, and optionally radius and compartment.
         """
         vprop = dict()
-        if 'radius' in sk:
-            vprop['radius'] = np.array(sk['radius'])
-        if 'compartment' in sk:
-            vprop['compartment'] = np.array(sk['compartment'])
+        if "radius" in sk:
+            vprop["radius"] = np.array(sk["radius"])
+        if "compartment" in sk:
+            vprop["compartment"] = np.array(sk["compartment"])
 
         return cls(
-            vertices=np.array(sk['vertices']),
-            edges=np.array(sk['edges']),
-            root=sk.get('root'),
-            radius=np.array(sk.get('radius')),
-            vertex_properties = vprop,
+            vertices=np.array(sk["vertices"]),
+            edges=np.array(sk["edges"]),
+            root=sk.get("root"),
+            radius=np.array(sk.get("radius")),
+            vertex_properties=vprop,
         )
 
 

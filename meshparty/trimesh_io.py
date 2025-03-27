@@ -5,13 +5,7 @@ import h5py
 from scipy import spatial, sparse
 from sklearn import decomposition
 
-try:
-    from pykdtree.kdtree import KDTree
-except:
-    KDTree = spatial.cKDTree
 import os
-import networkx as nx
-import requests
 import time
 import re
 from collections import defaultdict
@@ -32,8 +26,6 @@ try:
 except ImportError:
     from trimesh import io as exchange
 
-from pymeshfix import _meshfix
-from tqdm import trange
 import DracoPy
 from meshparty import utils, trimesh_repair
 
@@ -986,7 +978,7 @@ class Mesh(trimesh.Trimesh):
     @caching.cache_decorator
     def pykdtree(self):
         """pykdtree.KDTree : KDTree of the mesh vertices"""
-        return KDTree(self.vertices)
+        return spatial.KDTree(self.vertices)
 
     @caching.cache_decorator
     def kdtree(self, balanced_tree=False):
@@ -997,7 +989,7 @@ class Mesh(trimesh.Trimesh):
         balanced_tree: bool
             passed on to scipy.spatial.cKDTree
         """
-        return spatial.cKDTree(self.vertices, balanced_tree=False)
+        return spatial.KDTree(self.vertices, balanced_tree=False)
 
     @property
     def n_vertices(self):
@@ -1018,48 +1010,6 @@ class Mesh(trimesh.Trimesh):
         else:
             link_edges_sym_unique = self.link_edges
         return np.vstack([self.edges, link_edges_sym_unique])
-
-    def fix_mesh(self, wiggle_vertices=False, verbose=False):
-        """Executes rudimentary fixing function from pymeshfix
-
-        Good for closing holes, fixes mesh in place
-        will recalculate normals
-
-        Parameters
-        ----------
-        wiggle_vertices: bool
-            adds robustness for smaller components (default False)
-        verbose: bool
-            whether to print out debug statements (default False)
-        """
-        if self.body_count > 1:
-            tin = _meshfix.PyTMesh(verbose)
-            # tin.LoadArray(self.vertices, self.faces)
-            tin.load_array(self.vertices, self.faces)
-            tin.remove_smallest_components()
-            # tin.RemoveSmallestComponents()
-
-            # Check if volume is 0 after isolated components have been removed
-            # self.vertices, self.faces = tin.ReturnArrays()
-            self.vertices, self.faces = tin.return_arrays()
-
-            self.fix_normals()
-
-        if self.volume == 0:
-            return
-
-        if wiggle_vertices:
-            wiggle = np.random.randn(self.n_vertices * 3).reshape(-1, 3) * 10
-            self.vertices += wiggle
-
-        # self.vertices, self.faces = _meshfix.CleanFromVF(self.vertices,
-        #                                                  self.faces,
-        #                                                  verbose=verbose)
-        self.vertices, self.faces = _meshfix.clean_from_arrays(
-            self.vertices, self.faces, verbose=verbose
-        )
-
-        self.fix_normals()
 
     def get_local_views(
         self,

@@ -1,2 +1,0 @@
-caveclient>=4.0.0
-pyembree
