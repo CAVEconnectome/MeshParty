@@ -286,7 +286,7 @@ def paths_to_edges(path_list):
 
 
 def filter_shapes(node_ids, shapes):
-    """ node_ids has to be sorted! """
+    """node_ids has to be sorted!"""
     if not isinstance(node_ids[0], list) and not isinstance(node_ids[0], np.ndarray):
         node_ids = [node_ids]
     # If shapes is 1d, make into an Nx1 2d-array.
@@ -298,18 +298,18 @@ def filter_shapes(node_ids, shapes):
     else:
         all_node_ids = np.concatenate(node_ids)
 
-    filter_ = np.in1d(shapes[:, 0], all_node_ids)
+    filter_ = np.isin(shapes[:, 0], all_node_ids)
     pre_filtered_shapes = shapes[filter_].copy()
     for k in range(1, ndim):
-        filter_ = np.in1d(pre_filtered_shapes[:, k], all_node_ids)
+        filter_ = np.isin(pre_filtered_shapes[:, k], all_node_ids)
         pre_filtered_shapes = pre_filtered_shapes[filter_]
 
     filtered_shapes = []
 
     for ns in node_ids:
-        f = pre_filtered_shapes[np.in1d(pre_filtered_shapes[:, 0], ns)]
+        f = pre_filtered_shapes[np.isin(pre_filtered_shapes[:, 0], ns)]
         for k in range(1, ndim):
-            f = f[np.in1d(f[:, k], ns)]
+            f = f[np.isin(f[:, k], ns)]
 
         f = np.unique(np.concatenate([f.flatten(), ns]), return_inverse=True)[1][
             : -len(ns)
