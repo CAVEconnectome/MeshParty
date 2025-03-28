@@ -87,11 +87,6 @@ test whether a mesh is watertight, run
     mesh.is_watertight
 
 
-To make a mesh watertight do
-::
-
-    mesh.fix_mesh()
-
 
 Since trimesh_io.Mesh() inherits from trimesh.Trimesh all trimesh functionality 
 is available to mesh, e.g.:

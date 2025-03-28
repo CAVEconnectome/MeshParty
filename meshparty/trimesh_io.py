@@ -32,7 +32,6 @@ try:
 except ImportError:
     from trimesh import io as exchange
 
-from pymeshfix import _meshfix
 from tqdm import trange
 import DracoPy
 from meshparty import utils, trimesh_repair
@@ -1019,48 +1018,6 @@ class Mesh(trimesh.Trimesh):
             link_edges_sym_unique = self.link_edges
         return np.vstack([self.edges, link_edges_sym_unique])
 
-    def fix_mesh(self, wiggle_vertices=False, verbose=False):
-        """Executes rudimentary fixing function from pymeshfix
-
-        Good for closing holes, fixes mesh in place
-        will recalculate normals
-
-        Parameters
-        ----------
-        wiggle_vertices: bool
-            adds robustness for smaller components (default False)
-        verbose: bool
-            whether to print out debug statements (default False)
-        """
-        if self.body_count > 1:
-            tin = _meshfix.PyTMesh(verbose)
-            # tin.LoadArray(self.vertices, self.faces)
-            tin.load_array(self.vertices, self.faces)
-            tin.remove_smallest_components()
-            # tin.RemoveSmallestComponents()
-
-            # Check if volume is 0 after isolated components have been removed
-            # self.vertices, self.faces = tin.ReturnArrays()
-            self.vertices, self.faces = tin.return_arrays()
-
-            self.fix_normals()
-
-        if self.volume == 0:
-            return
-
-        if wiggle_vertices:
-            wiggle = np.random.randn(self.n_vertices * 3).reshape(-1, 3) * 10
-            self.vertices += wiggle
-
-        # self.vertices, self.faces = _meshfix.CleanFromVF(self.vertices,
-        #                                                  self.faces,
-        #                                                  verbose=verbose)
-        self.vertices, self.faces = _meshfix.clean_from_arrays(
-            self.vertices, self.faces, verbose=verbose
-        )
-
-        self.fix_normals()
-
     def get_local_views(
         self,
         n_points=None,
@@ -1364,7 +1321,6 @@ class Mesh(trimesh.Trimesh):
         center_coords=None,
         pc_align=False,
         pc_norm=False,
-        fix_meshes=False,
     ):
         """Extracts a local mesh
 
@@ -1376,7 +1332,6 @@ class Mesh(trimesh.Trimesh):
         center_coords: list (n, 3) of floats
         pc_align: bool
         pc_norm: bool
-        fix_meshes: bool
         """
         local_view_tuple = self.get_local_views(
             n_points=n_points,
@@ -1390,11 +1345,6 @@ class Mesh(trimesh.Trimesh):
         vertices, _, faces = local_view_tuple
 
         meshes = [Mesh(vertices=v, faces=f) for v, f in zip(vertices, faces)]
-
-        if fix_meshes:
-            for mesh in meshes:
-                if mesh.n_vertices > 0:
-                    mesh.fix_mesh(wiggle_vertices=False)
 
         return meshes
 
