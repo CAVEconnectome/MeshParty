@@ -1,6 +1,4 @@
 import numpy as np
-from meshparty import utils, skeleton
-from copy import copy
 
 
 def annotation_location_indices(
