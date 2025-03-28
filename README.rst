@@ -10,7 +10,7 @@
    
 MeshParty
 #########
-A package to work with meshes, designed around use cases for analyzing neuronal morphology. 
+A package to work with meshes, designed around use cases for analyzing neuronal morphology.
 
 documentation https://meshparty.readthedocs.io/
  
@@ -21,8 +21,12 @@ From pypi:
 
     pip install meshparty
 
+Note: Version 2.0.0 or higher requires Python 3.10 or higher and offers reduced features for mesh analysis and visualization.
+Projects like pyvista are now easier and more powerful for work that was previously done in MeshParty.
+This package is still intended to be used for the Skeleton and MeshWork classes, but with reduced support for mesh analysis.
 
-We try to keep the pypi version up to date. To install the git version do:
+
+To install the git version do:
 
 :: 
 
