@@ -1,1 +1,3 @@
-__version__ = "2.0.0"
+from .base import *
+
+__version__ = "3.0.0"
