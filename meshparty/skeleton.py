@@ -370,6 +370,9 @@ class Skeleton:
         skeleton_index=None,
         meta={},
     ):
+        if vertex_properties is None:
+            vertex_properties = {}
+
         if remove_zero_length_edges:
             zlsk = utils.collapse_zero_length_edges(
                 vertices,
@@ -415,8 +418,6 @@ class Skeleton:
         self._kdtree = None
         self._pykdtree = None
         self._reset_derived_properties_filtered()
-        if vertex_properties is None:
-            vertex_properties = {}
         self.vertex_properties = vertex_properties
 
         if isinstance(meta, SkeletonMetadata):
