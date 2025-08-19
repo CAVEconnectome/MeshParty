@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import morphsync
-from typing import Optional, Union
+from typing import Any, Optional, Union
 from . import utils
 from abc import ABC, abstractmethod
 
@@ -154,8 +154,8 @@ class PointMixin(ABC):
         if linkage is not None:
             if len(linkage) != 1:
                 raise ValueError("Mapping must be a dict with one key.")
-            target_layer = linkage.keys()[0]
-            target_mapping = linkage.values()[0]
+            target_layer = list(linkage.keys())[0]
+            target_mapping = list(linkage.values())[0]
             if len(target_mapping) == len(self.vertices):
                 self._morphlink.add_link(
                     source=self.layer_name,
@@ -294,6 +294,8 @@ class PointCloudSync(PointMixin):
 
         if morphlink is None:
             self._morphlink = morphsync.MorphLink()
+        else:
+            self._morphlink = morphlink
 
         vertices, spatial_columns, label_columns = _process_vertices(
             vertices=vertices,
@@ -329,6 +331,49 @@ class PointCloudSync(PointMixin):
     def layer_name(self) -> str:
         return self._name
 
+    def __repr__(self) -> str:
+        return f"PointCloudSync(name={self.name}, vertices={self.vertices.shape[0]})"
+
+
+class AnnotationManager:
+    def __init__(self, morphlink: morphsync.MorphLink):
+        self._annotations = {}
+        self._morphlink = morphlink
+
+    def add(self, layer: PointCloudSync) -> None:
+        self._annotations[layer.name] = layer
+
+    def get(self, name: str, default: Any = None) -> PointCloudSync:
+        if name in self._annotations:
+            return getattr(self._morphlink, name)
+        else:
+            return default
+
+    def __getattr__(self, name: str) -> PointCloudSync:
+        if name in self._annotations:
+            return self._morphlink.layers.loc[name].layer
+        else:
+            raise AttributeError(f'Annotation "{name}" does not exist.')
+
+    def __dir__(self):
+        return super().__dir__() + list(self._annotations.keys())
+
+    @property
+    def names(self) -> list:
+        """Return a list of annotation names."""
+        return list(self._annotations.keys())
+
+    def __contains__(self, name: str) -> bool:
+        """Check if an annotation exists by name."""
+        return name in self._annotations
+
+    def __len__(self) -> int:
+        """Return the number of annotations."""
+        return len(self._annotations)
+
+    def __repr__(self) -> str:
+        return f"AnnotationManager(annotations={list(self._annotations.keys())})"
+
 
 class MeshWorkSync:
     SKEL_LN = "skeleton"
@@ -344,7 +389,7 @@ class MeshWorkSync:
         self._skeleton = None
         self._graph = None
         self._mesh = None
-        self._annotations = None
+        self._annotations = AnnotationManager(self._morphlink)
         self._labels = None
 
     @property
@@ -391,6 +436,10 @@ class MeshWorkSync:
             return None
         return self._graph
 
+    @property
+    def annotations(self) -> AnnotationManager:
+        return self._annotations
+
     def add_graph(
         self,
         vertices: Union[np.ndarray, pd.DataFrame, SkeletonSync],
@@ -403,7 +452,7 @@ class MeshWorkSync:
             raise ValueError('"Graph already exists!')
 
         if isinstance(vertices, GraphSync):
-            self._skeleton = GraphSync(
+            self._graph = GraphSync(
                 name=self.name,
                 vertices=vertices.vertices,
                 edges=vertices.edges,
@@ -412,12 +461,13 @@ class MeshWorkSync:
                 linkage=linkage,
             )
         else:
-            self._skeleton = GraphSync(
+            self._graph = GraphSync(
                 name=self.name,
                 vertices=vertices,
                 edges=edges,
                 labels=labels,
                 morphlink=self._morphlink,
+                spatial_columns=spatial_columns,
                 linkage=linkage,
             )
 
@@ -430,7 +480,7 @@ class MeshWorkSync:
         linkage: Optional[dict] = None,
     ):
         if isinstance(vertices, PointCloudSync):
-            PointCloudSync(
+            anno = PointCloudSync(
                 name=name,
                 vertices=vertices.vertices,
                 spatial_columns=vertices.spatial_columns,
@@ -438,7 +488,7 @@ class MeshWorkSync:
                 linkage=linkage,
             )
         else:
-            PointCloudSync(
+            anno = PointCloudSync(
                 name=name,
                 vertices=vertices,
                 spatial_columns=spatial_columns,
@@ -446,22 +496,11 @@ class MeshWorkSync:
                 morphlink=self._morphlink,
                 linkage=linkage,
             )
+        self._annotations.add(anno)
 
+    def apply_mask(
+        mask: np.ndarray,
+        mask_layer: str,
+    ) -> MeshWorkSync:
 
-#     def add_skeleton(
-#         self,
-#         vertices,
-#         edges,
-
-#     ):
-#         if isinstance(skeleton, str):
-#             skeleton = SkeletonSync(seg_id=int(skeleton))
-#         elif not isinstance(skeleton, SkeletonSync):
-#             raise ValueError("Skeleton must be a SkeletonSync or str.")
-
-#         if name is None:
-#             name = self.SKEL_LN
-#         self._morphlink.add_skeleton(
-#             skeleton=skeleton,
-#             name=name,
-#     )
+         
