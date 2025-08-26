@@ -6,6 +6,12 @@ import pandas as pd
 from scipy import sparse
 
 
+def single_path_length(path, vertices, edges):
+    vertices = np.asarray(vertices)
+    edges = np.asarray(edges)
+    return np.linalg.norm(vertices[path[1:]] - vertices[path[:-1]], axis=1).sum()
+
+
 def remap_vertices_and_edges(
     id_list: np.ndarray,
     edgelist: np.ndarray,
@@ -51,9 +57,16 @@ def process_vertices(
             )
         spatial_columns = vertices.columns
     else:
-        implicit_label_columns = list(
-            vertices.columns[~vertices.columns.isin(spatial_columns)]
-        )
+        if vertex_index:
+            implicit_label_columns = list(
+                vertices.columns[
+                    ~vertices.columns.isin(spatial_columns + [vertex_index])
+                ]
+            )
+        else:
+            implicit_label_columns = list(
+                vertices.columns[~vertices.columns.isin(spatial_columns)]
+            )
 
     if isinstance(labels, dict):
         labels = pd.DataFrame(labels, index=vertices.index)

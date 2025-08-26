@@ -169,6 +169,7 @@ class MeshWorkSync:
         vertices: Union[np.ndarray, pd.DataFrame, SkeletonSync],
         edges: Union[np.ndarray, pd.DataFrame],
         labels: Optional[Union[dict, pd.DataFrame]] = None,
+        root: Optional[int] = None,
         *,
         vertex_index: Optional[Union[str, np.ndarray]] = None,
         linkage: Optional[Link] = None,
@@ -185,6 +186,8 @@ class MeshWorkSync:
             The edges of the skeleton.
         labels : Optional[Union[dict, pd.DataFrame]]
             The labels for the skeleton.
+        root : Optional[int]
+            The root vertex for the skeleton, required of the edges are not already consistent with a single root.
         vertex_index : Optional[Union[str, np.ndarray]]
             The vertex index for the skeleton.
         linkage : Optional[Link]
@@ -207,6 +210,7 @@ class MeshWorkSync:
                 name=self.SKEL_LN,
                 vertices=vertices.vertices,
                 edges=vertices.edges,
+                root=root,
                 spatial_columns=vertices.spatial_columns,
                 morphsync=self._morphsync,
                 linkage=linkage,
@@ -217,11 +221,13 @@ class MeshWorkSync:
                 vertices=vertices,
                 edges=edges,
                 labels=labels,
+                root=root,
                 morphsync=self._morphsync,
                 spatial_columns=spatial_columns,
                 linkage=linkage,
                 vertex_index=vertex_index,
             )
+        self._managed_layers[self.SKEL_LN]._register_meshworksync(self)
         return self
 
     def add_graph(
@@ -280,6 +286,7 @@ class MeshWorkSync:
                 linkage=linkage,
                 vertex_index=vertex_index,
             )
+        self._managed_layers[self.GRAPH_LN]._register_meshworksync(self)
         return self
 
     def add_point_annotations(
@@ -339,6 +346,7 @@ class MeshWorkSync:
                 morphsync=self._morphsync,
                 linkage=linkage,
             )
+        anno._register_meshworksync(self)
         self._annotations.add(anno)
         return self
 
