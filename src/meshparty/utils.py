@@ -3,7 +3,16 @@ import fastremap
 
 import numpy as np
 import pandas as pd
-from scipy import sparse
+from scipy import sparse, stats
+
+
+def majority_agg():
+    # Return the most common value in x, ignoring NaNs
+    # Used for "majority" aggregation
+    def mode_func(x, nan_policy="omit"):
+        return stats.mode(x, nan_policy=nan_policy)[0]
+
+    return mode_func
 
 
 def single_path_length(path, vertices, edges):

@@ -27,6 +27,9 @@ class LayerManager:
         """Return a list of managed layer names."""
         return list(self._managed_layers.keys())
 
+    def add(self, layer: Union[SkeletonSync, GraphSync]) -> None:
+        self._managed_layers[layer.name] = layer
+
     def get(self, name: str) -> Optional[Union[SkeletonSync, GraphSync]]:
         return self._managed_layers.get(name)
 
@@ -42,6 +45,10 @@ class LayerManager:
     def __dir__(self):
         return super().__dir__() + list(self._managed_layers.keys())
 
+    def __iter__(self):
+        """Iterate over managed layers in order."""
+        return iter(self._managed_layers.values())
+
     def __repr__(self) -> str:
         return str(self.names)
 
@@ -49,12 +56,10 @@ class LayerManager:
 class AnnotationManager:
     def __init__(
         self,
-        morphsync: MorphSync,
         managed_layers: list,
         annotation_layers: Optional[list] = None,
     ):
         self._annotations = {}
-        self._morphsync = morphsync
         self._managed_layers = managed_layers
         if annotation_layers is not None:
             for layer in annotation_layers:
@@ -94,6 +99,10 @@ class AnnotationManager:
         """Return the number of annotations."""
         return len(self._annotations)
 
+    def __iter__(self):
+        """Iterate over annotations in order."""
+        return iter(self._annotations.values())
+
     def __repr__(self) -> str:
         return f"AnnotationManager(annotations={list(self._annotations.keys())})"
 
@@ -114,7 +123,6 @@ class MeshWorkSync:
             self._morphsync = MorphSync()
         else:
             self._morphsync = copy.deepcopy(morphsync)
-            # TODO populate below from this info
         self._name = name
         self._labels = {}
         if meta is None:
@@ -124,7 +132,6 @@ class MeshWorkSync:
         self._managed_layers = {}
         self._layers = LayerManager(self._managed_layers)
         self._annotations = AnnotationManager(
-            self._morphsync,
             managed_layers=self._managed_layers,
             annotation_layers=annotation_layers,
         )
@@ -350,12 +357,93 @@ class MeshWorkSync:
         self._annotations.add(anno)
         return self
 
+    def apply_mask(
+        self, layer: str, mask: np.ndarray, positional: bool = False
+    ) -> Self:
+        """Mask the"""
+        new_morphsync = self.layers[layer]._mask_morphsync(mask, positional=positional)
+        return self.__class__._from_existing(new_morphsync, self)
+
     def __repr__(self) -> str:
-        repr_list = []
-        if self.GRAPH_LN in self.layers:
-            repr_list.append(f"graph({self.graph.n_vertices})")
-        if self.SKEL_LN in self.layers:
-            repr_list.append(f"skel({self.skeleton.n_vertices})")
-        if self.MESH_LN in self.layers:
-            repr_list.append(f"mesh({self.mesh.n_vertices})")
-        return f"MeshWork(name={self.name},{' ' if repr_list else ''}{'+'.join(repr_list)}{',' if repr_list else ''} annotations={self.annotations.names})"
+        layers = self.layers
+        annos = self.annotations.names
+        return f"MeshWork(name={self.name}, layers={layers}, annotations={annos})"
+
+    @classmethod
+    def _from_existing(cls, new_morphsync, old_obj) -> Self:
+        new_obj = cls(
+            name=old_obj.name,
+            morphsync=new_morphsync,
+            meta=old_obj.meta,
+        )
+        for old_layer in old_obj.layers:
+            new_layer = old_layer.__class__._from_existing(new_morphsync, old_layer)
+            new_layer._register_meshworksync(new_obj)
+            new_obj._layers.add(new_layer)
+        for old_anno in old_obj.annotations:
+            new_anno = old_anno.__class__._from_existing(new_morphsync, old_anno)
+            new_anno._register_meshworksync(new_obj)
+            new_obj._annotations.add(new_anno)
+        return new_obj
+
+    @property
+    def labels(self) -> pd.DataFrame:
+        """Return a DataFrame of all label columns across all layers."""
+        all_labels = []
+        for layer in self.layers:
+            all_labels.append(
+                pd.DataFrame({"layer": layer.name, "labels": layer.labels.columns})
+            )
+        return pd.concat(all_labels)
+
+    def get_labels(
+        self,
+        labels: Union[str, list],
+        target_layer: str,
+        source_layers: Optional[Union[str, list]] = None,
+        agg: Union[str, dict] = "median",
+    ) -> pd.DataFrame:
+        """Map label columns from various sources to a target layer.
+
+        Parameters
+        ----------
+        labels : Union[str, list]
+            The labels to map from the source layer.
+        target_layer : str
+            The target layer to map all labels to.
+        source_layers : Optional[Union[str, list]]
+            The source layers to map the labels from. Unnecessary if labels are unique.
+        agg : Union[str, dict]
+            The aggregation method to use when mapping the labels.
+            Anything pandas `groupby.agg` takes, as well as "majority" which will is a majority vote across the mapped indices via the stats.mode function.
+
+        Returns
+        -------
+        pd.DataFrame
+            The mapped labels for the target layer.
+        """
+        if isinstance(labels, str):
+            labels = [labels]
+        if isinstance(source_layers, str):
+            source_layers = [source_layers]
+        elif source_layers is None:
+            source_layers = [None] * len(labels)
+        remap_labels = []
+        for label, source_layer in zip(labels, source_layers):
+            label_row = self.labels.query("labels == @label")
+            if label_row.shape[0] == 0:
+                raise ValueError(f'Label "{label}" not found in any layer.')
+            if label_row.shape[0] > 1 and source_layer is None:
+                raise ValueError(
+                    f'Label "{label}" found in multiple layers, please specify a source layer.'
+                )
+            if source_layer is None:
+                source_layer = label_row.iloc[0]["layer"]
+            remap_labels.append(
+                self.layers[source_layer].map_labels_to_layer(
+                    labels=label,
+                    layer=target_layer,
+                    agg=agg,
+                )
+            )
+        return pd.concat(remap_labels, axis=1)

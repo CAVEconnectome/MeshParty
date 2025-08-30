@@ -2,7 +2,6 @@ import numpy as np
 from typing import Dict, List, Tuple, Optional, Union
 from collections import defaultdict, deque
 from dataclasses import dataclass
-from joblib import Parallel, delayed, cpu_count
 from scipy import sparse
 from .utils import single_path_length, build_csgraph
 
@@ -41,6 +40,7 @@ class DAGCache:
     segments: Optional[List[List[int]]] = None
     distance_to_root: Optional[np.ndarray] = None
     hops_to_root: Optional[np.ndarray] = None
+    cover_paths: Optional[List[List[int]]] = None
     root: Optional[int] = None
 
     def __post_init__(self):
@@ -60,6 +60,7 @@ class DAGCache:
         self.root = None
         self.distance_to_root = None
         self.hops_to_root = None
+        self.cover_paths = None
 
 
 def build_parent_node_array(vertices, edges) -> np.ndarray:
@@ -799,3 +800,51 @@ def build_segments(
         segments.append(seg[np.argsort(hops_to_root[seg])[::-1]])
     segment_map = invs
     return segments, segment_map
+
+
+def build_cover_paths(
+    end_points: np.ndarray,
+    parent_node_array: np.ndarray,
+    distance_to_root: np.ndarray,
+    cache: Optional[DAGCache] = None,
+    include_parent: bool = False,
+) -> list[list[int]]:
+    cover_paths = []
+    seen = np.full(len(parent_node_array), False, dtype=bool)
+    end_points = end_points[np.argsort(distance_to_root[end_points])][
+        ::-1
+    ]  # sort in order farthest to closest.
+    for ep in end_points:
+        path = []
+        current = ep
+        while not seen[current]:
+            seen[current] = True
+            path.append(int(current))
+            current = parent_node_array[current]
+        if include_parent and current != -1:
+            path.append(int(current))
+        cover_paths.append(np.array(path, dtype=int))
+    if cache is not None:
+        cache.cover_paths = cover_paths
+    return cover_paths
+
+
+def build_proximity_lists_chunked(
+    vertices, csgraph, distance_threshold, chunk_size=1000
+):
+    n_vertices = len(vertices)
+    index_list = []
+    proximity_list = []
+    for start_idx in range(0, n_vertices, chunk_size):
+        end_idx = min(start_idx + chunk_size, n_vertices)
+        indices = np.arange(start_idx, end_idx)
+
+        distances = sparse.csgraph.dijkstra(
+            csgraph, indices=indices, directed=False, limit=distance_threshold
+        )
+        for ii, idx in enumerate(indices):
+            proximal_indices = np.flatnonzero(distances[ii] <= distance_threshold)
+            index_list.append([idx] * len(proximal_indices))
+            proximity_list.append(proximal_indices.tolist())
+
+    return np.concatenate(index_list), np.concatenate(proximity_list)

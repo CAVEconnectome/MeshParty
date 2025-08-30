@@ -8,7 +8,6 @@ __all__ = [
     "MorphSync",
     "GraphSyncWork",
     "MeshSyncWork",
-    "SkeletonSyncWork",
     "PointSyncWork",
     "Facet",
     "is_syncwork_object",
@@ -25,7 +24,7 @@ def is_syncwork_object(obj):
     """
     return isinstance(
         obj,
-        (GraphSyncWork, MeshSyncWork, SkeletonSyncWork, PointSyncWork),
+        (GraphSyncWork, MeshSyncWork, PointSyncWork),
     )
 
 
@@ -35,11 +34,6 @@ class GraphSyncWork(sync.Graph):
 
 
 class MeshSyncWork(sync.Mesh):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-
-class SkeletonSyncWork(sync.Graph):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
