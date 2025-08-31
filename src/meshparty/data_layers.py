@@ -659,6 +659,7 @@ class PointMixin(ABC):
 
 class GraphSync(PointMixin, EdgeMixin):
     layer_name = GRAPH_LAYER_NAME
+    layer_type = "graph"
 
     def __init__(
         self,
@@ -763,6 +764,7 @@ class GraphSync(PointMixin, EdgeMixin):
 
 class SkeletonSync(GraphSync):
     layer_name = SKEL_LAYER_NAME
+    layer_type = "skeleton"
 
     def __init__(
         self,
@@ -1447,6 +1449,8 @@ class SkeletonSync(GraphSync):
 
 
 class PointCloudSync(PointMixin):
+    layer_type = "points"
+
     def __init__(
         self,
         name: str,

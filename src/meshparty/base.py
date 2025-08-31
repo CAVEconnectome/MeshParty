@@ -171,16 +171,21 @@ class MeshWorkSync:
     def annotations(self) -> AnnotationManager:
         return self._annotations
 
+    @property
+    def _all_objects(self) -> dict:
+        return {**self._managed_layers, **self._annotations._annotations}
+
     def add_skeleton(
         self,
         vertices: Union[np.ndarray, pd.DataFrame, SkeletonSync],
-        edges: Union[np.ndarray, pd.DataFrame],
+        edges: Optional[Union[np.ndarray, pd.DataFrame]] = None,
         labels: Optional[Union[dict, pd.DataFrame]] = None,
         root: Optional[int] = None,
         *,
         vertex_index: Optional[Union[str, np.ndarray]] = None,
         linkage: Optional[Link] = None,
         spatial_columns: Optional[list] = None,
+        inherited_properties: Optional[dict] = None,
     ) -> Self:
         """
         Add a skeleton layer to the MorphSync.
@@ -188,7 +193,7 @@ class MeshWorkSync:
         Parameters
         ----------
         vertices : Union[np.ndarray, pd.DataFrame, SkeletonSync]
-            The vertices of the skeleton.
+            The vertices of the skeleton, or a skeletonsync object.
         edges : Union[np.ndarray, pd.DataFrame]
             The edges of the skeleton.
         labels : Optional[Union[dict, pd.DataFrame]]
@@ -213,15 +218,9 @@ class MeshWorkSync:
             spatial_columns = utils.process_spatial_columns(col_names=spatial_columns)
 
         if isinstance(vertices, SkeletonSync):
-            self._managed_layers[self.SKEL_LN] = SkeletonSync(
-                name=self.SKEL_LN,
-                vertices=vertices.vertices,
-                edges=vertices.edges,
-                root=root,
-                spatial_columns=vertices.spatial_columns,
-                morphsync=self._morphsync,
-                linkage=linkage,
-            )
+            if self._morphsync != vertices._morphsync:
+                raise ValueError("Incompatible MorphSync objects.")
+            self._managed_layers[self.SKEL_LN] = vertices
         else:
             self._managed_layers[self.SKEL_LN] = SkeletonSync(
                 name=self.SKEL_LN,
@@ -233,6 +232,7 @@ class MeshWorkSync:
                 spatial_columns=spatial_columns,
                 linkage=linkage,
                 vertex_index=vertex_index,
+                inherited_properties=inherited_properties,
             )
         self._managed_layers[self.SKEL_LN]._register_meshworksync(self)
         return self
@@ -240,7 +240,7 @@ class MeshWorkSync:
     def add_graph(
         self,
         vertices: Union[np.ndarray, pd.DataFrame, SkeletonSync],
-        edges: Union[np.ndarray, pd.DataFrame],
+        edges: Optional[Union[np.ndarray, pd.DataFrame]] = None,
         labels: Optional[Union[dict, pd.DataFrame]] = None,
         *,
         vertex_index: Optional[Union[str, np.ndarray]] = None,
@@ -272,16 +272,10 @@ class MeshWorkSync:
             raise ValueError('"Graph already exists!')
         if isinstance(spatial_columns, str):
             spatial_columns = utils.process_spatial_columns(col_names=spatial_columns)
-
         if isinstance(vertices, GraphSync):
-            self._managed_layers[self.GRAPH_LN] = GraphSync(
-                name=self.GRAPH_LN,
-                vertices=vertices.vertices,
-                edges=vertices.edges,
-                spatial_columns=vertices.spatial_columns,
-                morphsync=self._morphsync,
-                linkage=linkage,
-            )
+            if self._morphsync != vertices._morphsync:
+                raise ValueError("Incompatible MorphSync objects.")
+            self._managed_layers[self.GRAPH_LN] = vertices
         else:
             self._managed_layers[self.GRAPH_LN] = GraphSync(
                 name=self.GRAPH_LN,
