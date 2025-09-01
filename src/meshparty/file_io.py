@@ -1,25 +1,236 @@
-import tarfile
 import io
-import orjson
-from typing import TYPE_CHECKING, Optional, Union
-from scipy.sparse import save_npz, load_npz
-from numpy import savez_compressed
-import cloudfiles
-from urllib import parse
+import tarfile
 from pathlib import Path
-import pyarrow as pa
-import pandas as pd
+from typing import TYPE_CHECKING, Optional, Union, BinaryIO
+from urllib import parse
+
+import cloudfiles
 import numpy as np
+import orjson
+import pandas as pd
+import pyarrow as pa
+from numpy import savez_compressed
+from scipy.sparse import load_npz, save_npz
+
 from .base import MeshWorkSync
-from .data_layers import SkeletonSync, PointCloudSync, GraphSync, Link
+from .data_layers import GraphSync, Link, PointCloudSync, SkeletonSync
 
 if TYPE_CHECKING:
     import scipy
 
-__all__ = ["MeshworkIO"]
+__all__ = ["load_meshwork", "save_meshwork", "MeshworkIO"]
 
 PUTABLE_SCHEMES = ["s3", "gs", "file", "mem"]
 METADATA_FILENAME = "metadata.json"
+
+
+def load_meshwork(source: Union[str, BinaryIO]) -> MeshWorkSync:
+    """Load a MeshWorkSync object from a file path or file object.
+
+    Parameters
+    ----------
+    source : Union[str, BinaryIO]
+        The path to the file/cloudpath or an open binary file object.
+
+    Returns
+    -------
+    MeshWorkSync
+        The loaded MeshWorkSync object.
+
+    """
+    if isinstance(source, str):
+        return _load_from_path(source)
+    else:
+        return _load_from_file_object(source)
+
+
+def _load_from_path(path: str) -> MeshWorkSync:
+    """Load from a file path using cloudfiles."""
+    filename = path.split("/")[-1]
+    basepath = "/".join(path.split("/")[:-1])
+    return MeshworkIO(basepath).load(filename)
+
+
+def _load_from_file_object(file_obj: BinaryIO) -> MeshWorkSync:
+    """Load from an open binary file object."""
+    file_bytes = file_obj.read()
+    return _import_neuron_from_bytes(file_bytes)
+
+
+def save_meshwork(
+    nrn: MeshWorkSync,
+    file: Union[str, BinaryIO, None] = None,
+    allow_overwrite: bool = False,
+) -> None:
+    """Save MeshWorkSync to a file path or file object.
+
+    Parameters
+    ----------
+    nrn : MeshWorkSync
+        The MeshWorkSync object to save.
+    file: Union[str, BinaryIO, None]
+        File path, open binary file object, or None (uses nrn.name).
+    allow_overwrite : bool
+        Whether to allow overwriting existing files.
+    """
+    # Handle deprecated file parameter
+    if isinstance(file, str) or file is None:
+        _save_to_path(nrn, file, allow_overwrite)
+    else:
+        _save_to_file_object(nrn, file)
+
+
+def _save_to_path(
+    nrn: MeshWorkSync, path: Optional[str], allow_overwrite: bool
+) -> None:
+    """Save to a file path using cloudfiles."""
+    if path:
+        basepath = "/".join(path.split("/")[:-1])
+        name = path.split("/")[-1]
+    else:
+        basepath = "."
+        name = f"{nrn.name}.mwk"
+    MeshworkIO(basepath).save(nrn, name, allow_overwrite=allow_overwrite)
+
+
+def _save_to_file_object(nrn: MeshWorkSync, file_obj: BinaryIO) -> None:
+    """Save to an open binary file object."""
+    tar_bytes = _export_neuron_to_bytes(nrn)
+    file_obj.write(tar_bytes)
+
+
+def _export_neuron_to_bytes(nrn: MeshWorkSync) -> bytes:
+    """Export MeshWorkSync to bytes data."""
+    b = io.BytesIO()
+    with tarfile.open(fileobj=b, mode="w") as tf:
+        _export_neuron_to_tar(nrn, tf)
+    return b.getvalue()
+
+
+def _export_neuron_to_tar(nrn: MeshWorkSync, tf: tarfile.TarFile) -> None:
+    """Export MeshWorkSync to tar file."""
+    # export metadata
+    add_file_to_tar(
+        name=METADATA_FILENAME,
+        data=extract_metadata(nrn),
+        tf=tf,
+    )
+
+    # Export all layers
+    for l in nrn.layers:
+        match l.layer_type:
+            case "skeleton":
+                export_skeleton_layer(l, tf)
+            case "graph":
+                export_graph_layer(l, tf)
+            case "mesh":
+                export_mesh_layer(l, tf)
+            case "points":
+                export_point_cloud_layer(l, tf, as_annotation=False)
+
+    # Export all annotations
+    for anno in nrn.annotations:
+        export_point_cloud_layer(anno, tf, as_annotation=True)
+
+    # Export linkage
+    export_linkage(nrn, tf)
+
+
+def _import_neuron_from_bytes(file: bytes) -> MeshWorkSync:
+    """Import MeshWorkSync from bytes data."""
+    with tarfile.open(fileobj=io.BytesIO(file), mode="r") as tf:
+        files = {f.name: f for f in tf.getmembers()}
+        metadata = load_dict(files[METADATA_FILENAME], tf)
+        _validate_archive_structure(metadata, files)
+
+        nrn = MeshWorkSync(name=metadata["name"], meta=metadata["meta"])
+        nrn = _process_layers(metadata, files, tf, nrn)
+        nrn = _process_annotations(metadata, files, tf, nrn)
+        nrn = _process_linkage(metadata, tf, nrn)
+    return nrn
+
+
+def _validate_archive_structure(metadata: dict, files: dict):
+    """Validate that all expected files exist in the archive."""
+    missing_files = []
+
+    # Check required files exist
+    for layer_name, layer_info in metadata["structure"]["layers"].items():
+        required_files = [f"layers/{layer_name}/meta.json"]
+
+        # Add type-specific required files
+        if layer_info["type"] in ["skeleton", "graph"]:
+            required_files.extend(
+                [
+                    f"layers/{layer_name}/nodes.feather",
+                    f"layers/{layer_name}/edges.npz",
+                ]
+            )
+        elif layer_info["type"] == "points":
+            required_files.append(f"layers/{layer_name}/nodes.feather")
+
+        missing_files.extend([f for f in required_files if f not in files])
+
+    # Check annotations
+    for anno_name in metadata["structure"]["annotations"]:
+        required_files = [
+            f"annotations/{anno_name}/meta.json",
+            f"annotations/{anno_name}/nodes.feather",
+        ]
+        missing_files.extend([f for f in required_files if f not in files])
+
+    # Check linkage references valid layers
+    if "linkage" in metadata:
+        all_layer_names = set(metadata["structure"]["layers"].keys()) | set(
+            metadata["structure"]["annotations"].keys()
+        )
+        for linkage_pair in metadata["linkage"]:
+            for layer_name in linkage_pair:
+                if layer_name not in all_layer_names:
+                    raise ValueError(f"Linkage references unknown layer: {layer_name}")
+
+    if missing_files:
+        raise ValueError(f"Missing required files: {missing_files}")
+
+
+def _process_layers(metadata, files, tf, nrn) -> MeshWorkSync:
+    """Process layer data from tar file."""
+    for layer_name, layer_info in metadata["structure"]["layers"].items():
+        match layer_info["type"]:
+            case "skeleton":
+                nrn = build_skeleton(
+                    parse_skeleton_files(layer_name, files, tf), nrn=nrn
+                )
+            case "graph":
+                nrn = build_graph(parse_graph_files(layer_name, files, tf), nrn=nrn)
+            case "mesh":
+                # mesh = build_mesh(parse_mesh_files(layer_name, files, tf))
+                pass
+            case "points":
+                # pcd = build_point_cloud(
+                # parse_point_cloud_files(layer_name, files, tf)
+                # )
+                pass
+    return nrn
+
+
+def _process_annotations(metadata, files, tf, nrn) -> MeshWorkSync:
+    """Process annotation data from tar file."""
+    for anno_name, anno_info in metadata["structure"]["annotations"].items():
+        nrn = build_point_cloud(
+            parse_point_cloud_files(anno_name, files, tf, as_annotation=True),
+            nrn=nrn,
+            as_annotation=True,
+        )
+    return nrn
+
+
+def _process_linkage(metadata, tf, nrn) -> MeshWorkSync:
+    """Process linkage data from tar file."""
+    linkages = metadata["linkage"]
+    for linkage_pair in linkages:
+        nrn = build_linkage(linkage_pair, tf, nrn=nrn)
+    return nrn
 
 
 class MeshworkIO:
@@ -32,7 +243,9 @@ class MeshworkIO:
             self.cf = cloudfiles.CloudFiles(path)
             self._remote = False
         else:
-            self.cf = cloudfiles.CloudFiles("file://" + str((Path(path).absolute())))
+            self.cf = cloudfiles.CloudFiles(
+                "file://" + str((Path(path).expanduser().absolute()))
+            )
             self._remote = False
         self._saveable = parse.urlparse(self.cf.cloudpath).scheme in PUTABLE_SCHEMES
 
@@ -46,7 +259,7 @@ class MeshworkIO:
 
     def save(
         self,
-        nrn: "MeshworkSync",
+        nrn: MeshWorkSync,
         filename: Optional[str] = None,
         allow_overwrite: bool = False,
     ):
@@ -62,37 +275,8 @@ class MeshworkIO:
                 raise FileExistsError(
                     f"{filename} already exists in path {self.cf.cloudpath}."
                 )
-        b = io.BytesIO()
-        with tarfile.open(fileobj=b, mode="w") as tf:
-            self._export_neuron(nrn, tf)
-        self.cf.put(filename, b.getvalue())
-
-    def _export_neuron(self, nrn, tf):
-        # export metadata
-        add_file_to_tar(
-            name=METADATA_FILENAME,
-            data=extract_metadata(nrn),
-            tf=tf,
-        )
-
-        # Export all layers
-        for l in nrn.layers:
-            match l.layer_type:
-                case "skeleton":
-                    export_skeleton_layer(l, tf)
-                case "graph":
-                    export_graph_layer(l, tf)
-                case "mesh":
-                    export_mesh_layer(l, tf)
-                case "points":
-                    export_point_cloud_layer(l, tf, as_annotation=False)
-
-        # Export all annotations
-        for anno in nrn.annotations:
-            export_point_cloud_layer(anno, tf, as_annotation=True)
-
-        # Export linkage
-        export_linkage(nrn, tf)
+        tar_bytes = _export_neuron_to_bytes(nrn)
+        self.cf.put(filename, tar_bytes)
 
     def load(self, filename: str) -> MeshWorkSync:
         f = self.cf.get(filename, raw=True)
@@ -102,95 +286,8 @@ class MeshworkIO:
             )
         return self._import_neuron(f)
 
-    def _process_layers(self, metadata, files, tf, nrn) -> MeshWorkSync:
-        for layer_name, layer_info in metadata["structure"]["layers"].items():
-            match layer_info["type"]:
-                case "skeleton":
-                    nrn = build_skeleton(
-                        parse_skeleton_files(layer_name, files, tf), nrn=nrn
-                    )
-                case "graph":
-                    nrn = build_graph(parse_graph_files(layer_name, files, tf), nrn=nrn)
-                case "mesh":
-                    # mesh = build_mesh(parse_mesh_files(layer_name, files, tf))
-                    pass
-                case "points":
-                    # pcd = build_point_cloud(
-                    # parse_point_cloud_files(layer_name, files, tf)
-                    # )
-                    pass
-        return nrn
-
-    def _process_annotations(self, metadata, files, tf, nrn) -> MeshWorkSync:
-        for anno_name, anno_info in metadata["structure"]["annotations"].items():
-            nrn = build_point_cloud(
-                parse_point_cloud_files(anno_name, files, tf, as_annotation=True),
-                nrn=nrn,
-                as_annotation=True,
-            )
-        return nrn
-
-    def _process_linkage(self, metadata, tf, nrn) -> MeshWorkSync:
-        linkages = metadata["linkage"]
-        for linkage_pair in linkages:
-            nrn = build_linkage(linkage_pair, tf, nrn=nrn)
-        return nrn
-
     def _import_neuron(self, file: bytes) -> MeshWorkSync:
-        with tarfile.open(fileobj=io.BytesIO(file), mode="r") as tf:
-            files = {f.name: f for f in tf.getmembers()}
-            metadata = load_dict(files[METADATA_FILENAME], tf)
-            self._validate_archive_structure(metadata, files)
-
-            nrn = MeshWorkSync(name=metadata["name"], meta=metadata["meta"])
-            nrn = self._process_layers(metadata, files, tf, nrn)
-            nrn = self._process_annotations(metadata, files, tf, nrn)
-            nrn = self._process_linkage(metadata, tf, nrn)
-        return nrn
-
-    def _validate_archive_structure(self, metadata: dict, files: dict):
-        """Validate that all expected files exist in the archive."""
-        missing_files = []
-
-        # Check required files exist
-        for layer_name, layer_info in metadata["structure"]["layers"].items():
-            required_files = [f"layers/{layer_name}/meta.json"]
-
-            # Add type-specific required files
-            if layer_info["type"] in ["skeleton", "graph"]:
-                required_files.extend(
-                    [
-                        f"layers/{layer_name}/nodes.feather",
-                        f"layers/{layer_name}/edges.npz",
-                    ]
-                )
-            elif layer_info["type"] == "points":
-                required_files.append(f"layers/{layer_name}/nodes.feather")
-
-            missing_files.extend([f for f in required_files if f not in files])
-
-        # Check annotations
-        for anno_name in metadata["structure"]["annotations"]:
-            required_files = [
-                f"annotations/{anno_name}/meta.json",
-                f"annotations/{anno_name}/nodes.feather",
-            ]
-            missing_files.extend([f for f in required_files if f not in files])
-
-        # Check linkage references valid layers
-        if "linkage" in metadata:
-            all_layer_names = set(metadata["structure"]["layers"].keys()) | set(
-                metadata["structure"]["annotations"].keys()
-            )
-            for linkage_pair in metadata["linkage"]:
-                for layer_name in linkage_pair:
-                    if layer_name not in all_layer_names:
-                        raise ValueError(
-                            f"Linkage references unknown layer: {layer_name}"
-                        )
-
-        if missing_files:
-            raise ValueError(f"Missing required files: {missing_files}")
+        return _import_neuron_from_bytes(file)
 
 
 def load_dict(tinfo, tf) -> dict:
