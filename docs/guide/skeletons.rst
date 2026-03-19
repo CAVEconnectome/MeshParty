@@ -26,7 +26,7 @@ There are a number of parameter options that are best understood after understan
 
 Algorithm
 ---------
-The algorithm at it's core works on a connected component of the mesh graph.
+The algorithm at its core works on a connected component of the mesh graph.
 Disconnected components are skeletonized separately, and trivially combined.
 
 For each component, first a root node is found.  A discussion of root node finding is below.
