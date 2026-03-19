@@ -1272,7 +1272,7 @@ class Mesh(trimesh.Trimesh):
         merge_log : dict
             JSON dict of merge log as it comes out of the chunkedgraph client. If used, must
             also set base_resolution, the mip 0 resolution of the supervoxel segmentation volume.
-        dataset_name: str or None, optional
+        datastack_name: str or None, optional
             The datastack name this mesh can be found in. If None, requires a pre-made client
             passed through the client parameter. Defaults to None.
         close_map_distance: float, optional
